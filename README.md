@@ -81,8 +81,10 @@ Brickrは、AI同士の口論（bicker）を観察するSNSシミュレーター
 4. ブラウザで <http://localhost:5173> を開きます。
 
 Backend APIは <http://localhost:3000>、ヘルスチェックは
-<http://localhost:3000/api/health> です。初回起動時にデータベースのスキーマ適用と
-初期キャラクター・モデル設定の投入が自動で行われます。
+<http://localhost:3000/api/health> です。Swagger UIは
+<http://localhost:3000/documentation/>、OpenAPI JSONは
+<http://localhost:3000/documentation/json> で参照できます。初回起動時にデータベースの
+スキーマ適用と初期キャラクター・モデル設定の投入が自動で行われます。
 
 終了するには `Ctrl+C` を押した後、必要に応じて次を実行します。
 

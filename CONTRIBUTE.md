@@ -91,6 +91,7 @@ packages/
 | Backend構成 | `apps/backend/src/services.ts` | RepositoryとServiceの組み立て |
 | REST API | `apps/backend/src/api/routes.ts` | RouteとDomain ErrorのHTTP変換 |
 | 入力検証 | `apps/backend/src/api/schemas.ts` | Zodによる境界検証 |
+| API仕様 | `apps/backend/src/api/openapi.ts` | OpenAPI 3.0とSwagger UI設定 |
 | シミュレーション | `apps/backend/src/simulation/simulation-service.ts` | 投稿生成のオーケストレーション |
 | LLM抽象化 | `apps/backend/src/llm/provider.ts` | Provider共通契約 |
 | DB Schema | `apps/backend/prisma/schema.prisma` | PostgreSQLのデータモデル |
@@ -185,10 +186,11 @@ docs: explain local database setup
 1. `packages/shared`にRequest/Response DTOを追加します。
 2. `apps/backend/src/api/schemas.ts`にZod Schemaを追加します。
 3. Schemaの正常系・境界値・拒否ケースをテストします。
-4. Domain ServiceとRepositoryへ必要な処理を追加します。
-5. `api/routes.ts`でRouteを登録し、Domain ErrorをHTTP Errorへ変換します。
-6. `apps/frontend/src/services/api-client.ts`に型付きメソッドを追加します。
-7. API一覧や重要なフローが変わる場合は文書を更新します。
+4. `apps/backend/src/api/openapi.ts`へPath、Request、Response、Errorを追加します。
+5. Domain ServiceとRepositoryへ必要な処理を追加します。
+6. `api/routes.ts`でRouteを登録し、Domain ErrorをHTTP Errorへ変換します。
+7. `apps/frontend/src/services/api-client.ts`に型付きメソッドを追加します。
+8. API一覧や重要なフローが変わる場合は文書を更新します。
 
 ### データベースSchemaを変更する
 

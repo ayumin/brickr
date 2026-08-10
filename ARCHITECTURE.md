@@ -96,7 +96,8 @@ flowchart TD
 ### 5.1 起動とComposition Root
 
 `server.ts`がFastify Appを構築し、Signal受信時にHTTP ServerとPrisma接続を終了します。
-`app.ts`はCORS、Body上限、SecretをRedactするLogger、Route、共通Error Handlerを設定します。
+`app.ts`はCORS、Body上限、SecretをRedactするLogger、OpenAPI/Swagger UI、Route、
+共通Error Handlerを設定します。
 
 `services.ts`は次の依存を組み立てます。
 
@@ -120,6 +121,15 @@ Service Testを記述できます。
 `api/schemas.ts`がZodでRequestを検証します。Routeは検証後の値だけをServiceへ渡し、
 既知のDomain Errorを4xx/5xxのJSON Errorへ変換します。予期しない例外は共通Handlerが
 内部情報を隠して`internal_error`として返します。
+
+`api/openapi.ts`がOpenAPI 3.0仕様を定義します。実行時のZod検証とエラー形式を変えないため、
+仕様は`@fastify/swagger`のstatic modeで登録し、`@fastify/swagger-ui`が次を配信します。
+
+- Swagger UI: `/documentation/`
+- OpenAPI JSON: `/documentation/json`
+- OpenAPI YAML: `/documentation/yaml`
+
+OpenAPI仕様のテストは全公開Pathと`operationId`の一意性、UI/JSONの配信を検証します。
 
 主要Endpoint:
 
