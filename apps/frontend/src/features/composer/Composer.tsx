@@ -15,6 +15,7 @@ import type { ComposerScope } from "../../types";
 import { QuotePost } from "../timeline/QuotePost";
 import { Icon } from "../../components/Icon";
 import { MentionInput } from "./MentionInput";
+import { appendMentionOnce } from "./composer-utils";
 
 const ACCEPTED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
 
@@ -76,16 +77,12 @@ export function Composer({
     );
   }, [scope]);
 
-  // A mention requested elsewhere (profile header) is appended once.
+  // StrictMode can run this effect twice; appendMentionOnce keeps it idempotent.
   useEffect(() => {
     if (!pendingMention) {
       return;
     }
-    setContent((current) => {
-      const needsSpace =
-        current.length > 0 && !/[\s\n]$/.test(current) ? " " : "";
-      return `${current}${needsSpace}@${pendingMention} `;
-    });
+    setContent((current) => appendMentionOnce(current, pendingMention));
     onPendingMentionConsumed?.();
   }, [pendingMention, onPendingMentionConsumed]);
 
