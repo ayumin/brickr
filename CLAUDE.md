@@ -1882,3 +1882,266 @@ Characterが本当に別人格に見えること
 ```
 
 を最優先してください。
+
+---
+
+# 66. Login Feature (計画中・MVP後)
+
+ここからは、User Login機能を追加する際の設計方針です。
+
+MVP Scope（59条）には含まれず、55条・60条の「MVPでは高度な認証機構は不要」「Complex Authentication / Enterprise RBACは実装しない」は維持したまま、
+必要最小限のLogin機能として設計します。Enterprise RBACのような複雑な権限モデルは導入しません。
+
+---
+
+## 66.1 User Attributes
+
+既存のUserProfile（48条: handle固定`@you`、displayName、description、avatar）に加えて、以下を持ちます。
+
+```text
+handle       (登録後変更不可。User / Character共通namespaceでDatabase制約により一意)
+displayName  (公開、編集可)
+description  (公開、編集可)
+avatar       (公開、編集可)
+email        (ログイン名、非開示)
+生年月日      (非開示、登録後変更不可。18歳未満は登録不可)
+country      (任意、編集可)
+region       (任意、編集可。都道府県 / 州レベルまで。市区町村以下の住所や電話番号は収集しない)
+interests    (任意、編集可)
+occupation   (任意、編集可)
+x_handle     (任意、編集可)
+```
+
+非開示の氏名フィールドは持ちません。`displayName`のみで公開名を表現します。
+
+`handle`の一意性はUserとCharacterで共有し、Application Logicではなく**Database制約**で強制します。
+
+---
+
+## 66.2 Handle-based Routing
+
+`/handle`（例: `/architect`）でその人物（UserまたはCharacter）のTimelineへ直接遷移できるようにします。
+
+Frontendにはまだルーターが存在しないため、React Router（6条で利用可能と定義済み）を導入し、
+`SimulationView`が保持するView状態をURLへ同期させます。Handleから著者を解決するAPIは、
+Simulationを読み込んでいない状態からのアクセス（直接URL / リロード）でも解決できる必要があります。
+
+---
+
+## 66.3 Simulation / Timeline for Multiple Users
+
+複数の実Userが存在しても、Simulation（会話の場）自体は分割しません。
+
+```text
+Simulation
+    ↓
+共有Thread（User / Character問わず同じPost Model）
+    ↓
+著者ごとのTimelineは既存の仕組み（48条）をそのまま利用
+```
+
+UserもCharacterも同じ`authorId`として扱い、投稿者が人間かAIかをUI上で区別する情報は表示しません。
+
+すべてのUserは、存在するどのSimulationにも参加（投稿）できます。ただし、Stop状態のSimulationには参加できません。
+
+Simulationの`Stop` / `Resume`は、そのSimulationの作成者本人と管理者のみが実行できます（35条〜36条のResponder Selection自体には変更なし）。
+
+---
+
+## 66.4 API Key と Token消費
+
+LLM API Keyは引き続き26条の通り環境変数（`.env`）でのみ管理し、Userごとの個別API Key保存は行いません。
+
+代わりに、Userごとの LLM Token消費量を記録・表示します。
+
+```text
+Character生成完了
+    ↓
+その生成を誘発したPostのUserにToken使用量を紐づけて記録
+    ↓
+Userのプロフィール設定画面に自分のToken消費量を表示
+```
+
+`LLMGenerateResult`にはProviderのレスポンスに含まれるToken使用量（prompt / completion）を含めます。
+
+---
+
+## 66.5 Character Ownership
+
+Login導入後は、一般Userも管理画面からCharacterを作成できます。
+
+```text
+Character.createdByUserId
+```
+
+を持ち、可視範囲は次の通りです。
+
+```text
+作成者本人・管理者   : 参照可能
+その他のUser        : 参照不可（通常のCharacter DTOにも含めない）
+```
+
+Characterの編集・削除は、作成者本人と管理者のみに制限します。
+
+---
+
+## 66.6 Simulation Ownership
+
+Simulationにも`createdByUserId`を持たせますが、Characterと可視範囲のルールが逆になります。
+
+```text
+Simulationの作成者   : 全Userに公開（誰でも見える）
+Simulationの分析画面 : 作成者本人・管理者のみ閲覧可能
+```
+
+CharacterとSimulationで「作成者情報の公開範囲」が異なる点を混同しないでください。
+
+---
+
+## 66.7 Admin Capabilities
+
+管理者（`isAdmin`のような単純なbooleanで表現し、複雑なRoleモデルは導入しない）は以下を行えます。
+
+- User一覧画面から、特定のUserが作成したCharacter一覧とToken消費量をdrilldownで確認する
+- User Accountを停止 / 復帰する
+- Character一覧画面（50条）と同様のパターンで、User管理用のテーブル画面を持つ
+
+管理者権限はこれらの用途に閉じ、Enterprise RBACのような汎用的な権限管理機構は導入しません（60条）。
+
+---
+
+## 66.8 Authentication Mechanism
+
+認証方式はEmail + Passwordに固定します。
+
+```text
+Password : bcrypt等でHash化して保存
+```
+
+OAuth（Google等）やMagic Link（パスワードレス）はMVP後の検討候補（61条）に留め、今回のScopeには含めません。外部Provider依存を増やさないことを優先します。
+
+---
+
+## 66.9 Signup（招待制）
+
+自己登録を無制限に開放しません。
+
+```text
+Admin発行の使い捨て招待コード
+        ↓
+Signup画面でコード + email + password + 生年月日等を入力
+        ↓
+コードを使用済みにしてUser作成
+```
+
+理由: Email確認（66.10条）を行わないため、無制限の自己登録を許可すると、環境変数で共有しているLLM API Key（26条）の消費コストや濫用に対して脆弱になります。
+
+招待コードの有効期限や特定Emailへの紐付けの有無といった細部は、実装時の判断に委ねます。
+
+最初のAdmin Userは、招待の起点が存在しないため、`ADMIN_EMAIL` / `ADMIN_PASSWORD`のような環境変数からseedスクリプトで作成します（26条のAPI Key管理と同じ、env経由の方式に統一）。
+
+---
+
+## 66.10 Email確認とパスワードリカバリー
+
+Signup時のEmail確認（確認リンク送信）は行いません。生年月日の自己申告ゲート（66.1条）と同じ方針で、Emailアドレスも自己申告として即時信頼し、登録後すぐにアカウントを有効化します。
+
+この結果、メール送信基盤（SMTP等）はMVPのこの段階では一切不要になります。
+
+パスワードを忘れた場合のSelf-serviceリカバリーは今回のScopeに含めません。Adminが管理画面から対象Userへ仮パスワードを発行する形で代替します。
+
+---
+
+## 66.11 Session管理
+
+ログイン後のセッションはhttpOnly Cookie + PostgreSQLの`sessions`テーブル（不透明なトークンをDBで引く方式）で管理します。RedisなどのSessionストアは導入しません（60条）。
+
+```text
+Login成功
+    ↓
+sessionsテーブルへ新規行作成、不透明トークンをhttpOnly Cookieへ
+    ↓
+以降のRequestはCookie経由でsessionsを引き、User + statusを確認
+```
+
+44条のSSE Endpointは`EventSource`がCustom Headerを送れないため、同じCookieベースの認証をそのまま利用します（別途Query Parameterでのトークン受け渡しは不要）。
+
+CSRF対策は、Cookieに`SameSite=Lax` + `Secure`属性を付与することで十分とし、別途のCSRFトークン（Double Submit等）は導入しません。Frontend/Backendが異なるPort（5173 / 3000）でもSame-Siteとして扱われるため、Cross-siteのPOST/PUT/DELETEでCookieが送信されない前提に立ちます。
+
+---
+
+## 66.12 Suspendの効果
+
+AdminによるUser Suspendは以下をすべて即時に行います。
+
+```text
+ログイン拒否
++
+既存sessionsを全削除（即時ログアウト）
++
+投稿・Reply・Quote・Character作成等、一切のWrite操作を拒否
+```
+
+Suspend済みUserが過去に投稿したPostは、48条のCharacter削除時の扱いと同様、投稿者情報を含めて保持されます。
+
+Userの自己都合による退会（アカウント削除）は今回のScopeに含めません。AdminのSuspend / Reactivateのみで運用します。
+
+---
+
+## 66.13 Handle共有Namespace
+
+User / Character間でHandleの一意性をDatabase制約で強制するため、共有の`handles`テーブルを新設します。
+
+```text
+handles
+  handle    (Primary Key)
+  ownerType ("user" | "character")
+  ownerId
+```
+
+User / Characterの作成・Handle変更時には、同一TransactionでこのテーブルへInsert / Updateし、Primary Key制約により衝突を防ぎます。User / Characterそれぞれのドメインモデル自体は分離を維持し（4条）、Handle解決のためだけにこのテーブルを参照します。既存の`Character.handle`列の`@unique`制約は、このテーブルへの参照に置き換えます。
+
+---
+
+## 66.14 既存Seed Characterの扱い
+
+既存の手作りSeed Character（Architect、Skeptic等）の`createdByUserId`はnullのままとし、「System所有」として扱います。
+
+```text
+createdByUserId = null → System所有
+```
+
+66.5条の「編集・削除は作成者本人と管理者のみ」というルールに、nullはどのUserとも一致しないため自然に従い、実質的にAdminのみが編集・削除可能になります。専用のSystem Userレコードは作成しません。
+
+---
+
+## 66.15 User管理API
+
+50条のCharacter管理画面と同じパターンで、`/api/admin/*`のような別Namespaceを作らず、既存のリソース命名規則に揃えます。
+
+```http
+GET  /api/users/management
+GET  /api/users/:id
+POST /api/users/:id/suspend
+POST /api/users/:id/reactivate
+POST /api/users/:id/reset-password
+GET  /api/users/:id/characters
+GET  /api/users/:id/token-usage
+```
+
+これらはすべて認証済み + `isAdmin`でガードします。
+
+---
+
+## 66.16 Application Settings（環境変数）のAdmin限定化
+
+既存の`GET / PUT /api/application-settings`（`ApplicationSettingsService`、Frontendの`UserProfileEditor`内`EnvironmentPanel`）は、API Keyの設定有無やLLM挙動の閾値など環境変数由来の設定を確認・編集できる機能です。
+
+Login導入後は、この機能を`isAdmin`のUserのみに限定します。
+
+```text
+GET  /api/application-settings   → isAdmin限定
+PUT  /api/application-settings   → isAdmin限定
+```
+
+非AdminのUserに対しては、User Profile編集画面から`EnvironmentPanel`自体を表示しません。
