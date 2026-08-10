@@ -1,10 +1,10 @@
 # CLAUDE.md
 
-# Enjo Simulator / 炎上シミュレータ
+# Brickr — Post something. Watch the AIs bicker.
 
 ## 1. Project Overview
 
-「炎上シミュレータ」は、Twitter/X風のSNS UI上で、ユーザーの投稿に対して複数のAIキャラクターが、それぞれに与えられた性格・立場・口調に基づいて様々な投稿を行う様子を観察するためのWebアプリケーションです。
+「Brickr」は、Twitter/X風のSNS UI上で、ユーザーの投稿に対して複数のAIキャラクターが、それぞれに与えられた性格・立場・口調に基づいて様々な投稿を行う様子を観察するためのWebアプリケーションです。名称はAI同士の口論（bicker）に由来し、タグラインは「Post something. Watch the AIs bicker.」です。
 
 主目的は、
 
@@ -18,7 +18,7 @@
 
 炎上の正確な再現、実社会のSNS予測、リスク評価などはMVPの目的ではありません。
 
-「炎上シミュレータ」という名称ですが、MVPではまず、
+タグラインはAI同士の議論を表しますが、MVPではまず、
 
 ```text
 複数AIキャラクターによるSNS風会話シミュレーション
@@ -99,7 +99,7 @@ FrontendとBackendは明確に分離します。
 Monorepo構成を採用します。
 
 ```text
-enjo-simulator/
+brickr/
 ├── apps/
 │   ├── frontend/
 │   │   ├── src/
@@ -684,6 +684,13 @@ Character:
 }
 ```
 
+Backend起動後、ModelProfile APIが最初に呼ばれた時点で、環境変数にAPI Keyが設定された
+OpenAI / Anthropic / GeminiのModels APIを並列に呼び出します。取得した生成可能Modelを
+安定したIDのModelProfileとしてupsertし、5分間cacheします。Geminiは`generateContent`
+対応Modelだけを採用します。OpenAIはModels APIがendpoint capabilityを返さないため、
+会話生成Model familyからaudio / image / realtime / search等の専用Modelを除外します。
+1 Providerの一覧取得に失敗しても、他Providerの結果と保存済みModelProfileは利用可能にします。
+
 ---
 
 # 23. Character / Model / Provider Separation
@@ -723,6 +730,10 @@ LLM Providerには共通Interfaceを用意します。
 ```ts
 export interface LLMProvider {
   readonly id: string;
+
+  listModels(
+    signal?: AbortSignal,
+  ): Promise<LLMAvailableModel[]>;
 
   generate(
     request: LLMGenerateRequest,
@@ -796,6 +807,9 @@ DATABASE_URL=
 API KeyをFrontendへ渡さないでください。
 
 API KeyをCharacterレコードへ保存しないでください。
+
+Character編集UIではProviderとModelを別々に選択し、選択したProviderについて
+Backendが取得・保存したModelProfileだけをModel候補として表示します。
 
 ---
 
@@ -1729,7 +1743,6 @@ MVP後に必要性を見ながら検討します。
 - より長いConversation
 - QuoteからのConversation Branch
 - Conversation Visualization
-- Provider / Model切替UI
 
 ---
 
