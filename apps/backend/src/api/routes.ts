@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { AppServices } from "../services.js";
 import {
+  CharacterGenerationError,
   CharacterHandleConflictError,
   CharacterNotFoundError,
   ModelProfileNotFoundError,
@@ -13,6 +14,8 @@ import {
 import { sendError } from "./errors.js";
 import { registerEventsRoute } from "./events-route.js";
 import {
+  bulkCreateCharactersSchema,
+  bulkDeleteCharactersSchema,
   createPostSchema,
   createSimulationSchema,
   idParams,
@@ -33,6 +36,10 @@ export async function registerRoutes(
 
   app.get("/api/characters", async () => ({
     characters: await services.characters.listDtos(),
+  }));
+
+  app.get("/api/characters/management", async () => ({
+    characters: await services.characters.listManagementDtos(),
   }));
 
   app.get("/api/characters/:id", async (request, reply) => {
@@ -71,6 +78,31 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/characters/bulk-create", async (request, reply) => {
+    const body = bulkCreateCharactersSchema.safeParse(request.body);
+    if (!body.success) {
+      return sendError(
+        reply,
+        400,
+        "invalid_body",
+        "character count is invalid",
+        body.error.issues,
+      );
+    }
+    const job = services.characters.startCreateMany(body.data.count);
+    return reply.status(202).send({ job });
+  });
+
+  app.get("/api/character-bulk-jobs/:id", async (request, reply) => {
+    const params = idParams.safeParse(request.params);
+    if (!params.success) {
+      return sendError(reply, 400, "invalid_params", "job id is invalid");
+    }
+    const job = services.characters.findBulkCreationJob(params.data.id);
+    if (!job) return sendError(reply, 404, "not_found", "bulk creation job not found");
+    return { job };
+  });
+
   app.put("/api/characters/:id", async (request, reply) => {
     const params = idParams.safeParse(request.params);
     if (!params.success) {
@@ -85,6 +117,32 @@ export async function registerRoutes(
     } catch (error) {
       return handleDomainError(reply, error);
     }
+  });
+
+  app.delete("/api/characters/:id", async (request, reply) => {
+    const params = idParams.safeParse(request.params);
+    if (!params.success) {
+      return sendError(reply, 400, "invalid_params", "character id is invalid");
+    }
+    try {
+      return { deletedId: await services.characters.delete(params.data.id) };
+    } catch (error) {
+      return handleDomainError(reply, error);
+    }
+  });
+
+  app.post("/api/characters/bulk-delete", async (request, reply) => {
+    const body = bulkDeleteCharactersSchema.safeParse(request.body);
+    if (!body.success) {
+      return sendError(
+        reply,
+        400,
+        "invalid_body",
+        "character ids are invalid",
+        body.error.issues,
+      );
+    }
+    return { deletedIds: await services.characters.deleteMany(body.data.ids) };
   });
 
   app.get("/api/model-profiles", async () => ({
@@ -207,6 +265,9 @@ function handleDomainError(reply: FastifyReply, error: unknown): FastifyReply {
   }
   if (error instanceof CharacterHandleConflictError) {
     return sendError(reply, 409, "handle_conflict", error.message);
+  }
+  if (error instanceof CharacterGenerationError) {
+    return sendError(reply, 502, "character_generation_failed", error.message);
   }
   if (error instanceof SimulationNotFoundError) {
     return sendError(reply, 404, "not_found", error.message);

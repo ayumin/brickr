@@ -29,6 +29,9 @@ export class MockProvider implements LLMProvider {
   readonly defaultModel = "mock";
 
   async generate(request: LLMGenerateRequest): Promise<LLMGenerateResult> {
+    if (request.systemPrompt.includes("[CHARACTER_BATCH_GENERATION]")) {
+      return generateCharacterBatch(request);
+    }
     const persona = fragment(request.systemPrompt, 12);
     const lastUser = lastUserMessage(request.messages);
     const seed = hash(`${request.systemPrompt}|${lastUser}`);
@@ -43,6 +46,39 @@ export class MockProvider implements LLMProvider {
 
     return { text, model: request.model, providerId: PROVIDER_ID };
   }
+}
+
+function generateCharacterBatch(request: LLMGenerateRequest): LLMGenerateResult {
+  const prompt = lastUserMessage(request.messages);
+  const count = Number(/count:\s*(\d+)/u.exec(prompt)?.[1] ?? "1");
+  const batch = Number(/batch:\s*(\d+)/u.exec(prompt)?.[1] ?? "1");
+  const roles = ["地域交通の運営者", "若手研究者", "小規模店舗の経営者", "子育て中の編集者", "自治体の相談員"];
+  const tones = ["端的で実務的", "慎重で根拠を重視", "親しみやすく率直", "穏やかで問いかけが多い", "丁寧で調整を重視"];
+  const characters = Array.from({ length: count }, (_, index) => {
+    const serial = (batch - 1) * 5 + index + 1;
+    const role = roles[index % roles.length] ?? roles[0];
+    const tone = tones[index % tones.length] ?? tones[0];
+    return {
+      displayName: `生成キャラクター${String(serial)}`,
+      description: `${role}として日々の課題に向き合い、現場で実行できる選択肢を大切にしている。`,
+      rolePrompt: `${role}の立場から、投稿の前提と現実的な影響を確認し、自分の経験に基づく意見を述べる。`,
+      tonePrompt: `${tone}な日本語で、結論と理由を簡潔に伝える。`,
+      dialectPrompt: "",
+      interests: ["社会", "仕事", "暮らし"],
+    };
+  });
+  return {
+    text: JSON.stringify({
+      characters: Object.fromEntries(
+        characters.map((character, index) => [
+          `character_${String(index + 1)}`,
+          character,
+        ]),
+      ),
+    }),
+    model: request.model,
+    providerId: PROVIDER_ID,
+  };
 }
 
 function lastUserMessage(messages: LLMGenerateRequest["messages"]): string {

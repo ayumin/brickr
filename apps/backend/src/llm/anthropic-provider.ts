@@ -64,6 +64,16 @@ export class AnthropicProvider implements LLMProvider {
           messages: request.messages.map(toAnthropicMessage),
           // Thinking is wasted latency for a 100-140 character SNS post.
           thinking: { type: "disabled" },
+          ...(request.structuredOutput
+            ? {
+                output_config: {
+                  format: {
+                    type: "json_schema" as const,
+                    schema: request.structuredOutput.schema,
+                  },
+                },
+              }
+            : {}),
         },
         request.signal ? { signal: request.signal } : undefined,
       );

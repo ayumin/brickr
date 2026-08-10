@@ -30,6 +30,20 @@ export type CharacterConfigDto = CharacterDto & {
   modelProfileId: string;
 };
 
+/** Settings needed by the character management table, without persona prompts. */
+export type CharacterManagementDto = CharacterDto & {
+  activityLevel: number;
+  responseProbability: number;
+  replyProbability: number;
+  quoteProbability: number;
+  influence: number;
+  modelProfileId: string;
+};
+
+export type CharacterManagementResponse = {
+  characters: CharacterManagementDto[];
+};
+
 export type SaveCharacterRequest = {
   handle: string;
   displayName: string;
@@ -49,6 +63,41 @@ export type SaveCharacterRequest = {
 
 export type CharacterConfigResponse = {
   character: CharacterConfigDto;
+};
+
+export type DeleteCharacterResponse = {
+  deletedId: string;
+};
+
+export type BulkDeleteCharactersRequest = {
+  ids: string[];
+};
+
+export type BulkDeleteCharactersResponse = {
+  deletedIds: string[];
+};
+
+export type BulkCreateCharactersRequest = {
+  count: number;
+};
+
+export type CharacterBulkCreationStatus =
+  | "generating"
+  | "saving"
+  | "completed"
+  | "failed";
+
+export type CharacterBulkCreationJobDto = {
+  id: string;
+  status: CharacterBulkCreationStatus;
+  completed: number;
+  total: number;
+  createdCount: number;
+  error?: string;
+};
+
+export type CharacterBulkCreationJobResponse = {
+  job: CharacterBulkCreationJobDto;
 };
 
 export type ModelProfileDto = {

@@ -1,4 +1,6 @@
 import {
+  MAX_AVATAR_DATA_URL_LENGTH,
+  MAX_AVATAR_IMAGE_BYTES,
   MAX_IMAGE_DATA_URL_LENGTH,
   MAX_IMAGE_BYTES,
   MAX_POST_LENGTH,
@@ -23,6 +25,25 @@ const imageDataUrl = z
   .max(MAX_IMAGE_DATA_URL_LENGTH)
   .regex(/^data:image\/(?:png|jpeg|gif|webp);base64,[A-Za-z0-9+/]+={0,2}$/u)
   .refine((value) => decodedImageSize(value) <= MAX_IMAGE_BYTES, "image exceeds 5 MiB");
+
+const avatarDataUrl = z
+  .string()
+  .max(MAX_AVATAR_DATA_URL_LENGTH)
+  .regex(/^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/u)
+  .refine(
+    (value) => decodedImageSize(value) <= MAX_AVATAR_IMAGE_BYTES,
+    "avatar exceeds 1 MiB",
+  );
+
+// Remote URLs already stored before avatar upload was introduced remain valid
+// for edits, while the UI only offers cropped image upload from now on.
+const legacyRemoteAvatarUrl = z
+  .string()
+  .trim()
+  .url()
+  .max(2_048)
+  .refine((value) => /^https?:\/\//u.test(value), "avatar URL must use HTTP or HTTPS");
+const avatarSource = z.union([legacyRemoteAvatarUrl, avatarDataUrl]);
 
 function decodedImageSize(dataUrl: string): number {
   const encoded = dataUrl.slice(dataUrl.indexOf(",") + 1);
@@ -67,13 +88,21 @@ export const saveCharacterSchema = z.object({
   quoteProbability: probability,
   influence: probability,
   modelProfileId: id,
-  avatarUrl: z.string().trim().url().max(2_048).optional(),
+  avatarUrl: avatarSource.optional(),
+});
+
+export const bulkDeleteCharactersSchema = z.object({
+  ids: z.array(id).min(1).max(100),
+});
+
+export const bulkCreateCharactersSchema = z.object({
+  count: z.number().int().min(1).max(100),
 });
 
 export const saveUserProfileSchema = z.object({
   displayName: z.string().trim().min(1).max(80),
   description: z.string().trim().max(500),
-  avatarUrl: z.string().trim().url().max(2_048).optional(),
+  avatarUrl: avatarSource.optional(),
 });
 
 export const idParams = z.object({ id });

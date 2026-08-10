@@ -60,6 +60,18 @@ export class OpenAIProvider implements LLMProvider {
             ? {}
             : { max_completion_tokens: request.maxOutputTokens }),
           ...(request.temperature === undefined ? {} : { temperature: request.temperature }),
+          ...(request.structuredOutput
+            ? {
+                response_format: {
+                  type: "json_schema" as const,
+                  json_schema: {
+                    name: request.structuredOutput.name,
+                    strict: true,
+                    schema: request.structuredOutput.schema,
+                  },
+                },
+              }
+            : {}),
         },
         request.signal ? { signal: request.signal } : undefined,
       );

@@ -1,5 +1,6 @@
 import { AgentService } from "./agents/agent-service.js";
 import { CharacterRepository } from "./characters/character-repository.js";
+import { LLMCharacterPersonaGenerator } from "./characters/character-generator.js";
 import { CharacterService } from "./characters/character-service.js";
 import { env } from "./config/env.js";
 import { LLMClient } from "./llm/llm-client.js";
@@ -72,7 +73,11 @@ export function buildServices(db: Db, logger: SimulationLogger): AppServices {
   );
 
   return {
-    characters: new CharacterService(characterRepository, modelProfileRepository),
+    characters: new CharacterService(
+      characterRepository,
+      modelProfileRepository,
+      new LLMCharacterPersonaGenerator(llmClient),
+    ),
     modelProfiles: new ModelProfileService(modelProfileRepository),
     userProfile: new UserProfileService(userProfileRepository),
     posts: postService,

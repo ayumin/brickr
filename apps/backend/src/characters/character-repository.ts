@@ -43,12 +43,23 @@ export class CharacterRepository {
   constructor(private readonly db: Db) {}
 
   async findAll(): Promise<Character[]> {
+    const rows = await this.db.character.findMany({
+      where: { deletedAt: null },
+      orderBy: { id: "asc" },
+    });
+    return rows.map(toCharacter);
+  }
+
+  /** Used when rendering historical posts whose author was later deleted. */
+  async findAllIncludingDeleted(): Promise<Character[]> {
     const rows = await this.db.character.findMany({ orderBy: { id: "asc" } });
     return rows.map(toCharacter);
   }
 
   async findById(id: string): Promise<Character | null> {
-    const row = await this.db.character.findUnique({ where: { id } });
+    const row = await this.db.character.findFirst({
+      where: { id, deletedAt: null },
+    });
     return row ? toCharacter(row) : null;
   }
 
@@ -60,14 +71,16 @@ export class CharacterRepository {
   async findByHandles(handles: string[]): Promise<Character[]> {
     if (handles.length === 0) return [];
     const rows = await this.db.character.findMany({
-      where: { handle: { in: handles } },
+      where: { handle: { in: handles }, deletedAt: null },
     });
     return rows.map(toCharacter);
   }
 
   async findByIds(ids: string[]): Promise<Character[]> {
     if (ids.length === 0) return [];
-    const rows = await this.db.character.findMany({ where: { id: { in: ids } } });
+    const rows = await this.db.character.findMany({
+      where: { id: { in: ids }, deletedAt: null },
+    });
     return rows.map(toCharacter);
   }
 
@@ -79,12 +92,41 @@ export class CharacterRepository {
     return toCharacter(row);
   }
 
+  async createMany(
+    entries: Array<{ id: string; input: SaveCharacter }>,
+  ): Promise<Character[]> {
+    if (entries.length === 0) return [];
+    const rows = await this.db.$transaction(
+      entries.map(({ id, input }) =>
+        this.db.character.create({
+          data: { id, ...toWriteData(input) },
+        }),
+      ),
+    );
+    return rows.map(toCharacter);
+  }
+
   async update(id: string, input: SaveCharacter): Promise<Character> {
     const row = await this.db.character.update({
       where: { id },
       data: toWriteData(input),
     });
     return toCharacter(row);
+  }
+
+  async delete(id: string): Promise<void> {
+    await this.db.character.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
+  }
+
+  async deleteMany(ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    await this.db.character.updateMany({
+      where: { id: { in: ids }, deletedAt: null },
+      data: { deletedAt: new Date() },
+    });
   }
 }
 

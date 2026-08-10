@@ -1,10 +1,15 @@
 import type { SaveCharacterRequest } from "@enjo/shared";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { ModelProfileRepository } from "../model-profiles/model-profile-repository.js";
 import type { ModelProfile } from "../model-profiles/model-profile.js";
 import type { CharacterRepository } from "./character-repository.js";
+import type {
+  CharacterPersonaGenerator,
+  GeneratedCharacterPersona,
+} from "./character-generator.js";
 import {
   CharacterHandleConflictError,
+  CharacterGenerationError,
   CharacterNotFoundError,
   CharacterService,
   ModelProfileNotFoundError,
@@ -36,7 +41,11 @@ function makeCharacter(id: string, input: SaveCharacterRequest = REQUEST): Chara
   return { id, ...input };
 }
 
-function makeService(initial: Character[] = [], profiles: ModelProfile[] = [PROFILE]) {
+function makeService(
+  initial: Character[] = [],
+  profiles: ModelProfile[] = [PROFILE],
+  generate?: (count: number) => Promise<GeneratedCharacterPersona[]>,
+) {
   const characters = [...initial];
 
   const characterRepository = {
@@ -45,10 +54,19 @@ function makeService(initial: Character[] = [], profiles: ModelProfile[] = [PROF
       Promise.resolve(characters.find((character) => character.id === id) ?? null),
     findByHandle: (handle: string): Promise<Character | null> =>
       Promise.resolve(characters.find((character) => character.handle === handle) ?? null),
+    findByIds: (ids: string[]): Promise<Character[]> =>
+      Promise.resolve(characters.filter((character) => ids.includes(character.id))),
     create: (id: string, input: SaveCharacter): Promise<Character> => {
       const character = { id, ...input };
       characters.push(character);
       return Promise.resolve(character);
+    },
+    createMany: (
+      entries: Array<{ id: string; input: SaveCharacter }>,
+    ): Promise<Character[]> => {
+      const created = entries.map(({ id, input }) => ({ id, ...input }));
+      characters.push(...created);
+      return Promise.resolve(created);
     },
     update: (id: string, input: SaveCharacter): Promise<Character> => {
       const index = characters.findIndex((character) => character.id === id);
@@ -56,15 +74,46 @@ function makeService(initial: Character[] = [], profiles: ModelProfile[] = [PROF
       characters[index] = character;
       return Promise.resolve(character);
     },
+    delete: (id: string): Promise<void> => {
+      const index = characters.findIndex((character) => character.id === id);
+      if (index >= 0) characters.splice(index, 1);
+      return Promise.resolve();
+    },
+    deleteMany: (ids: string[]): Promise<void> => {
+      for (let index = characters.length - 1; index >= 0; index -= 1) {
+        if (ids.includes(characters[index]!.id)) characters.splice(index, 1);
+      }
+      return Promise.resolve();
+    },
   } as unknown as CharacterRepository;
 
   const modelProfileRepository = {
     findById: (id: string): Promise<ModelProfile | null> =>
       Promise.resolve(profiles.find((profile) => profile.id === id) ?? null),
+    findAll: (): Promise<ModelProfile[]> => Promise.resolve([...profiles]),
   } as unknown as ModelProfileRepository;
 
+  const personaGenerator: CharacterPersonaGenerator = {
+    generate: (count) =>
+      generate?.(count) ??
+      Promise.resolve(
+        Array.from({ length: count }, (_, index) => ({
+          displayName: `LLM Character ${String(index + 1)}`,
+          description: `LLM profile ${String(index + 1)}`,
+          rolePrompt: `LLM role ${String(index + 1)}`,
+          tonePrompt: `LLM tone ${String(index + 1)}`,
+          interests: ["test"],
+        })),
+      ),
+  };
+
   return {
-    service: new CharacterService(characterRepository, modelProfileRepository),
+    service: new CharacterService(
+      characterRepository,
+      modelProfileRepository,
+      personaGenerator,
+      () => 0.37,
+    ),
     characters,
   };
 }
@@ -78,6 +127,75 @@ describe("CharacterService", () => {
     expect(created.id).toBeTruthy();
     expect(created).toMatchObject(REQUEST);
     expect(characters).toHaveLength(1);
+  });
+
+  it("bulk creates LLM personas with unique handles and random behaviour", async () => {
+    const { service, characters } = makeService();
+
+    const created = await service.createMany(3);
+
+    expect(created).toHaveLength(3);
+    expect(characters).toHaveLength(3);
+    expect(new Set(created.map((character) => character.id)).size).toBe(3);
+    expect(new Set(created.map((character) => character.handle)).size).toBe(3);
+    expect(created[0]).not.toHaveProperty("modelProfileId");
+    expect(characters[0]).toMatchObject({
+      displayName: "LLM Character 1",
+      description: "LLM profile 1",
+      rolePrompt: "LLM role 1",
+      modelProfileId: PROFILE.id,
+      activityLevel: 0.37,
+      responseProbability: 0.37,
+      replyProbability: 0.37,
+      quoteProbability: 0.37,
+      influence: 0.37,
+    });
+  });
+
+  it("does not persist any character when LLM persona generation fails", async () => {
+    const { service, characters } = makeService([], [PROFILE], () =>
+      Promise.reject(new Error("invalid LLM output")),
+    );
+
+    await expect(service.createMany(3)).rejects.toBeInstanceOf(
+      CharacterGenerationError,
+    );
+    expect(characters).toEqual([]);
+  });
+
+  it("tracks a background bulk creation job through completion", async () => {
+    const { service } = makeService();
+
+    const started = service.startCreateMany(2);
+
+    expect(started).toMatchObject({
+      status: "generating",
+      completed: 0,
+      total: 2,
+    });
+    await vi.waitFor(() => {
+      expect(service.findBulkCreationJob(started.id)).toMatchObject({
+        status: "completed",
+        completed: 2,
+        createdCount: 2,
+      });
+    });
+  });
+
+  it("keeps the underlying generation reason on a failed background job", async () => {
+    const { service } = makeService([], [PROFILE], () =>
+      Promise.reject(new Error("invalid structured output")),
+    );
+
+    const started = service.startCreateMany(2);
+
+    await vi.waitFor(() => {
+      expect(service.findBulkCreationJob(started.id)).toMatchObject({
+        status: "failed",
+        error:
+          "キャラクター生成処理でエラーが発生しました: invalid structured output",
+      });
+    });
   });
 
   it("updates an existing character without changing its id", async () => {
@@ -106,6 +224,25 @@ describe("CharacterService", () => {
     expect(configDto).toHaveProperty("rolePrompt", REQUEST.rolePrompt);
   });
 
+  it("lists model and behaviour settings without exposing persona prompts", async () => {
+    const existing = makeCharacter("character-1");
+    const { service } = makeService([existing]);
+
+    const [managementDto] = await service.listManagementDtos();
+
+    expect(managementDto).toMatchObject({
+      id: existing.id,
+      modelProfileId: REQUEST.modelProfileId,
+      activityLevel: REQUEST.activityLevel,
+      responseProbability: REQUEST.responseProbability,
+      replyProbability: REQUEST.replyProbability,
+      quoteProbability: REQUEST.quoteProbability,
+      influence: REQUEST.influence,
+    });
+    expect(managementDto).not.toHaveProperty("rolePrompt");
+    expect(managementDto).not.toHaveProperty("tonePrompt");
+  });
+
   it("rejects a handle already used by another character", async () => {
     const existing = makeCharacter("character-1");
     const { service } = makeService([existing]);
@@ -129,5 +266,32 @@ describe("CharacterService", () => {
     await expect(service.update("missing", REQUEST)).rejects.toBeInstanceOf(
       CharacterNotFoundError,
     );
+  });
+
+  it("deletes an existing character", async () => {
+    const existing = makeCharacter("character-1");
+    const { service, characters } = makeService([existing]);
+
+    await expect(service.delete(existing.id)).resolves.toBe(existing.id);
+    expect(characters).toEqual([]);
+  });
+
+  it("rejects deletion of an unknown character", async () => {
+    const { service } = makeService();
+
+    await expect(service.delete("missing")).rejects.toBeInstanceOf(
+      CharacterNotFoundError,
+    );
+  });
+
+  it("bulk deletes existing unique ids and ignores missing ids", async () => {
+    const first = makeCharacter("character-1");
+    const second = makeCharacter("character-2", { ...REQUEST, handle: "second" });
+    const { service, characters } = makeService([first, second]);
+
+    await expect(
+      service.deleteMany([first.id, first.id, "missing"]),
+    ).resolves.toEqual([first.id]);
+    expect(characters).toEqual([second]);
   });
 });

@@ -27,6 +27,12 @@ export type LLMMessage = {
   images?: LLMImage[];
 };
 
+export type LLMStructuredOutput = {
+  /** Provider-safe schema name: letters, numbers, underscores and dashes. */
+  name: string;
+  schema: Record<string, unknown>;
+};
+
 export type LLMGenerateRequest = {
   model: string;
   systemPrompt: string;
@@ -35,6 +41,8 @@ export type LLMGenerateRequest = {
   maxOutputTokens?: number;
   /** Ignored by providers that no longer accept a sampling temperature. */
   temperature?: number;
+  /** JSON Schema enforced by providers that support structured output. */
+  structuredOutput?: LLMStructuredOutput;
   /** Abort signal used to enforce the per-call timeout. */
   signal?: AbortSignal;
 };
