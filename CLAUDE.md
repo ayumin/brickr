@@ -304,7 +304,8 @@ Frontendは以下を担当します。
 - REST API Client
 - SSE Client
 - Loading / Error表示
-- Light / Dark mode切り替え
+- 複数ブランドThemeの切り替え
+- UI iconはBootstrap Iconsを使用し、絵文字をiconとして使用しない
 
 Frontendの役割は、
 
@@ -1367,6 +1368,16 @@ CharacterのPersonaがUIから伝わることを優先してください。
 
 独立した「ホーム」ナビゲーション項目は置かず、ヘッダーのサービス名または
 ユーザーのavatarから、投稿Composerのあるホームへ戻れるようにします。
+ユーザーおよび各Characterの個別Timelineには、本人が書いたPostに加えて、
+本人のhandleがmentionされたPostも表示します。Profileの投稿数は本人が書いたPostだけを数えます。
+UserおよびCharacterのProfile領域はアプリヘッダー直下にsticky表示します。
+Timelineは最初の100件を表示し、「さらに表示」で100件ずつ追加表示します。
+右パネルのCharacter一覧も同様に100件ずつ追加表示します。
+各Postの右上にはBootstrap Iconsの展開ボタンを表示します。展開後のPost詳細画面では、
+対象Postに紐づくすべてのReply（子孫を含む）と、そのPostを直接引用したすべてのRepostを表示します。
+対象Post自身がReplyまたはQuoteとして別のPostを参照している場合、参照元は1件だけを1階層表示し、
+参照元からさらに過去の参照関係を再帰表示しません。旧データなどでReplyとQuoteの両方を持つ場合は
+Reply先を優先します。
 
 ---
 
@@ -1377,6 +1388,9 @@ Composerでは以下を可能にします。
 - Text入力
 - @mention
 - Post
+
+ホームではProfile直下の「投稿する」ボタンからComposerを展開し、投稿成功後に閉じます。
+Character Profileの「@で話しかける」から遷移した場合は、mention入りのComposerを自動展開します。
 
 Example:
 
@@ -1390,6 +1404,8 @@ What's happening?
 
 通常の新規PostにはPNG / JPEG / GIF / WebP画像を1枚添付できます。
 最大サイズは5MBです。ReplyとQuote Postには新しい画像を添付できません。
+Post本文中のHTTP / HTTPS URLは、通常Post、Reply、Quote、Repostのすべてで
+安全な外部リンクとして表示します。
 
 ---
 
@@ -1411,10 +1427,39 @@ Character一覧内のdescription previewは最大30文字程度に省略し、
 
 Character作成・編集画面では、Personaを構成するrole / tone / dialect Prompt、
 Behavior、利用するModelProfileを編集できます。
+通常画面では右パネルのCharacter一覧を表示し、見出しの「キャラクター」を一覧画面への導線にします。
+Character一覧画面では、Characterの検索・新規作成・編集・単体削除・選択したCharacterの
+一括削除を行えます。この画面では右パネルを表示せず、Characterをテーブル形式で表示します。
+管理テーブルは1ページ100件でページネーションします。
+管理テーブルのヘッダーはテーブル内スクロール時も上端に固定します。
+人数を1〜100人で指定する一括追加にも対応します。プロフィール、Persona、口調、関心分野は
+LLMでCharacterごとに生成し、行動傾向の各数値はBackendでランダムに割り当てます。
+人数欄は文字列として扱い、1〜100の整数表記だけを有効にします。空欄、0、先頭ゼロ、
+小数、符号付き入力、101以上では作成ボタンを無効にします。
+LLM出力は保存前に検証し、衝突しないhandleを付与したうえでトランザクション保存します。
+構造化出力は共通JSON Schemaから、OpenAIのstrict `response_format.json_schema`、
+Anthropicの`output_config.format`、Geminiの`responseMimeType / responseJsonSchema`へ変換します。
+Anthropicは配列の`minItems > 1`を受け付けないため、`characters`を
+`character_1`〜`character_N`の固定キーオブジェクトにします。全キーをrequired、
+`additionalProperties: false`として、3 Providerすべてで要求人数をSchemaレベルで強制します。
+一括作成はBackendの非同期Jobとして実行し、モーダル内のプログレスバーに生成済み人数と
+生成中・保存中・完了・失敗の状態を表示します。失敗時はタイムアウト、Provider/APIエラー、
+JSON解析不能、項目不足、件数不一致などの安全な失敗理由もモーダル内に表示します。
+テーブルには利用Modelと、活動・反応・返信・引用・影響度の行動傾向を個別のカラムで表示し、
+各行動傾向カラムを昇順・降順で並び替え可能にします。
+プロフィールはCharacter名の下に50文字程度まで表示し、その他の長いテキストは
+100文字程度までに省略します。削除後も過去のPostは投稿者情報を含めて保持します。
 
 ホームでは投稿Composerの上にUser ProfileをCharacter Profileと同じ形式で表示します。
 UserはdisplayName、description、avatarを編集できます。識別子`you`とhandle`@you`は固定です。
-Light / Dark modeの切り替えもUser Profileの設定変更画面に置きます。
+UserとCharacterのavatarはURL入力ではなく画像アップロードで設定し、
+アップロード時に正方形の切り取り位置と拡大率を調整できるようにします。
+Themeの切り替えもUser Profileの設定変更画面に置きます。
+選択可能なThemeはX.com Light / Dark、Salesforce、Atlassian、GitLab Light / Dark、
+GitHub Light / Darkとし、選択ボタンには各Themeのカラーサンプルを表示します。
+UI上のicon表現にはBootstrap Iconsを使用し、絵文字は使用しません。
+モーダルは「閉じる」または「キャンセル」に加えて、モーダル外側の背景クリックでも閉じます。
+保存や画像処理の実行中は、背景クリックによるクローズを無効にします。
 
 ---
 
@@ -1629,10 +1674,11 @@ MVPでは以下を実装します。
 25. 一部Provider失敗時の継続
 26. Simulationの停止と再開
 27. Character作成・編集UI
-28. Light / Dark mode切り替え
+28. 8種類のブランドTheme切り替え
 29. User Profile表示・編集
 30. 通常Postへの画像添付（Reply / Quoteは除く）
 31. 添付画像をLLMのマルチモーダル入力として渡し、Characterが内容を解釈できること
+32. Character一覧画面での作成・編集・単体削除・一括削除
 
 ---
 
