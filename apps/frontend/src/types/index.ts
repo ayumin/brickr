@@ -44,4 +44,6 @@ export type ComposerScope = {
  */
 export type TimelineView =
   | { kind: "home" }
+  | { kind: "characters" }
+  | { kind: "post"; postId: string }
   | { kind: "timeline"; authorId: string };

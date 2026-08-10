@@ -3,10 +3,12 @@ import { USER_AUTHOR_ID, USER_HANDLE } from "@enjo/shared";
 import type { CharacterDto, PostDto, UserProfileDto } from "@enjo/shared";
 
 import { Avatar } from "../../components/Avatar";
+import { Icon } from "../../components/Icon";
 import { Spinner } from "../../components/Spinner";
 import type { ThinkingCharacter } from "../../types";
 import { Composer } from "../composer/Composer";
 import { PostCard } from "./PostCard";
+import { PostContent } from "./PostContent";
 import { formatRelativeTime } from "./QuotePost";
 import {
   buildReplyIndex,
@@ -22,6 +24,8 @@ type InlineComposerState = {
   postId: string;
   mode: "reply" | "quote";
 };
+
+const TIMELINE_PAGE_SIZE = 100;
 
 function toggleId(
   current: ReadonlySet<string>,
@@ -73,9 +77,11 @@ function ThinkingRow({ character }: { character: ThinkingCharacter }) {
 function RepostRow({
   repost,
   onOpenAuthor,
+  onOpenPost,
 }: {
   repost: PostDto;
   onOpenAuthor?: (authorId: string) => void;
+  onOpenPost?: (postId: string) => void;
 }) {
   const author = repost.author;
   return (
@@ -126,9 +132,20 @@ function RepostRow({
           </time>
         </p>
         <p className="mt-0.5 text-[14px] break-words whitespace-pre-wrap text-ink-muted">
-          {repost.content}
+          <PostContent content={repost.content} />
         </p>
       </div>
+      {onOpenPost ? (
+        <button
+          type="button"
+          onClick={() => onOpenPost(repost.id)}
+          aria-label="このリポストを展開"
+          title="投稿を展開"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-ink-faint hover:bg-surface-raised hover:text-accent"
+        >
+          <Icon name="arrows-angle-expand" />
+        </button>
+      ) : null}
     </li>
   );
 }
@@ -136,8 +153,8 @@ function RepostRow({
 function EmptyState({ title, body }: { title: string; body: string }) {
   return (
     <div className="px-6 py-16 text-center">
-      <p className="text-2xl" aria-hidden="true">
-        🔥
+      <p className="text-2xl text-flame">
+        <Icon name="fire" />
       </p>
       <p className="mt-3 font-semibold text-ink">{title}</p>
       <p className="mx-auto mt-2 max-w-sm text-sm whitespace-pre-line text-ink-muted">
@@ -163,6 +180,10 @@ export type TimelineProps = {
   canPost: boolean;
   onOpenAuthor: (authorId: string) => void;
   onPosted: (post: PostDto) => void;
+  onOpenPost: (postId: string) => void;
+  /** Detail view starts with this post's replies and reposts open. */
+  initialExpandedPostId?: string;
+  rootPostShowQuotedPost?: boolean;
 };
 
 export function Timeline({
@@ -178,15 +199,24 @@ export function Timeline({
   canPost,
   onOpenAuthor,
   onPosted,
+  onOpenPost,
+  initialExpandedPostId,
+  rootPostShowQuotedPost = true,
 }: TimelineProps) {
   const [expandedReplies, setExpandedReplies] = useState<ReadonlySet<string>>(
-    new Set<string>(),
+    () => new Set(initialExpandedPostId ? [initialExpandedPostId] : []),
   );
   const [expandedReposts, setExpandedReposts] = useState<ReadonlySet<string>>(
-    new Set<string>(),
+    () => new Set(initialExpandedPostId ? [initialExpandedPostId] : []),
   );
   const [inlineComposer, setInlineComposer] =
     useState<InlineComposerState | null>(null);
+  const [visibleCount, setVisibleCount] = useState(TIMELINE_PAGE_SIZE);
+
+  const visibleRootPosts = useMemo(
+    () => rootPosts.slice(0, visibleCount),
+    [rootPosts, visibleCount],
+  );
 
   const replyIndex = useMemo(() => buildReplyIndex(allPosts), [allPosts]);
   const repostIndex = useMemo(() => buildRepostIndex(allPosts), [allPosts]);
@@ -206,7 +236,7 @@ export function Timeline({
   // Reveal that thread so the indicator can stay directly below its target.
   useEffect(() => {
     if (thinking.length === 0) return;
-    const visibleRoots = new Set(rootPosts.map((post) => post.id));
+    const visibleRoots = new Set(visibleRootPosts.map((post) => post.id));
     const rootsToExpand = new Set<string>();
 
     for (const character of thinking) {
@@ -233,7 +263,7 @@ export function Timeline({
       }
       return changed ? next : current;
     });
-  }, [thinking, postsById, rootPosts]);
+  }, [thinking, postsById, visibleRootPosts]);
 
   const knownHandles = useMemo(() => {
     const handles = new Set<string>([USER_HANDLE]);
@@ -351,6 +381,7 @@ export function Timeline({
               key={repost.id}
               repost={repost}
               onOpenAuthor={onOpenAuthor}
+              onOpenPost={onOpenPost}
             />
           ))}
         </ul>
@@ -380,7 +411,7 @@ export function Timeline({
           </li>
         ) : null}
 
-        {rootPosts.map((post) => {
+        {visibleRootPosts.map((post) => {
           const replyCount = countReplies(replyIndex, post.id);
           const repostCount = countReposts(repostIndex, post.id);
           const repliesExpanded = expandedReplies.has(post.id);
@@ -393,6 +424,8 @@ export function Timeline({
                 knownHandles={knownHandles}
                 onOpenAuthor={onOpenAuthor}
                 onOpenHandle={openHandle}
+                onExpand={onOpenPost}
+                showQuotedPost={rootPostShowQuotedPost}
                 replyCount={replyCount}
                 repostCount={repostCount}
                 repliesExpanded={repliesExpanded}
@@ -437,6 +470,7 @@ export function Timeline({
                           knownHandles={knownHandles}
                           onOpenAuthor={onOpenAuthor}
                           onOpenHandle={openHandle}
+                          onExpand={onOpenPost}
                           // No nested reply expander: every descendant is
                           // already visible in this flat list.
                           replyCount={countReplies(replyIndex, reply.id)}
@@ -468,6 +502,22 @@ export function Timeline({
           );
         })}
       </ul>
+      {visibleRootPosts.length < rootPosts.length ? (
+        <div className="border-b border-line px-4 py-4 text-center">
+          <button
+            type="button"
+            onClick={() =>
+              setVisibleCount((current) => current + TIMELINE_PAGE_SIZE)
+            }
+            className="rounded-full border border-line px-5 py-2 text-sm font-semibold text-accent transition hover:bg-accent/10"
+          >
+            さらに表示
+          </button>
+          <p className="mt-1.5 text-xs text-ink-faint">
+            {visibleRootPosts.length} / {rootPosts.length}件を表示
+          </p>
+        </div>
+      ) : null}
     </div>
   );
 }

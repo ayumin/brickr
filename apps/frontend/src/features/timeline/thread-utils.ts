@@ -16,7 +16,7 @@
  * into a thread, and the flat expansion has to show it for the reply count to
  * stay consistent with what expanding reveals.
  */
-import type { PostDto } from "@enjo/shared";
+import { USER_AUTHOR_ID, USER_HANDLE, type PostDto } from "@enjo/shared";
 
 /** postId → its direct replies, oldest first. */
 export type ReplyIndex = ReadonlyMap<string, readonly PostDto[]>;
@@ -59,6 +59,21 @@ export function indexPostsById(
     byId.set(post.id, post);
   }
   return byId;
+}
+
+/**
+ * Reference rendered as a separate context card in the post detail view.
+ *
+ * A quoted post is normally already embedded in `PostCard`, so it does not
+ * need a second card. A reply is not embedded and therefore returns its
+ * parent. If legacy/corrupt data contains both relationships, the explicit
+ * reply relationship wins and the detail view still shows only one reference.
+ */
+export function selectSeparateDetailReferenceId(post: PostDto): string | null {
+  if (post.replyTo !== null) {
+    return post.replyTo;
+  }
+  return post.quotedPost === null ? post.quoteOf : null;
 }
 
 /**
@@ -182,13 +197,17 @@ export function countReplies(index: ReplyIndex, postId: string): number {
 }
 
 /**
- * The home timeline: thread starters written by the user, newest first.
- * Character posts are not top-level content any more — they live inside
- * expanded threads and on character timelines.
+ * The user's home timeline: their thread starters plus every post that
+ * mentions @you. User replies still live inside their thread unless somebody
+ * explicitly mentions the user in that reply.
  */
-export function selectUserThreads(posts: readonly PostDto[]): PostDto[] {
+export function selectUserTimeline(posts: readonly PostDto[]): PostDto[] {
   return posts
-    .filter((post) => post.author.kind === "user" && isThreadStarter(post))
+    .filter(
+      (post) =>
+        (isAuthoredBy(post, USER_AUTHOR_ID) && isThreadStarter(post)) ||
+        isMentioned(post, USER_HANDLE),
+    )
     .sort(comparePostsNewestFirst);
 }
 
@@ -197,15 +216,23 @@ function isAuthoredBy(post: PostDto, authorId: string): boolean {
   return post.authorId === authorId || post.author.id === authorId;
 }
 
+/** Mention handles are normalized to lowercase by the backend. */
+function isMentioned(post: PostDto, handle: string | undefined): boolean {
+  if (!handle) return false;
+  const normalized = handle.toLowerCase();
+  return post.mentions.some((mention) => mention.toLowerCase() === normalized);
+}
+
 /**
- * One author's timeline: their standalone posts, their replies and their
- * reposts, newest first.
+ * One identity's timeline: everything they authored plus every post that
+ * mentions their handle, newest first.
  */
 export function selectAuthorTimeline(
   posts: readonly PostDto[],
   authorId: string,
+  handle?: string,
 ): PostDto[] {
   return posts
-    .filter((post) => isAuthoredBy(post, authorId))
+    .filter((post) => isAuthoredBy(post, authorId) || isMentioned(post, handle))
     .sort(comparePostsNewestFirst);
 }

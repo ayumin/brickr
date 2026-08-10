@@ -13,6 +13,7 @@ import { Spinner } from "../../components/Spinner";
 import { api, toErrorMessage } from "../../services/api-client";
 import type { ComposerScope } from "../../types";
 import { QuotePost } from "../timeline/QuotePost";
+import { Icon } from "../../components/Icon";
 import { MentionInput } from "./MentionInput";
 
 const ACCEPTED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
@@ -232,7 +233,7 @@ export function Composer({
                 </div>
               ) : (
                 <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-line px-3 py-1.5 text-xs text-ink-muted transition hover:border-accent/50 hover:text-accent">
-                  <span aria-hidden="true">🖼️</span>
+                  <Icon name="image" />
                   画像を添付
                   <input
                     type="file"

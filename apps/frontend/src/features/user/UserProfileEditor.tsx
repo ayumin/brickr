@@ -4,25 +4,26 @@ import type {
   UserProfileDto,
 } from "@enjo/shared";
 import { ErrorBanner } from "../../components/ErrorBanner";
+import { AvatarUploader } from "../../components/AvatarUploader";
 import { api, toErrorMessage } from "../../services/api-client";
-import type { Theme } from "../../services/theme";
+import { THEME_OPTIONS, type Theme } from "../../services/theme";
 
 export function UserProfileEditor({
   profile,
   onClose,
   onSaved,
   theme,
-  onToggleTheme,
+  onThemeChange,
 }: {
   profile: UserProfileDto;
   onClose: () => void;
   onSaved: (profile: UserProfileDto) => void;
   theme: Theme;
-  onToggleTheme: () => void;
+  onThemeChange: (theme: Theme) => void;
 }) {
   const [displayName, setDisplayName] = useState(profile.displayName);
   const [description, setDescription] = useState(profile.description);
-  const [avatarUrl, setAvatarUrl] = useState(profile.avatarUrl ?? "");
+  const [avatarUrl, setAvatarUrl] = useState<string | undefined>(profile.avatarUrl);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,7 +33,7 @@ export function UserProfileEditor({
     const request: SaveUserProfileRequest = {
       displayName: displayName.trim(),
       description: description.trim(),
-      ...(avatarUrl.trim() ? { avatarUrl: avatarUrl.trim() } : {}),
+      ...(avatarUrl ? { avatarUrl } : {}),
     };
     try {
       onSaved(await api.updateUserProfile(request));
@@ -44,8 +45,16 @@ export function UserProfileEditor({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/75 p-3 backdrop-blur-sm sm:p-6">
+    <div
+      className="fixed inset-0 z-50 overflow-y-auto bg-black/75 p-3 backdrop-blur-sm sm:p-6"
+      onClick={(event) => {
+        if (event.target === event.currentTarget && !saving) onClose();
+      }}
+    >
       <form
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="user-profile-editor-title"
         className="mx-auto w-full max-w-lg space-y-5 rounded-2xl border border-line bg-canvas p-5 shadow-2xl"
         onSubmit={(event) => {
           event.preventDefault();
@@ -54,7 +63,9 @@ export function UserProfileEditor({
       >
         <header className="flex items-start gap-3">
           <div>
-            <h2 className="font-bold text-ink">プロフィールを編集</h2>
+            <h2 id="user-profile-editor-title" className="font-bold text-ink">
+              プロフィールを編集
+            </h2>
             <p className="text-xs text-ink-faint">@{profile.handle} は変更できません</p>
           </div>
           <button
@@ -88,19 +99,28 @@ export function UserProfileEditor({
         <fieldset className="border-t border-line pt-4">
           <legend className="text-sm font-medium text-ink-muted">表示テーマ</legend>
           <div className="mt-2 grid grid-cols-2 gap-2">
-            {(["light", "dark"] as const).map((option) => (
+            {THEME_OPTIONS.map((option) => (
               <button
-                key={option}
+                key={option.id}
                 type="button"
-                onClick={theme === option ? undefined : onToggleTheme}
-                aria-pressed={theme === option}
-                className={`rounded-xl border px-3 py-2 text-sm transition ${
-                  theme === option
+                onClick={() => onThemeChange(option.id)}
+                aria-pressed={theme === option.id}
+                className={`rounded-xl border px-3 py-2 text-left text-sm transition ${
+                  theme === option.id
                     ? "border-accent bg-accent/10 font-semibold text-accent"
                     : "border-line text-ink-muted hover:border-line-strong hover:text-ink"
                 }`}
               >
-                {option === "light" ? "☀️ Light" : "🌙 Dark"}
+                <span className="mb-1.5 flex overflow-hidden rounded-full border border-black/10" aria-hidden="true">
+                  {option.swatches.map((color) => (
+                    <span
+                      key={color}
+                      className="h-3 flex-1"
+                      style={{ backgroundColor: color }}
+                    />
+                  ))}
+                </span>
+                <span className="block truncate text-xs">{option.label}</span>
               </button>
             ))}
           </div>
@@ -117,15 +137,7 @@ export function UserProfileEditor({
           />
         </label>
 
-        <label className="block text-sm text-ink-muted">
-          Avatar URL（任意）
-          <input
-            type="url"
-            value={avatarUrl}
-            onChange={(event) => setAvatarUrl(event.currentTarget.value)}
-            className="mt-1.5 w-full rounded-xl border border-line bg-surface-raised px-3 py-2 text-ink focus:border-accent/60 focus:outline-none"
-          />
-        </label>
+        <AvatarUploader value={avatarUrl} onChange={setAvatarUrl} />
 
         <div className="flex justify-end gap-3 border-t border-line pt-4">
           <button

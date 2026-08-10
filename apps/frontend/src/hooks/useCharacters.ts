@@ -8,6 +8,7 @@ export type UseCharactersResult = {
   loading: boolean;
   error: string | null;
   reload: () => void;
+  remove: (ids: string[]) => void;
 };
 
 /** Loads the character roster the backend exposes (DTOs only, no prompts). */
@@ -51,5 +52,12 @@ export function useCharacters(): UseCharactersResult {
     setReloadToken((value) => value + 1);
   }, []);
 
-  return { characters, loading, error, reload };
+  const remove = useCallback((ids: string[]) => {
+    const removed = new Set(ids);
+    setCharacters((current) =>
+      current.filter((character) => !removed.has(character.id)),
+    );
+  }, []);
+
+  return { characters, loading, error, reload, remove };
 }

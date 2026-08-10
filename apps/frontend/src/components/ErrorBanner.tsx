@@ -51,10 +51,11 @@ export function ErrorBanner({
             aria-label="閉じる"
             className="rounded-full border border-current/30 px-2 py-1 text-xs leading-none transition hover:bg-current/10"
           >
-            ×
+            <Icon name="x-lg" />
           </button>
         ) : null}
       </div>
     </div>
   );
 }
+import { Icon } from "./Icon";

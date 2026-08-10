@@ -5,14 +5,20 @@
  * talks to our own backend — no LLM SDKs, no API keys (CLAUDE.md §8, §55).
  */
 import type {
+  BulkDeleteCharactersResponse,
   CharacterDto,
   CharacterConfigDto,
+  CharacterBulkCreationJobDto,
+  CharacterBulkCreationJobResponse,
   CharacterConfigResponse,
+  CharacterManagementDto,
+  CharacterManagementResponse,
   CharactersResponse,
   CreatePostRequest,
   CreatePostResponse,
   CreateSimulationRequest,
   CreateSimulationResponse,
+  DeleteCharacterResponse,
   ModelProfileDto,
   ModelProfilesResponse,
   PostDto,
@@ -109,7 +115,7 @@ function extractApiError(
 }
 
 type RequestOptions = {
-  method?: "GET" | "POST" | "PUT";
+  method?: "GET" | "POST" | "PUT" | "DELETE";
   body?: unknown;
   signal?: AbortSignal;
 };
@@ -174,6 +180,16 @@ export const api = {
     return data.character;
   },
 
+  async getCharacterManagement(
+    signal?: AbortSignal,
+  ): Promise<CharacterManagementDto[]> {
+    const data = await request<CharacterManagementResponse>(
+      "/api/characters/management",
+      signal ? { signal } : {},
+    );
+    return data.characters;
+  },
+
   async getCharacterConfig(
     id: string,
     signal?: AbortSignal,
@@ -193,6 +209,25 @@ export const api = {
     return data.character;
   },
 
+  async startCharacterBulkCreation(
+    count: number,
+  ): Promise<CharacterBulkCreationJobDto> {
+    const data = await request<CharacterBulkCreationJobResponse>(
+      "/api/characters/bulk-create",
+      { method: "POST", body: { count } },
+    );
+    return data.job;
+  },
+
+  async getCharacterBulkCreationJob(
+    id: string,
+  ): Promise<CharacterBulkCreationJobDto> {
+    const data = await request<CharacterBulkCreationJobResponse>(
+      `/api/character-bulk-jobs/${encodeURIComponent(id)}`,
+    );
+    return data.job;
+  },
+
   async updateCharacter(
     id: string,
     body: SaveCharacterRequest,
@@ -202,6 +237,22 @@ export const api = {
       { method: "PUT", body },
     );
     return data.character;
+  },
+
+  async deleteCharacter(id: string): Promise<string> {
+    const data = await request<DeleteCharacterResponse>(
+      `/api/characters/${encodeURIComponent(id)}`,
+      { method: "DELETE" },
+    );
+    return data.deletedId;
+  },
+
+  async deleteCharacters(ids: string[]): Promise<string[]> {
+    const data = await request<BulkDeleteCharactersResponse>(
+      "/api/characters/bulk-delete",
+      { method: "POST", body: { ids } },
+    );
+    return data.deletedIds;
   },
 
   async getModelProfiles(signal?: AbortSignal): Promise<ModelProfileDto[]> {

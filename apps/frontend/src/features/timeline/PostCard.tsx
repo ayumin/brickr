@@ -1,79 +1,10 @@
-import type { ReactNode } from "react";
 import type { PostDto } from "@enjo/shared";
 
 import { Avatar } from "../../components/Avatar";
+import { Icon } from "../../components/Icon";
 import { QuotePost, formatAbsoluteTime, formatRelativeTime } from "./QuotePost";
+import { PostContent } from "./PostContent";
 import { PostImage } from "./PostImage";
-
-/** Handles are ASCII (see character seeds), so this stays deliberately narrow. */
-const MENTION_PATTERN = /@([A-Za-z0-9_]{1,32})/g;
-
-/**
- * Renders post text with `@handle` highlighted.
- *
- * This splits the string and returns React elements. User input is NEVER
- * injected as HTML — no `dangerouslySetInnerHTML` anywhere (CLAUDE.md §55).
- */
-function renderContent(
-  content: string,
-  knownHandles: ReadonlySet<string> | undefined,
-  onOpenHandle: ((handle: string) => void) | undefined,
-): ReactNode[] {
-  const nodes: ReactNode[] = [];
-  let cursor = 0;
-
-  MENTION_PATTERN.lastIndex = 0;
-
-  for (const match of content.matchAll(MENTION_PATTERN)) {
-    const handle = match[1];
-    const start = match.index ?? -1;
-    if (handle === undefined || start < 0) {
-      continue;
-    }
-
-    if (start > cursor) {
-      nodes.push(content.slice(cursor, start));
-    }
-
-    const isKnown = knownHandles ? knownHandles.has(handle) : true;
-    const key = `mention-${String(start)}-${handle}`;
-
-    if (isKnown && onOpenHandle) {
-      nodes.push(
-        <button
-          key={key}
-          type="button"
-          onClick={() => {
-            onOpenHandle(handle);
-          }}
-          className="cursor-pointer rounded text-accent transition hover:underline"
-        >
-          @{handle}
-        </button>,
-      );
-    } else if (isKnown) {
-      nodes.push(
-        <span key={key} className="text-accent">
-          @{handle}
-        </span>,
-      );
-    } else {
-      nodes.push(
-        <span key={key} className="text-ink-muted">
-          @{handle}
-        </span>,
-      );
-    }
-
-    cursor = start + match[0].length;
-  }
-
-  if (cursor < content.length) {
-    nodes.push(content.slice(cursor));
-  }
-
-  return nodes;
-}
 
 export type PostCardProps = {
   post: PostDto;
@@ -85,6 +16,8 @@ export type PostCardProps = {
   onOpenAuthor?: (authorId: string) => void;
   /** Open a timeline from an `@handle` inside the body. */
   onOpenHandle?: (handle: string) => void;
+  /** Open this post with every linked reply and repost visible. */
+  onExpand?: (postId: string) => void;
   /** Transitive reply count (all descendants). */
   replyCount?: number;
   /** Direct repost (quote) count. */
@@ -99,6 +32,8 @@ export type PostCardProps = {
   onRepost?: () => void;
   /** Compact rendering, used for replies inside an expanded thread. */
   dense?: boolean;
+  /** False when a detail view renders the single referenced post separately. */
+  showQuotedPost?: boolean;
 };
 
 export function PostCard({
@@ -107,6 +42,7 @@ export function PostCard({
   knownHandles,
   onOpenAuthor,
   onOpenHandle,
+  onExpand,
   replyCount = 0,
   repostCount = 0,
   repliesExpanded = false,
@@ -116,6 +52,7 @@ export function PostCard({
   onReply,
   onRepost,
   dense = false,
+  showQuotedPost = true,
 }: PostCardProps) {
   const isUser = post.author.kind === "user";
   const isRepost = post.quoteOf !== null;
@@ -149,7 +86,7 @@ export function PostCard({
       <div className="min-w-0 flex-1">
         {isRepost ? (
           <p className="mb-1 text-xs text-ink-faint">
-            <span aria-hidden="true">🔁 </span>
+            <Icon name="repeat" className="mr-1" />
             リポスト（引用）
           </p>
         ) : null}
@@ -193,6 +130,17 @@ export function PostCard({
           >
             {formatRelativeTime(post.createdAt)}
           </time>
+          {onExpand ? (
+            <button
+              type="button"
+              onClick={() => onExpand(post.id)}
+              aria-label="この投稿を展開"
+              title="投稿を展開"
+              className="ml-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-ink-faint transition hover:bg-surface-raised hover:text-accent"
+            >
+              <Icon name="arrows-angle-expand" />
+            </button>
+          ) : null}
         </header>
 
         <p
@@ -200,15 +148,20 @@ export function PostCard({
             dense ? "text-[14px]" : "text-[15px]"
           }`}
         >
-          {renderContent(post.content, knownHandles, onOpenHandle)}
+          <PostContent
+            content={post.content}
+            {...(knownHandles ? { knownHandles } : {})}
+            {...(onOpenHandle ? { onOpenHandle } : {})}
+          />
         </p>
 
         {post.imageUrl ? <PostImage src={post.imageUrl} /> : null}
 
-        {post.quotedPost ? (
+        {showQuotedPost && post.quotedPost ? (
           <QuotePost
             post={post.quotedPost}
             {...(onOpenAuthor ? { onOpenAuthor } : {})}
+            {...(onExpand ? { onOpenPost: onExpand } : {})}
           />
         ) : null}
 

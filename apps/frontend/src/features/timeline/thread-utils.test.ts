@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { USER_AUTHOR_ID } from "@enjo/shared";
+import { USER_AUTHOR_ID, USER_HANDLE } from "@enjo/shared";
 import type { PostAuthorDto, PostDto } from "@enjo/shared";
 
 import {
@@ -9,8 +9,9 @@ import {
   countReposts,
   flattenReplies,
   selectAuthorTimeline,
+  selectSeparateDetailReferenceId,
   selectReposts,
-  selectUserThreads,
+  selectUserTimeline,
 } from "./thread-utils";
 
 const userAuthor: PostAuthorDto = {
@@ -30,6 +31,7 @@ type PostOverrides = {
   replyTo?: string | null;
   quoteOf?: string | null;
   quoted?: boolean;
+  mentions?: string[];
 };
 
 /** Minute-resolution timestamps keep the fixtures readable. */
@@ -46,7 +48,7 @@ function makePost(
     authorId: author.id,
     author,
     content: overrides.content ?? `post ${id}`,
-    mentions: [],
+    mentions: overrides.mentions ?? [],
     replyTo: overrides.replyTo ?? null,
     quoteOf,
     quotedPost:
@@ -255,7 +257,39 @@ describe("reposts", () => {
   });
 });
 
-describe("selectUserThreads", () => {
+describe("selectSeparateDetailReferenceId", () => {
+  it("returns the parent for a reply", () => {
+    const reply = makePost("reply", 1, { replyTo: "parent" });
+
+    expect(selectSeparateDetailReferenceId(reply)).toBe("parent");
+  });
+
+  it("does not duplicate a quote that PostCard embeds", () => {
+    const quote = makePost("quote", 1, { quoteOf: "original" });
+
+    expect(selectSeparateDetailReferenceId(quote)).toBeNull();
+  });
+
+  it("prefers the reply parent when legacy data contains both references", () => {
+    const both = makePost("both", 1, {
+      replyTo: "parent",
+      quoteOf: "original",
+    });
+
+    expect(selectSeparateDetailReferenceId(both)).toBe("parent");
+  });
+
+  it("falls back to quoteOf when the embedded quote data is unavailable", () => {
+    const quote = {
+      ...makePost("quote", 1, { quoteOf: "original" }),
+      quotedPost: null,
+    };
+
+    expect(selectSeparateDetailReferenceId(quote)).toBe("original");
+  });
+});
+
+describe("selectUserTimeline", () => {
   it("keeps only user-authored thread starters, newest first", () => {
     const posts = [
       makePost("user-1", 1, { author: userAuthor }),
@@ -265,7 +299,7 @@ describe("selectUserThreads", () => {
       makePost("user-2", 5, { author: userAuthor }),
     ];
 
-    expect(ids(selectUserThreads(posts))).toEqual(["user-2", "user-1"]);
+    expect(ids(selectUserTimeline(posts))).toEqual(["user-2", "user-1"]);
   });
 
   it("keeps a user repost, because it still starts a thread", () => {
@@ -274,11 +308,26 @@ describe("selectUserThreads", () => {
       makePost("character-post", 1),
     ];
 
-    expect(ids(selectUserThreads(posts))).toEqual(["user-repost"]);
+    expect(ids(selectUserTimeline(posts))).toEqual(["user-repost"]);
   });
 
-  it("returns an empty array when the user has not posted", () => {
-    expect(selectUserThreads([makePost("only-character", 1)])).toEqual([]);
+  it("includes posts that mention the user, including replies", () => {
+    const posts = [
+      makePost("root", 1),
+      makePost("mentioned-reply", 2, { replyTo: "root", mentions: ["you"] }),
+      makePost("not-mentioned", 3, { author: characterAuthor("kansai") }),
+    ];
+
+    expect(ids(selectUserTimeline(posts))).toEqual(["mentioned-reply"]);
+  });
+
+  it("does not duplicate a user thread that also mentions the user", () => {
+    const posts = [makePost("self-mention", 1, { author: userAuthor, mentions: ["you"] })];
+    expect(ids(selectUserTimeline(posts))).toEqual(["self-mention"]);
+  });
+
+  it("returns an empty array when the user has neither posted nor been mentioned", () => {
+    expect(selectUserTimeline([makePost("only-character", 1)])).toEqual([]);
   });
 });
 
@@ -293,11 +342,33 @@ describe("selectAuthorTimeline", () => {
       makePost("other-character", 4, { author: characterAuthor("kansai") }),
     ];
 
-    expect(ids(selectAuthorTimeline(posts, "skeptic"))).toEqual([
+    expect(ids(selectAuthorTimeline(posts, "skeptic", "skeptic"))).toEqual([
       "repost",
       "reply",
       "standalone",
     ]);
+  });
+
+  it("includes posts mentioning the character handle", () => {
+    const skeptic = characterAuthor("skeptic");
+    const posts = [
+      makePost("own", 1, { author: skeptic }),
+      makePost("mention", 3, {
+        author: characterAuthor("kansai"),
+        mentions: ["skeptic"],
+      }),
+      makePost("other", 2, { author: characterAuthor("architect") }),
+    ];
+
+    expect(ids(selectAuthorTimeline(posts, "skeptic", "skeptic"))).toEqual([
+      "mention",
+      "own",
+    ]);
+  });
+
+  it("matches mention handles case-insensitively", () => {
+    const posts = [makePost("mention", 1, { mentions: ["SKEPTIC"] })];
+    expect(ids(selectAuthorTimeline(posts, "skeptic", "skeptic"))).toEqual(["mention"]);
   });
 
   it("selects the user's own timeline by author id", () => {
@@ -307,7 +378,7 @@ describe("selectAuthorTimeline", () => {
       makePost("character-post", 1),
     ];
 
-    expect(ids(selectAuthorTimeline(posts, USER_AUTHOR_ID))).toEqual([
+    expect(ids(selectAuthorTimeline(posts, USER_AUTHOR_ID, USER_HANDLE))).toEqual([
       "user-reply",
       "user-root",
     ]);

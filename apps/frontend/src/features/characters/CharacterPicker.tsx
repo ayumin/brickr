@@ -1,9 +1,12 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { CharacterDto } from "@enjo/shared";
 
 import { Avatar } from "../../components/Avatar";
+import { Icon } from "../../components/Icon";
 import { Spinner } from "../../components/Spinner";
 import { truncateProfile } from "./character-utils";
+
+const CHARACTER_PAGE_SIZE = 100;
 
 export type CharacterPickerProps = {
   characters: CharacterDto[];
@@ -12,6 +15,7 @@ export type CharacterPickerProps = {
   onSelect: (character: CharacterDto) => void;
   onCreate: () => void;
   onEdit: (character: CharacterDto) => void;
+  onOpenList: () => void;
 };
 
 /**
@@ -26,8 +30,14 @@ export function CharacterPicker({
   onSelect,
   onCreate,
   onEdit,
+  onOpenList,
 }: CharacterPickerProps) {
   const [query, setQuery] = useState("");
+  const [visibleCount, setVisibleCount] = useState(CHARACTER_PAGE_SIZE);
+
+  useEffect(() => {
+    setVisibleCount(CHARACTER_PAGE_SIZE);
+  }, [query]);
 
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -42,10 +52,18 @@ export function CharacterPicker({
     );
   }, [characters, query]);
 
+  const visibleCharacters = visible.slice(0, visibleCount);
+
   return (
     <section className="rounded-2xl border border-line bg-surface">
       <header className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
-        <h2 className="text-sm font-semibold text-ink">キャラクター</h2>
+        <button
+          type="button"
+          onClick={onOpenList}
+          className="rounded-md text-left text-sm font-semibold text-ink transition hover:text-accent"
+        >
+          キャラクター
+        </button>
         <div className="flex items-center gap-2">
           <span className="rounded-full bg-surface-raised px-2 py-0.5 text-xs text-ink-muted">
             {characters.length}人
@@ -55,7 +73,8 @@ export function CharacterPicker({
             onClick={onCreate}
             className="rounded-full bg-accent-strong px-2.5 py-1 text-xs font-semibold text-white hover:bg-accent"
           >
-            ＋ 作成
+            <Icon name="plus-lg" className="mr-1" />
+            作成
           </button>
         </div>
       </header>
@@ -82,7 +101,7 @@ export function CharacterPicker({
         </p>
       ) : (
         <ul className="max-h-[60vh] overflow-y-auto p-2 lg:max-h-[calc(100dvh-16rem)]">
-          {visible.map((character) => {
+          {visibleCharacters.map((character) => {
             const isSelected = character.id === selectedId;
             return (
               <li key={character.id}>
@@ -134,6 +153,22 @@ export function CharacterPicker({
               </li>
             );
           })}
+          {visibleCharacters.length < visible.length ? (
+            <li className="px-2 py-3 text-center">
+              <button
+                type="button"
+                onClick={() =>
+                  setVisibleCount((current) => current + CHARACTER_PAGE_SIZE)
+                }
+                className="rounded-full border border-line px-4 py-1.5 text-xs font-semibold text-accent hover:bg-accent/10"
+              >
+                さらに表示
+              </button>
+              <p className="mt-1 text-[11px] text-ink-faint">
+                {visibleCharacters.length} / {visible.length}人を表示
+              </p>
+            </li>
+          ) : null}
         </ul>
       )}
     </section>

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { SimulationDto } from "@enjo/shared";
 
 import { ErrorBanner } from "./components/ErrorBanner";
+import { Icon } from "./components/Icon";
 import { Spinner } from "./components/Spinner";
 import { ApiError, api, isAbortError, toErrorMessage } from "./services/api-client";
 import { applyTheme, readPreferredTheme, type Theme } from "./services/theme";
@@ -46,6 +47,7 @@ export default function App() {
     loading: charactersLoading,
     error: charactersError,
     reload: reloadCharacters,
+    remove: removeCharacters,
   } = useCharacters();
 
   const [simulation, setSimulation] = useState<SimulationDto | null>(null);
@@ -114,20 +116,15 @@ export default function App() {
     setError(null);
   }, []);
 
-  const toggleTheme = useCallback(() => {
-    setTheme((current) => {
-      const next = current === "dark" ? "light" : "dark";
-      applyTheme(next);
-      return next;
-    });
+  const selectTheme = useCallback((selected: Theme) => {
+    applyTheme(selected);
+    setTheme(selected);
   }, []);
 
   if (phase === "loading" || (!simulation && phase !== "error")) {
     return (
       <div className="flex min-h-dvh flex-col items-center justify-center gap-4 px-6 text-center">
-        <span className="text-3xl" aria-hidden="true">
-          🔥
-        </span>
+        <Icon name="fire" className="text-3xl text-flame" />
         <Spinner size="lg" />
         <p className="text-sm text-ink-muted">
           シミュレーションを準備しています…
@@ -140,8 +137,9 @@ export default function App() {
     return (
       <div className="flex min-h-dvh items-center justify-center px-6">
         <div className="w-full max-w-md space-y-4">
-          <h1 className="text-center text-lg font-bold text-ink">
-            🔥 炎上シミュレータ
+          <h1 className="flex items-center justify-center gap-2 text-center text-lg font-bold text-ink">
+            <Icon name="fire" className="text-flame" />
+            炎上シミュレータ
           </h1>
           <ErrorBanner
             message="起動できませんでした"
@@ -167,12 +165,13 @@ export default function App() {
       charactersLoading={charactersLoading}
       charactersError={charactersError}
       onReloadCharacters={reloadCharacters}
+      onCharactersDeleted={removeCharacters}
       userProfile={userProfile.profile}
       userProfileError={userProfile.error}
       onReloadUserProfile={userProfile.reload}
       onUserProfileUpdated={userProfile.setProfile}
       theme={theme}
-      onToggleTheme={toggleTheme}
+      onThemeChange={selectTheme}
       bootstrapError={error}
       onDismissBootstrapError={dismissError}
     />

@@ -1,6 +1,8 @@
 import type { QuotedPostDto } from "@enjo/shared";
 
 import { Avatar } from "../../components/Avatar";
+import { Icon } from "../../components/Icon";
+import { PostContent } from "./PostContent";
 import { PostImage } from "./PostImage";
 
 /**
@@ -66,10 +68,11 @@ export type QuotePostProps = {
   post: QuotedPostDto;
   /** Open the quoted author's timeline. */
   onOpenAuthor?: (authorId: string) => void;
+  onOpenPost?: (postId: string) => void;
 };
 
 /** Embedded card for the post a character quoted / reposted (CLAUDE.md §38). */
-export function QuotePost({ post, onOpenAuthor }: QuotePostProps) {
+export function QuotePost({ post, onOpenAuthor, onOpenPost }: QuotePostProps) {
   const author = post.author;
 
   return (
@@ -109,10 +112,21 @@ export function QuotePost({ post, onOpenAuthor }: QuotePostProps) {
         >
           {formatRelativeTime(post.createdAt)}
         </time>
+        {onOpenPost ? (
+          <button
+            type="button"
+            onClick={() => onOpenPost(post.id)}
+            aria-label="引用元の投稿を展開"
+            title="投稿を展開"
+            className="ml-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-ink-faint hover:bg-surface-hover hover:text-accent"
+          >
+            <Icon name="arrows-angle-expand" />
+          </button>
+        ) : null}
       </header>
 
       <p className="mt-1 text-[14px] break-words whitespace-pre-wrap text-ink-muted">
-        {post.content}
+        <PostContent content={post.content} />
       </p>
       {post.imageUrl ? <PostImage src={post.imageUrl} alt="引用された投稿の画像" /> : null}
     </article>

@@ -6,6 +6,7 @@ import type {
 } from "@enjo/shared";
 
 import { ErrorBanner } from "../../components/ErrorBanner";
+import { AvatarUploader } from "../../components/AvatarUploader";
 import { Spinner } from "../../components/Spinner";
 import { api, isAbortError, toErrorMessage } from "../../services/api-client";
 
@@ -86,7 +87,6 @@ export function CharacterEditor({
       | "rolePrompt"
       | "tonePrompt"
       | "dialectPrompt"
-      | "avatarUrl"
       | "modelProfileId"
     >,
     value: string,
@@ -131,11 +131,21 @@ export function CharacterEditor({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/75 p-3 backdrop-blur-sm sm:p-6">
-      <div className="mx-auto w-full max-w-3xl overflow-hidden rounded-2xl border border-line bg-canvas shadow-2xl">
+    <div
+      className="fixed inset-0 z-50 overflow-y-auto bg-black/75 p-3 backdrop-blur-sm sm:p-6"
+      onClick={(event) => {
+        if (event.target === event.currentTarget && !saving) onClose();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="character-editor-title"
+        className="mx-auto w-full max-w-3xl overflow-hidden rounded-2xl border border-line bg-canvas shadow-2xl"
+      >
         <header className="sticky top-0 z-10 flex items-center gap-3 border-b border-line bg-canvas/95 px-4 py-3 backdrop-blur">
           <div>
-            <h2 className="font-bold text-ink">
+            <h2 id="character-editor-title" className="font-bold text-ink">
               {characterId ? "キャラクターを編集" : "キャラクターを作成"}
             </h2>
             <p className="text-xs text-ink-faint">
@@ -200,11 +210,11 @@ export function CharacterEditor({
                 />
               </div>
               <div className="sm:col-span-2">
-                <TextField
-                  label="Avatar URL（任意）"
-                  value={form.avatarUrl ?? ""}
-                  type="url"
-                  onChange={(value) => setText("avatarUrl", value)}
+                <AvatarUploader
+                  value={form.avatarUrl}
+                  onChange={(avatarUrl) =>
+                    setForm((current) => ({ ...current, avatarUrl }))
+                  }
                 />
               </div>
             </section>
@@ -353,7 +363,6 @@ type TextFieldProps = {
   required?: boolean;
   maxLength?: number;
   pattern?: string;
-  type?: "text" | "url";
 };
 
 function TextField({ label, value, onChange, hint, prefix, ...input }: TextFieldProps) {
