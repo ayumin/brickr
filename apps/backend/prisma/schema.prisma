@@ -1,4 +1,4 @@
-// Enjo Simulator — MVP schema.
+// Brickr — MVP schema.
 //
 // Keep the schema small: characters, model_profiles, simulations, posts, and
 // the singleton editable user profile.

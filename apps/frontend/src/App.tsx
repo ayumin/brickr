@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SimulationDto } from "@enjo/shared";
 
+import { APP_FULL_NAME, APP_NAME, APP_TAGLINE } from "./brand";
+import { BrandLogo } from "./components/BrandLogo";
 import { ErrorBanner } from "./components/ErrorBanner";
-import { Icon } from "./components/Icon";
 import { Spinner } from "./components/Spinner";
 import { ApiError, api, isAbortError, toErrorMessage } from "./services/api-client";
 import { applyTheme, readPreferredTheme, type Theme } from "./services/theme";
@@ -124,7 +125,11 @@ export default function App() {
   if (phase === "loading" || (!simulation && phase !== "error")) {
     return (
       <div className="flex min-h-dvh flex-col items-center justify-center gap-4 px-6 text-center">
-        <Icon name="fire" className="text-3xl text-flame" />
+        <BrandLogo className="h-16 w-16" />
+        <div>
+          <p className="font-bold text-ink">{APP_NAME}</p>
+          <p className="text-xs text-ink-faint">{APP_TAGLINE}</p>
+        </div>
         <Spinner size="lg" />
         <p className="text-sm text-ink-muted">
           シミュレーションを準備しています…
@@ -138,8 +143,8 @@ export default function App() {
       <div className="flex min-h-dvh items-center justify-center px-6">
         <div className="w-full max-w-md space-y-4">
           <h1 className="flex items-center justify-center gap-2 text-center text-lg font-bold text-ink">
-            <Icon name="fire" className="text-flame" />
-            炎上シミュレータ
+            <BrandLogo className="h-7 w-7" />
+            {APP_FULL_NAME}
           </h1>
           <ErrorBanner
             message="起動できませんでした"

@@ -6,6 +6,8 @@ import type {
   UserProfileDto,
 } from "@enjo/shared";
 
+import { APP_NAME, APP_TAGLINE } from "../../brand";
+import { BrandLogo } from "../../components/BrandLogo";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { Icon } from "../../components/Icon";
 import { Spinner } from "../../components/Spinner";
@@ -274,13 +276,16 @@ export function SimulationView({
           <button
             type="button"
             onClick={goHome}
-            aria-label="炎上シミュレータのホームへ戻る"
+            aria-label={`${APP_NAME}のホームへ戻る`}
             className="flex min-w-0 items-center gap-2 rounded-lg text-left hover:opacity-80"
           >
-            <Icon name="fire" className="text-lg leading-none text-flame" />
+            <BrandLogo className="h-7 w-7" />
             <div className="min-w-0">
-              <h1 className="truncate text-base font-bold text-ink">
-                炎上シミュレータ
+              <h1 className="flex min-w-0 items-baseline gap-1 truncate text-base font-bold text-ink">
+                <span>{APP_NAME}</span>
+                <span className="hidden truncate text-[11px] font-normal text-ink-faint sm:inline">
+                  — {APP_TAGLINE}
+                </span>
               </h1>
               <p className="truncate text-[11px] text-ink-faint">
                 {simulation.title ?? "無題のスレッド"}

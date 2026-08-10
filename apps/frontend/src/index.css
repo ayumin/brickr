@@ -113,6 +113,42 @@ html[data-theme="github-dark"] {
   --color-accent: #58a6ff; --color-accent-strong: #1f6feb; --color-accent-soft: #10243d; --color-flame: #f0883e; --color-danger: #f85149; --color-warn: #d29922;
 }
 
+.brand-logo {
+  background-color: #000;
+}
+
+.brand-logo__light {
+  display: none;
+}
+
+.brand-logo__dark {
+  display: block;
+}
+
+html[data-theme="x-light"] .brand-logo,
+html[data-theme="salesforce"] .brand-logo,
+html[data-theme="atlassian"] .brand-logo,
+html[data-theme="gitlab-light"] .brand-logo,
+html[data-theme="github-light"] .brand-logo {
+  background-color: #fff;
+}
+
+html[data-theme="x-light"] .brand-logo__light,
+html[data-theme="salesforce"] .brand-logo__light,
+html[data-theme="atlassian"] .brand-logo__light,
+html[data-theme="gitlab-light"] .brand-logo__light,
+html[data-theme="github-light"] .brand-logo__light {
+  display: block;
+}
+
+html[data-theme="x-light"] .brand-logo__dark,
+html[data-theme="salesforce"] .brand-logo__dark,
+html[data-theme="atlassian"] .brand-logo__dark,
+html[data-theme="gitlab-light"] .brand-logo__dark,
+html[data-theme="github-light"] .brand-logo__dark {
+  display: none;
+}
+
 body {
   margin: 0;
   min-height: 100dvh;
