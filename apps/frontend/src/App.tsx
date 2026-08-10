@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { SimulationDto } from "@enjo/shared";
+import type { SimulationDto, SimulationSummaryDto } from "@enjo/shared";
 
 import { APP_FULL_NAME, APP_NAME, APP_TAGLINE } from "./brand";
 import { BrandLogo } from "./components/BrandLogo";
@@ -52,9 +52,24 @@ export default function App() {
   } = useCharacters();
 
   const [simulation, setSimulation] = useState<SimulationDto | null>(null);
+  const [simulations, setSimulations] = useState<SimulationSummaryDto[]>([]);
+  const [simulationsLoading, setSimulationsLoading] = useState(false);
+  const [simulationsError, setSimulationsError] = useState<string | null>(null);
   const [phase, setPhase] = useState<LoadPhase>("loading");
   const [error, setError] = useState<string | null>(null);
   const [theme, setTheme] = useState<Theme>(readPreferredTheme);
+
+  const loadSimulations = useCallback(async (): Promise<void> => {
+    setSimulationsLoading(true);
+    setSimulationsError(null);
+    try {
+      setSimulations(await api.getSimulations());
+    } catch (cause) {
+      if (!isAbortError(cause)) setSimulationsError(toErrorMessage(cause));
+    } finally {
+      setSimulationsLoading(false);
+    }
+  }, []);
 
   /**
    * Resolve the simulation to show: reuse the id kept in localStorage when the
@@ -113,6 +128,53 @@ export default function App() {
     void bootstrap();
   }, [bootstrap]);
 
+  useEffect(() => {
+    if (phase === "ready") void loadSimulations();
+  }, [loadSimulations, phase, simulation?.id]);
+
+  const selectSimulation = useCallback(async (id: string): Promise<void> => {
+    setError(null);
+    try {
+      const existing = await api.getSimulation(id);
+      const selected =
+        existing.simulation.status === "stopped"
+          ? await api.resumeSimulation(id)
+          : existing.simulation;
+      storeSimulationId(selected.id);
+      setSimulation(selected);
+    } catch (cause) {
+      setError(toErrorMessage(cause));
+      throw cause;
+    }
+  }, []);
+
+  const createSimulation = useCallback(async (title: string): Promise<void> => {
+    setError(null);
+    try {
+      const created = await api.createSimulation({ title });
+      storeSimulationId(created.id);
+      setSimulation(created);
+    } catch (cause) {
+      setError(toErrorMessage(cause));
+      throw cause;
+    }
+  }, []);
+
+  const renameSimulation = useCallback(
+    async (id: string, title: string): Promise<void> => {
+      setError(null);
+      try {
+        const renamed = await api.updateSimulation(id, { title });
+        setSimulation((current) => (current?.id === id ? renamed : current));
+        await loadSimulations();
+      } catch (cause) {
+        setError(toErrorMessage(cause));
+        throw cause;
+      }
+    },
+    [loadSimulations],
+  );
+
   const dismissError = useCallback(() => {
     setError(null);
   }, []);
@@ -165,7 +227,15 @@ export default function App() {
 
   return (
     <SimulationView
+      key={simulation.id}
       simulation={simulation}
+      simulations={simulations}
+      simulationsLoading={simulationsLoading}
+      simulationsError={simulationsError}
+      onReloadSimulations={loadSimulations}
+      onSelectSimulation={selectSimulation}
+      onCreateSimulation={createSimulation}
+      onRenameSimulation={renameSimulation}
       characters={characters}
       charactersLoading={charactersLoading}
       charactersError={charactersError}

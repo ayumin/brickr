@@ -15,6 +15,7 @@ export type CharacterPickerProps = {
   onSelect: (character: CharacterDto) => void;
   onEdit: (character: CharacterDto) => void;
   onOpenList: () => void;
+  embedded?: boolean;
 };
 
 /**
@@ -29,6 +30,7 @@ export function CharacterPicker({
   onSelect,
   onEdit,
   onOpenList,
+  embedded = false,
 }: CharacterPickerProps) {
   const [query, setQuery] = useState("");
   const [visibleCount, setVisibleCount] = useState(CHARACTER_PAGE_SIZE);
@@ -53,8 +55,8 @@ export function CharacterPicker({
   const visibleCharacters = visible.slice(0, visibleCount);
 
   return (
-    <section className="rounded-2xl border border-line bg-surface">
-      <header className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
+    <section className={embedded ? "bg-surface" : "rounded-2xl border border-line bg-surface"}>
+      {!embedded ? <header className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
         <button
           type="button"
           onClick={onOpenList}
@@ -67,7 +69,7 @@ export function CharacterPicker({
         <span className="rounded-full bg-surface-raised px-2 py-0.5 text-xs text-ink-muted">
           {characters.length}人
         </span>
-      </header>
+      </header> : null}
 
       <div className="px-3 pt-3">
         <input

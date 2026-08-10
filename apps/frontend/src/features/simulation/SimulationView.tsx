@@ -3,6 +3,7 @@ import { USER_AUTHOR_ID } from "@enjo/shared";
 import type {
   CharacterDto,
   SimulationDto,
+  SimulationSummaryDto,
   UserProfileDto,
 } from "@enjo/shared";
 
@@ -26,6 +27,10 @@ import {
   selectUserTimeline,
 } from "../timeline/thread-utils";
 import { useSimulationEvents } from "./useSimulationEvents";
+import { SimulationList } from "./SimulationList";
+import { SimulationPicker } from "./SimulationPicker";
+import { SimulationAnalysis } from "./SimulationAnalysis";
+import { SimulationNameDialog } from "./SimulationNameDialog";
 
 const CONNECTION_LABEL: Record<ConnectionState, string> = {
   connecting: "接続中…",
@@ -73,6 +78,13 @@ type ProfileInfo = {
 
 export type SimulationViewProps = {
   simulation: SimulationDto;
+  simulations: SimulationSummaryDto[];
+  simulationsLoading: boolean;
+  simulationsError: string | null;
+  onReloadSimulations: () => void;
+  onSelectSimulation: (id: string) => Promise<void>;
+  onCreateSimulation: (title: string) => Promise<void>;
+  onRenameSimulation: (id: string, title: string) => Promise<void>;
   characters: CharacterDto[];
   charactersLoading: boolean;
   charactersError: string | null;
@@ -90,6 +102,13 @@ export type SimulationViewProps = {
 
 export function SimulationView({
   simulation,
+  simulations,
+  simulationsLoading,
+  simulationsError,
+  onReloadSimulations,
+  onSelectSimulation,
+  onCreateSimulation,
+  onRenameSimulation,
   characters,
   charactersLoading,
   charactersError,
@@ -110,10 +129,15 @@ export function SimulationView({
   const [view, setView] = useState<TimelineView>({ kind: "home" });
   const [postReturnView, setPostReturnView] = useState<TimelineView>({ kind: "home" });
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarTab, setSidebarTab] = useState<"characters" | "simulations">("characters");
   const [pendingMention, setPendingMention] = useState<string | null>(null);
   const [composerOpen, setComposerOpen] = useState(false);
   const [editor, setEditor] = useState<{ characterId: string | null } | null>(null);
   const [userEditorOpen, setUserEditorOpen] = useState(false);
+  const [simulationNameDialog, setSimulationNameDialog] = useState<
+    { mode: "create" } | { mode: "rename"; simulation: SimulationSummaryDto } | null
+  >(null);
 
   const isStopped = simulation.status === "stopped";
   const canPost = !isStopped;
@@ -140,6 +164,18 @@ export function SimulationView({
 
   const openCharacterList = useCallback(() => {
     setView({ kind: "characters" });
+    setSidebarOpen(false);
+    window.scrollTo({ top: 0 });
+  }, []);
+
+  const openSimulationList = useCallback(() => {
+    setView({ kind: "simulations" });
+    setSidebarOpen(false);
+    window.scrollTo({ top: 0 });
+  }, []);
+
+  const openSimulationAnalysis = useCallback((simulationId: string) => {
+    setView({ kind: "simulation-analysis", simulationId });
     setSidebarOpen(false);
     window.scrollTo({ top: 0 });
   }, []);
@@ -250,19 +286,55 @@ export function SimulationView({
     .join(" / ");
 
   const sidebar = (
-    <CharacterPicker
-      characters={characters}
-      loading={charactersLoading}
-      selectedId={authorId}
-      onSelect={(character) => {
-        openAuthor(character.id);
-      }}
-      onEdit={(character) => {
-        setSidebarOpen(false);
-        setEditor({ characterId: character.id });
-      }}
-      onOpenList={openCharacterList}
-    />
+    <section className="overflow-hidden rounded-2xl border border-line bg-surface">
+      <header className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
+        <button
+          type="button"
+          onClick={sidebarTab === "characters" ? openCharacterList : openSimulationList}
+          className="flex min-w-0 items-center gap-2 rounded-md text-left text-sm font-semibold text-ink transition hover:text-accent"
+        >
+          <Icon name={sidebarTab === "characters" ? "list" : "clock-history"} className="text-base" />
+          <span className="truncate">{sidebarTab === "characters" ? "キャラクター一覧" : "シミュレーション履歴"}</span>
+        </button>
+        <span className="shrink-0 rounded-full bg-surface-raised px-2 py-0.5 text-xs text-ink-muted">
+          {sidebarTab === "characters" ? `${String(characters.length)}人` : `${String(simulations.length)}件`}
+        </span>
+      </header>
+      <div className="grid grid-cols-2 border-b border-line bg-surface-muted p-1">
+        <button type="button" onClick={() => setSidebarTab("characters")} className={`rounded-lg px-2 py-1.5 text-xs font-semibold ${sidebarTab === "characters" ? "bg-surface text-accent shadow-sm" : "text-ink-muted"}`}>
+          <Icon name="people" className="mr-1" />キャラクター
+        </button>
+        <button type="button" onClick={() => setSidebarTab("simulations")} className={`rounded-lg px-2 py-1.5 text-xs font-semibold ${sidebarTab === "simulations" ? "bg-surface text-accent shadow-sm" : "text-ink-muted"}`}>
+          <Icon name="clock-history" className="mr-1" />履歴
+        </button>
+      </div>
+      {sidebarTab === "characters" ? (
+        <CharacterPicker
+          embedded
+          characters={characters}
+          loading={charactersLoading}
+          selectedId={authorId}
+          onSelect={(character) => openAuthor(character.id)}
+          onEdit={(character) => {
+            setSidebarOpen(false);
+            setEditor({ characterId: character.id });
+          }}
+          onOpenList={openCharacterList}
+        />
+      ) : (
+        <SimulationPicker
+          simulations={simulations}
+          currentId={simulation.id}
+          loading={simulationsLoading}
+          error={simulationsError}
+          onRetry={onReloadSimulations}
+          onSelect={onSelectSimulation}
+          onCreate={() => setSimulationNameDialog({ mode: "create" })}
+          onRename={(item) => setSimulationNameDialog({ mode: "rename", simulation: item })}
+          onAnalyze={openSimulationAnalysis}
+        />
+      )}
+    </section>
   );
 
   return (
@@ -299,11 +371,12 @@ export function SimulationView({
             <button
               type="button"
               onClick={() => {
+                setSidebarTab("characters");
                 setSidebarOpen(true);
               }}
               className="rounded-full border border-line px-3 py-1 text-xs text-ink-muted transition hover:border-line-strong hover:text-ink lg:hidden"
             >
-              キャラ{characters.length > 0 ? `(${String(characters.length)})` : ""}
+              パネル
             </button>
 
           </div>
@@ -313,7 +386,7 @@ export function SimulationView({
       <div className="mx-auto flex w-full max-w-[1000px] justify-center gap-6 px-0 lg:px-4">
         <main
           className={`min-w-0 w-full border-x border-line pb-24 ${
-            view.kind === "characters" ? "max-w-[1000px]" : "max-w-[600px]"
+            view.kind === "characters" || view.kind === "simulations" || view.kind === "simulation-analysis" ? "max-w-[1000px]" : "max-w-[600px]"
           }`}
         >
           {view.kind === "timeline" ? (
@@ -364,19 +437,31 @@ export function SimulationView({
                 <p className="text-xs text-ink-faint">返信とリポストをすべて表示</p>
               </div>
             </div>
-          ) : view.kind === "characters" ? (
+          ) : view.kind === "characters" || view.kind === "simulations" || view.kind === "simulation-analysis" ? (
             <div className="flex items-center gap-3 border-b border-line px-4 py-2.5">
               <button
                 type="button"
-                onClick={goHome}
+                  onClick={view.kind === "simulation-analysis" ? openSimulationList : goHome}
                 aria-label="ホームに戻る"
                 className="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted transition hover:bg-surface-hover hover:text-ink"
               >
                 <Icon name="arrow-left" />
               </button>
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-ink">キャラクター一覧</p>
-                <p className="text-xs text-ink-faint">作成・編集・削除</p>
+                <p className="truncate text-sm font-semibold text-ink">
+                  {view.kind === "characters"
+                    ? "キャラクター一覧"
+                    : view.kind === "simulations"
+                      ? "シミュレーション一覧"
+                      : simulations.find((item) => item.id === view.simulationId)?.title ?? "シミュレーション分析"}
+                </p>
+                <p className="text-xs text-ink-faint">
+                  {view.kind === "characters"
+                    ? "作成・編集・削除"
+                    : view.kind === "simulations"
+                      ? "履歴の確認・復帰・新規開始"
+                      : "シミュレーション全体の分析"}
+                </p>
               </div>
             </div>
           ) : (
@@ -504,6 +589,20 @@ export function SimulationView({
               onDeleted={onCharactersDeleted}
               onCreated={onReloadCharacters}
             />
+          ) : view.kind === "simulations" ? (
+            <SimulationList
+              simulations={simulations}
+              currentId={simulation.id}
+              loading={simulationsLoading}
+              error={simulationsError}
+              onRetry={onReloadSimulations}
+              onSelect={onSelectSimulation}
+              onCreate={() => setSimulationNameDialog({ mode: "create" })}
+              onRename={(item) => setSimulationNameDialog({ mode: "rename", simulation: item })}
+              onAnalyze={openSimulationAnalysis}
+            />
+          ) : view.kind === "simulation-analysis" ? (
+            <SimulationAnalysis simulationId={view.simulationId} />
           ) : view.kind === "post" ? (
             selectedPost ? (
               <PostDetail
@@ -566,9 +665,20 @@ export function SimulationView({
           )}
         </main>
 
-        {view.kind !== "characters" ? (
-          <aside className="hidden w-[320px] shrink-0 py-4 lg:block">
-            <div className="sticky top-[4.5rem]">{sidebar}</div>
+        {view.kind !== "characters" && view.kind !== "simulations" && view.kind !== "simulation-analysis" ? (
+          <aside className={`relative hidden shrink-0 py-4 transition-[width] lg:block ${sidebarCollapsed ? "w-12" : "w-[320px]"}`}>
+            <div className="sticky top-[4.5rem]">
+              <button
+                type="button"
+                onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
+                title={sidebarCollapsed ? "パネルを展開" : "パネルを折りたたむ"}
+                aria-label={sidebarCollapsed ? "パネルを展開" : "パネルを折りたたむ"}
+                className="mb-2 flex h-9 w-9 items-center justify-center rounded-full border border-line bg-surface text-ink-muted transition hover:text-accent"
+              >
+                <Icon name={sidebarCollapsed ? "chevron-left" : "chevron-right"} />
+              </button>
+              {!sidebarCollapsed ? sidebar : null}
+            </div>
           </aside>
         ) : null}
       </div>
@@ -614,6 +724,21 @@ export function SimulationView({
             setUserEditorOpen(false);
             events.reload();
           }}
+        />
+      ) : null}
+
+      {simulationNameDialog ? (
+        <SimulationNameDialog
+          mode={simulationNameDialog.mode}
+          {...(simulationNameDialog.mode === "rename"
+            ? { initialValue: simulationNameDialog.simulation.title ?? "" }
+            : {})}
+          onClose={() => setSimulationNameDialog(null)}
+          onSave={(title) =>
+            simulationNameDialog.mode === "create"
+              ? onCreateSimulation(title)
+              : onRenameSimulation(simulationNameDialog.simulation.id, title)
+          }
         />
       ) : null}
     </div>

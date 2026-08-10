@@ -31,8 +31,13 @@ import type {
   RestoreCharacterResponse,
   SaveCharacterRequest,
   SaveUserProfileRequest,
+  SimulationAnalysisDto,
+  SimulationAnalysisResponse,
   SimulationDto,
   SimulationResponse,
+  SimulationsResponse,
+  SimulationSummaryDto,
+  UpdateSimulationRequest,
   UserProfileDto,
   UserProfileResponse,
 } from "@enjo/shared";
@@ -336,6 +341,36 @@ export const api = {
       ...(signal ? { signal } : {}),
     });
     return data.simulation;
+  },
+
+  async getSimulations(signal?: AbortSignal): Promise<SimulationSummaryDto[]> {
+    const data = await request<SimulationsResponse>(
+      "/api/simulations",
+      signal ? { signal } : {},
+    );
+    return data.simulations;
+  },
+
+  async updateSimulation(
+    id: string,
+    body: UpdateSimulationRequest,
+  ): Promise<SimulationDto> {
+    const data = await request<{ simulation: SimulationDto }>(
+      `/api/simulations/${encodeURIComponent(id)}`,
+      { method: "PUT", body },
+    );
+    return data.simulation;
+  },
+
+  async getSimulationAnalysis(
+    id: string,
+    signal?: AbortSignal,
+  ): Promise<SimulationAnalysisDto> {
+    const data = await request<SimulationAnalysisResponse>(
+      `/api/simulations/${encodeURIComponent(id)}/analysis`,
+      signal ? { signal } : {},
+    );
+    return data.analysis;
   },
 
   getSimulation(
