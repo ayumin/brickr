@@ -9,6 +9,7 @@ import type { PostDto } from "@enjo/shared";
 
 /** A character the backend told us is currently generating ("考え中"). */
 export type ThinkingCharacter = {
+  targetPostId: string;
   characterId: string;
   handle: string;
   displayName: string;

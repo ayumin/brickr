@@ -6,15 +6,23 @@
  */
 import type {
   CharacterDto,
+  CharacterConfigDto,
+  CharacterConfigResponse,
   CharactersResponse,
   CreatePostRequest,
   CreatePostResponse,
   CreateSimulationRequest,
   CreateSimulationResponse,
+  ModelProfileDto,
+  ModelProfilesResponse,
   PostDto,
   PostsResponse,
+  SaveCharacterRequest,
+  SaveUserProfileRequest,
   SimulationDto,
   SimulationResponse,
+  UserProfileDto,
+  UserProfileResponse,
 } from "@enjo/shared";
 
 const DEFAULT_BASE_URL = "http://localhost:3000";
@@ -101,7 +109,7 @@ function extractApiError(
 }
 
 type RequestOptions = {
-  method?: "GET" | "POST";
+  method?: "GET" | "POST" | "PUT";
   body?: unknown;
   signal?: AbortSignal;
 };
@@ -166,6 +174,60 @@ export const api = {
     return data.character;
   },
 
+  async getCharacterConfig(
+    id: string,
+    signal?: AbortSignal,
+  ): Promise<CharacterConfigDto> {
+    const data = await request<CharacterConfigResponse>(
+      `/api/characters/${encodeURIComponent(id)}/config`,
+      signal ? { signal } : {},
+    );
+    return data.character;
+  },
+
+  async createCharacter(body: SaveCharacterRequest): Promise<CharacterConfigDto> {
+    const data = await request<CharacterConfigResponse>("/api/characters", {
+      method: "POST",
+      body,
+    });
+    return data.character;
+  },
+
+  async updateCharacter(
+    id: string,
+    body: SaveCharacterRequest,
+  ): Promise<CharacterConfigDto> {
+    const data = await request<CharacterConfigResponse>(
+      `/api/characters/${encodeURIComponent(id)}`,
+      { method: "PUT", body },
+    );
+    return data.character;
+  },
+
+  async getModelProfiles(signal?: AbortSignal): Promise<ModelProfileDto[]> {
+    const data = await request<ModelProfilesResponse>(
+      "/api/model-profiles",
+      signal ? { signal } : {},
+    );
+    return data.modelProfiles;
+  },
+
+  async getUserProfile(signal?: AbortSignal): Promise<UserProfileDto> {
+    const data = await request<UserProfileResponse>(
+      "/api/user-profile",
+      signal ? { signal } : {},
+    );
+    return data.profile;
+  },
+
+  async updateUserProfile(body: SaveUserProfileRequest): Promise<UserProfileDto> {
+    const data = await request<UserProfileResponse>("/api/user-profile", {
+      method: "PUT",
+      body,
+    });
+    return data.profile;
+  },
+
   async createSimulation(
     body: CreateSimulationRequest = {},
     signal?: AbortSignal,
@@ -194,6 +256,17 @@ export const api = {
   ): Promise<SimulationDto> {
     const data = await request<{ simulation: SimulationDto }>(
       `/api/simulations/${encodeURIComponent(id)}/stop`,
+      { method: "POST", ...(signal ? { signal } : {}) },
+    );
+    return data.simulation;
+  },
+
+  async resumeSimulation(
+    id: string,
+    signal?: AbortSignal,
+  ): Promise<SimulationDto> {
+    const data = await request<{ simulation: SimulationDto }>(
+      `/api/simulations/${encodeURIComponent(id)}/resume`,
       { method: "POST", ...(signal ? { signal } : {}) },
     );
     return data.simulation;

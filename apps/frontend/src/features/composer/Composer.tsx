@@ -1,6 +1,11 @@
 import { useEffect, useState } from "react";
-import { MAX_POST_LENGTH, USER_DISPLAY_NAME, USER_HANDLE } from "@enjo/shared";
-import type { CharacterDto, CreatePostRequest, PostDto } from "@enjo/shared";
+import { MAX_POST_LENGTH } from "@enjo/shared";
+import type {
+  CharacterDto,
+  CreatePostRequest,
+  PostDto,
+  UserProfileDto,
+} from "@enjo/shared";
 
 import { Avatar } from "../../components/Avatar";
 import { ErrorBanner } from "../../components/ErrorBanner";
@@ -13,9 +18,12 @@ import { MentionInput } from "./MentionInput";
 export type ComposerProps = {
   simulationId: string;
   characters: CharacterDto[];
+  userProfile: UserProfileDto;
   disabled?: boolean;
   disabledReason?: string;
   onPosted: (post: PostDto) => void;
+  /** Clicking the user's avatar returns to the unified home timeline. */
+  onOpenUser?: () => void;
   /**
    * Inline mode: the post is scoped to an existing post, either as a reply
    * (`replyTo`) or as a repost/quote (`quoteOf`). Omitted at the top of the
@@ -34,9 +42,11 @@ export type ComposerProps = {
 export function Composer({
   simulationId,
   characters,
+  userProfile,
   disabled = false,
   disabledReason,
   onPosted,
+  onOpenUser,
   scope,
   onCancel,
   compact = false,
@@ -119,7 +129,7 @@ export function Composer({
     <form
       className={
         compact
-          ? "border-b border-line bg-black/25 px-4 py-3"
+          ? "border-b border-line bg-surface px-4 py-3"
           : "border-b border-line px-4 py-3"
       }
       onSubmit={(event) => {
@@ -135,11 +145,20 @@ export function Composer({
       ) : null}
 
       <div className="flex gap-3">
-        <Avatar
-          handle={USER_HANDLE}
-          displayName={USER_DISPLAY_NAME}
-          size={compact ? "sm" : "md"}
-        />
+        <button
+          type="button"
+          onClick={onOpenUser}
+          disabled={!onOpenUser}
+          aria-label="あなたのホームを開く"
+          className="h-fit shrink-0 rounded-full disabled:cursor-default"
+        >
+          <Avatar
+            handle={userProfile.handle}
+            displayName={userProfile.displayName}
+            avatarUrl={userProfile.avatarUrl}
+            size={compact ? "sm" : "md"}
+          />
+        </button>
 
         <div className="min-w-0 flex-1">
           <MentionInput
@@ -215,7 +234,7 @@ export function Composer({
       </div>
 
       {disabled && disabledReason ? (
-        <p className="mt-3 rounded-xl border border-line bg-black/20 px-3 py-2 text-xs text-ink-muted">
+        <p className="mt-3 rounded-xl border border-line bg-surface-raised px-3 py-2 text-xs text-ink-muted">
           {disabledReason}
         </p>
       ) : null}

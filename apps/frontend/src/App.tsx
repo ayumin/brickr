@@ -4,8 +4,10 @@ import type { SimulationDto } from "@enjo/shared";
 import { ErrorBanner } from "./components/ErrorBanner";
 import { Spinner } from "./components/Spinner";
 import { ApiError, api, isAbortError, toErrorMessage } from "./services/api-client";
+import { applyTheme, readPreferredTheme, type Theme } from "./services/theme";
 import { SimulationView } from "./features/simulation/SimulationView";
 import { useCharacters } from "./hooks/useCharacters";
+import { useUserProfile } from "./hooks/useUserProfile";
 import type { LoadPhase } from "./types";
 
 const SIMULATION_STORAGE_KEY = "enjo.simulationId";
@@ -34,10 +36,11 @@ function storeSimulationId(id: string | null): void {
 function defaultTitle(): string {
   const now = new Date();
   const pad = (value: number): string => String(value).padStart(2, "0");
-  return `${pad(now.getMonth() + 1)}/${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())} のスレッド`;
+  return `${pad(now.getMonth() + 1)}/${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())} のシミュレーション`;
 }
 
 export default function App() {
+  const userProfile = useUserProfile();
   const {
     characters,
     loading: charactersLoading,
@@ -48,7 +51,7 @@ export default function App() {
   const [simulation, setSimulation] = useState<SimulationDto | null>(null);
   const [phase, setPhase] = useState<LoadPhase>("loading");
   const [error, setError] = useState<string | null>(null);
-  const [restarting, setRestarting] = useState(false);
+  const [theme, setTheme] = useState<Theme>(readPreferredTheme);
 
   /**
    * Resolve the simulation to show: reuse the id kept in localStorage when the
@@ -65,15 +68,10 @@ export default function App() {
         try {
           const existing = await api.getSimulation(storedId);
 
-          // A stopped thread rejects new posts with 409, so restoring one would
-          // leave the composer permanently broken after a reload. Start fresh
-          // instead; the old thread is still reachable through the API.
-          if (existing.simulation.status !== "stopped") {
-            setSimulation(existing.simulation);
-            setPhase("ready");
-            return;
-          }
-          storeSimulationId(null);
+          // Stopped simulations are restored too: the UI can resume them.
+          setSimulation(existing.simulation);
+          setPhase("ready");
+          return;
         } catch (cause) {
           if (!(cause instanceof ApiError && cause.isNotFound)) {
             throw cause;
@@ -107,31 +105,20 @@ export default function App() {
     void bootstrap();
   }, [bootstrap]);
 
-  const handleRestart = useCallback(() => {
-    setRestarting(true);
-    setError(null);
-
-    void api
-      .createSimulation({ title: defaultTitle() })
-      .then((created) => {
-        storeSimulationId(created.id);
-        setSimulation(created);
-        setPhase("ready");
-      })
-      .catch((cause: unknown) => {
-        setError(toErrorMessage(cause));
-      })
-      .finally(() => {
-        setRestarting(false);
-      });
-  }, []);
-
   const handleSimulationUpdated = useCallback((updated: SimulationDto) => {
     setSimulation(updated);
   }, []);
 
   const dismissError = useCallback(() => {
     setError(null);
+  }, []);
+
+  const toggleTheme = useCallback(() => {
+    setTheme((current) => {
+      const next = current === "dark" ? "light" : "dark";
+      applyTheme(next);
+      return next;
+    });
   }, []);
 
   if (phase === "loading" || (!simulation && phase !== "error")) {
@@ -180,8 +167,12 @@ export default function App() {
       charactersError={charactersError}
       onReloadCharacters={reloadCharacters}
       onSimulationUpdated={handleSimulationUpdated}
-      onRestart={handleRestart}
-      restarting={restarting}
+      userProfile={userProfile.profile}
+      userProfileError={userProfile.error}
+      onReloadUserProfile={userProfile.reload}
+      onUserProfileUpdated={userProfile.setProfile}
+      theme={theme}
+      onToggleTheme={toggleTheme}
       bootstrapError={error}
       onDismissBootstrapError={dismissError}
     />

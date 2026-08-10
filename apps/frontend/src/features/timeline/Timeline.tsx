@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { USER_AUTHOR_ID, USER_HANDLE } from "@enjo/shared";
-import type { CharacterDto, PostDto } from "@enjo/shared";
+import type { CharacterDto, PostDto, UserProfileDto } from "@enjo/shared";
 
 import { Avatar } from "../../components/Avatar";
 import { Spinner } from "../../components/Spinner";
@@ -38,11 +38,11 @@ function toggleId(
 
 function ThinkingRow({ character }: { character: ThinkingCharacter }) {
   return (
-    <li className="flex items-center gap-3 border-b border-line px-4 py-3">
+    <div className="flex items-center gap-2.5 border-b border-line bg-surface px-6 py-2.5">
       <Avatar
         handle={character.handle}
         displayName={character.displayName}
-        size="md"
+        size="sm"
       />
       <div className="min-w-0">
         <p className="truncate text-sm text-ink">
@@ -62,7 +62,7 @@ function ThinkingRow({ character }: { character: ThinkingCharacter }) {
           </span>
         </p>
       </div>
-    </li>
+    </div>
   );
 }
 
@@ -154,6 +154,7 @@ export type TimelineProps = {
   /** Every post in the simulation, used to derive threads and reposts. */
   allPosts: PostDto[];
   characters: CharacterDto[];
+  userProfile: UserProfileDto;
   thinking: ThinkingCharacter[];
   loading: boolean;
   emptyTitle: string;
@@ -169,6 +170,7 @@ export function Timeline({
   rootPosts,
   allPosts,
   characters,
+  userProfile,
   thinking,
   loading,
   emptyTitle,
@@ -189,6 +191,49 @@ export function Timeline({
   const replyIndex = useMemo(() => buildReplyIndex(allPosts), [allPosts]);
   const repostIndex = useMemo(() => buildRepostIndex(allPosts), [allPosts]);
   const postsById = useMemo(() => indexPostsById(allPosts), [allPosts]);
+
+  const thinkingByTarget = useMemo(() => {
+    const index = new Map<string, ThinkingCharacter[]>();
+    for (const character of thinking) {
+      const current = index.get(character.targetPostId);
+      if (current) current.push(character);
+      else index.set(character.targetPostId, [character]);
+    }
+    return index;
+  }, [thinking]);
+
+  // A cascade may start while its target is inside a collapsed reply thread.
+  // Reveal that thread so the indicator can stay directly below its target.
+  useEffect(() => {
+    if (thinking.length === 0) return;
+    const visibleRoots = new Set(rootPosts.map((post) => post.id));
+    const rootsToExpand = new Set<string>();
+
+    for (const character of thinking) {
+      let post = postsById.get(character.targetPostId);
+      const visited = new Set<string>();
+      while (post?.replyTo && !visited.has(post.id)) {
+        visited.add(post.id);
+        post = postsById.get(post.replyTo);
+      }
+      if (post && visibleRoots.has(post.id) && post.id !== character.targetPostId) {
+        rootsToExpand.add(post.id);
+      }
+    }
+
+    if (rootsToExpand.size === 0) return;
+    setExpandedReplies((current) => {
+      const next = new Set(current);
+      let changed = false;
+      for (const id of rootsToExpand) {
+        if (!next.has(id)) {
+          next.add(id);
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+  }, [thinking, postsById, rootPosts]);
 
   const knownHandles = useMemo(() => {
     const handles = new Set<string>([USER_HANDLE]);
@@ -264,12 +309,29 @@ export function Timeline({
       <Composer
         simulationId={simulationId}
         characters={characters}
+        userProfile={userProfile}
         compact
         autoFocus
         scope={{ mode: inlineComposer.mode, post }}
+        onOpenUser={() => onOpenAuthor(USER_AUTHOR_ID)}
         onCancel={closeInlineComposer}
         onPosted={handleInlinePosted}
       />
+    );
+  };
+
+  const renderThinking = (postId: string) => {
+    const charactersForPost = thinkingByTarget.get(postId) ?? [];
+    if (charactersForPost.length === 0) return null;
+    return (
+      <div aria-label="この投稿への応答を考えているキャラクター">
+        {charactersForPost.map((character) => (
+          <ThinkingRow
+            key={`${character.characterId}:${character.targetPostId}`}
+            character={character}
+          />
+        ))}
+      </div>
     );
   };
 
@@ -279,7 +341,7 @@ export function Timeline({
     }
     const reposts = selectReposts(repostIndex, post.id);
     return (
-      <div className="border-b border-line bg-black/25">
+      <div className="border-b border-line bg-surface">
         <p className="px-4 pt-2 text-[11px] font-medium text-ink-faint">
           リポストしたキャラクター
         </p>
@@ -312,11 +374,7 @@ export function Timeline({
           timelines = that author's posts). Inside an expanded thread the
           replies stay oldest-first, because a conversation reads chronologically.
         */}
-        {thinking.map((character) => (
-          <ThinkingRow key={character.characterId} character={character} />
-        ))}
-
-        {rootPosts.length === 0 && thinking.length === 0 ? (
+        {rootPosts.length === 0 ? (
           <li>
             <EmptyState title={emptyTitle} body={emptyBody} />
           </li>
@@ -357,11 +415,13 @@ export function Timeline({
                   : {})}
               />
 
+              {renderThinking(post.id)}
+
               {renderInlineComposer(post)}
               {renderRepostList(post)}
 
               {repliesExpanded ? (
-                <div className="border-l-2 border-accent/30 bg-black/20">
+                <div className="border-l-2 border-accent/30 bg-surface">
                   <ul>
                     {/*
                       One flat chronological level: a reply-to-a-reply sits at
@@ -396,6 +456,7 @@ export function Timeline({
                               }
                             : {})}
                         />
+                        {renderThinking(reply.id)}
                         {renderInlineComposer(reply)}
                         {renderRepostList(reply)}
                       </li>

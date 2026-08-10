@@ -29,9 +29,32 @@
     "Yu Gothic UI", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
-html {
+html,
+html[data-theme="dark"] {
   color-scheme: dark;
   background-color: var(--color-canvas);
+}
+
+html[data-theme="light"] {
+  color-scheme: light;
+  --color-canvas: #f6f7f9;
+  --color-surface: #ffffff;
+  --color-surface-raised: #f0f2f5;
+  --color-surface-hover: #e8ebef;
+  --color-line: #d9dde3;
+  --color-line-strong: #b8c0cc;
+
+  --color-ink: #181b20;
+  --color-ink-muted: #596271;
+  --color-ink-faint: #7b8492;
+
+  --color-accent: #1877d2;
+  --color-accent-strong: #1266ba;
+  --color-accent-soft: #dcecff;
+
+  --color-flame: #d95724;
+  --color-danger: #c9362c;
+  --color-warn: #946800;
 }
 
 body {
@@ -63,7 +86,7 @@ body {
   outline-offset: 2px;
 }
 
-/* Slim, dark scrollbars so panels don't look like desktop widgets. */
+/* Slim scrollbars that follow the active theme tokens. */
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--color-line-strong) transparent;

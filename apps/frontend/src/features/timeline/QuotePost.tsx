@@ -72,7 +72,7 @@ export function QuotePost({ post, onOpenAuthor }: QuotePostProps) {
   const author = post.author;
 
   return (
-    <article className="mt-3 rounded-xl border border-line bg-black/25 px-3 py-2.5 transition hover:border-line-strong">
+    <article className="mt-3 rounded-xl border border-line bg-surface-raised px-3 py-2.5 transition hover:border-line-strong">
       <header className="flex min-w-0 items-center gap-2">
         <button
           type="button"

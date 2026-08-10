@@ -3,24 +3,29 @@ import type { CharacterDto } from "@enjo/shared";
 
 import { Avatar } from "../../components/Avatar";
 import { Spinner } from "../../components/Spinner";
+import { truncateProfile } from "./character-utils";
 
 export type CharacterPickerProps = {
   characters: CharacterDto[];
   loading?: boolean;
   selectedId?: string | null;
   onSelect: (character: CharacterDto) => void;
+  onCreate: () => void;
+  onEdit: (character: CharacterDto) => void;
 };
 
 /**
  * Sidebar list of every character in the simulation.
- * Only fields present on `CharacterDto` are shown — prompts, probabilities and
- * model profiles are intentionally not sent to the frontend (CLAUDE.md §47).
+ * The list stays on the lightweight `CharacterDto`; full settings are fetched
+ * only after the user opens the editor.
  */
 export function CharacterPicker({
   characters,
   loading = false,
   selectedId,
   onSelect,
+  onCreate,
+  onEdit,
 }: CharacterPickerProps) {
   const [query, setQuery] = useState("");
 
@@ -41,9 +46,18 @@ export function CharacterPicker({
     <section className="rounded-2xl border border-line bg-surface">
       <header className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
         <h2 className="text-sm font-semibold text-ink">キャラクター</h2>
-        <span className="rounded-full bg-white/5 px-2 py-0.5 text-xs text-ink-muted">
-          {characters.length}人
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="rounded-full bg-surface-raised px-2 py-0.5 text-xs text-ink-muted">
+            {characters.length}人
+          </span>
+          <button
+            type="button"
+            onClick={onCreate}
+            className="rounded-full bg-accent-strong px-2.5 py-1 text-xs font-semibold text-white hover:bg-accent"
+          >
+            ＋ 作成
+          </button>
+        </div>
       </header>
 
       <div className="px-3 pt-3">
@@ -54,7 +68,7 @@ export function CharacterPicker({
             setQuery(event.currentTarget.value);
           }}
           placeholder="名前や@handleで絞り込む"
-          className="w-full rounded-full border border-line bg-black/25 px-3 py-1.5 text-sm text-ink placeholder:text-ink-faint focus:border-accent/60 focus:outline-none"
+          className="w-full rounded-full border border-line bg-surface-raised px-3 py-1.5 text-sm text-ink placeholder:text-ink-faint focus:border-accent/60 focus:outline-none"
         />
       </div>
 
@@ -72,38 +86,51 @@ export function CharacterPicker({
             const isSelected = character.id === selectedId;
             return (
               <li key={character.id}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    onSelect(character);
-                  }}
-                  aria-current={isSelected}
-                  className={`flex w-full items-start gap-2.5 rounded-xl px-2 py-2 text-left transition ${
+                <div
+                  className={`flex items-start gap-1 rounded-xl transition ${
                     isSelected
                       ? "bg-accent/12 ring-1 ring-accent/40"
                       : "hover:bg-surface-hover"
                   }`}
                 >
-                  <Avatar
-                    handle={character.handle}
-                    displayName={character.displayName}
-                    avatarUrl={character.avatarUrl}
-                    size="sm"
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="flex min-w-0 items-baseline gap-1.5">
-                      <span className="truncate text-sm font-semibold text-ink">
-                        {character.displayName}
+                  <button
+                    type="button"
+                    onClick={() => onSelect(character)}
+                    aria-current={isSelected}
+                    className="flex min-w-0 flex-1 items-start gap-2.5 px-2 py-2 text-left"
+                  >
+                    <Avatar
+                      handle={character.handle}
+                      displayName={character.displayName}
+                      avatarUrl={character.avatarUrl}
+                      size="sm"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex min-w-0 items-baseline gap-1.5">
+                        <span className="truncate text-sm font-semibold text-ink">
+                          {character.displayName}
+                        </span>
+                        <span className="truncate text-xs text-ink-faint">
+                          @{character.handle}
+                        </span>
                       </span>
-                      <span className="truncate text-xs text-ink-faint">
-                        @{character.handle}
+                      <span
+                        className="mt-0.5 block text-xs leading-snug text-ink-muted"
+                        title={character.description}
+                      >
+                        {truncateProfile(character.description)}
                       </span>
                     </span>
-                    <span className="mt-0.5 line-clamp-2 block text-xs leading-snug text-ink-muted">
-                      {character.description}
-                    </span>
-                  </span>
-                </button>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onEdit(character)}
+                    aria-label={`${character.displayName}を編集`}
+                    className="m-1 rounded-lg px-2 py-1.5 text-xs text-ink-faint hover:bg-surface-hover hover:text-ink"
+                  >
+                    編集
+                  </button>
+                </div>
               </li>
             );
           })}

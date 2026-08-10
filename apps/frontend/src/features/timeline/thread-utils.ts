@@ -16,7 +16,6 @@
  * into a thread, and the flat expansion has to show it for the reply count to
  * stay consistent with what expanding reveals.
  */
-import { USER_AUTHOR_ID } from "@enjo/shared";
 import type { PostDto } from "@enjo/shared";
 
 /** postId → its direct replies, oldest first. */
@@ -209,9 +208,4 @@ export function selectAuthorTimeline(
   return posts
     .filter((post) => isAuthoredBy(post, authorId))
     .sort(comparePostsNewestFirst);
-}
-
-/** The human user's own timeline. */
-export function selectUserTimeline(posts: readonly PostDto[]): PostDto[] {
-  return selectAuthorTimeline(posts, USER_AUTHOR_ID);
 }

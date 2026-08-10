@@ -1,16 +1,19 @@
 import { useCallback, useMemo, useState } from "react";
-import {
-  USER_AUTHOR_ID,
-  USER_DISPLAY_NAME,
-  USER_HANDLE,
+import { USER_AUTHOR_ID } from "@enjo/shared";
+import type {
+  CharacterDto,
+  SimulationDto,
+  UserProfileDto,
 } from "@enjo/shared";
-import type { CharacterDto, SimulationDto } from "@enjo/shared";
 
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { Spinner } from "../../components/Spinner";
 import { api, toErrorMessage } from "../../services/api-client";
+import type { Theme } from "../../services/theme";
 import type { ConnectionState, TimelineView } from "../../types";
 import { CharacterPicker } from "../characters/CharacterPicker";
+import { CharacterEditor } from "../characters/CharacterEditor";
+import { UserProfileEditor } from "../user/UserProfileEditor";
 import { CharacterProfile } from "../characters/CharacterProfile";
 import { Composer } from "../composer/Composer";
 import { Timeline } from "../timeline/Timeline";
@@ -35,7 +38,7 @@ const CONNECTION_DOT: Record<ConnectionState, string> = {
 function ConnectionBadge({ connection }: { connection: ConnectionState }) {
   return (
     <span
-      className="flex shrink-0 items-center gap-1.5 rounded-full border border-line bg-black/30 px-2.5 py-1 text-[11px] text-ink-muted"
+      className="flex shrink-0 items-center gap-1.5 rounded-full border border-line bg-surface-raised px-2.5 py-1 text-[11px] text-ink-muted"
       title="投稿はSSEで順次届きます"
     >
       <span
@@ -61,8 +64,12 @@ export type SimulationViewProps = {
   charactersError: string | null;
   onReloadCharacters: () => void;
   onSimulationUpdated: (simulation: SimulationDto) => void;
-  onRestart: () => void;
-  restarting: boolean;
+  userProfile: UserProfileDto;
+  userProfileError: string | null;
+  onReloadUserProfile: () => void;
+  onUserProfileUpdated: (profile: UserProfileDto) => void;
+  theme: Theme;
+  onToggleTheme: () => void;
   bootstrapError?: string | null;
   onDismissBootstrapError?: () => void;
 };
@@ -74,8 +81,12 @@ export function SimulationView({
   charactersError,
   onReloadCharacters,
   onSimulationUpdated,
-  onRestart,
-  restarting,
+  userProfile,
+  userProfileError,
+  onReloadUserProfile,
+  onUserProfileUpdated,
+  theme,
+  onToggleTheme,
   bootstrapError,
   onDismissBootstrapError,
 }: SimulationViewProps) {
@@ -84,14 +95,23 @@ export function SimulationView({
   const [view, setView] = useState<TimelineView>({ kind: "home" });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [pendingMention, setPendingMention] = useState<string | null>(null);
-  const [stopping, setStopping] = useState(false);
+  const [changingStatus, setChangingStatus] = useState(false);
   const [stopError, setStopError] = useState<string | null>(null);
+  const [editor, setEditor] = useState<{ characterId: string | null } | null>(null);
+  const [userEditorOpen, setUserEditorOpen] = useState(false);
 
   const isStopped = simulation.status === "stopped";
   const canPost = !isStopped;
 
   const openAuthor = useCallback((authorId: string) => {
-    setView({ kind: "timeline", authorId });
+    // The user's timeline is the home view: new posts start threads there, and
+    // replies remain visible inside those threads rather than in a duplicate
+    // author-only screen.
+    setView(
+      authorId === USER_AUTHOR_ID
+        ? { kind: "home" }
+        : { kind: "timeline", authorId },
+    );
     setSidebarOpen(false);
     window.scrollTo({ top: 0 });
   }, []);
@@ -117,6 +137,11 @@ export function SimulationView({
     [events.posts],
   );
 
+  const userPostCount = useMemo(
+    () => events.posts.filter((post) => post.authorId === USER_AUTHOR_ID).length,
+    [events.posts],
+  );
+
   const authorId = view.kind === "timeline" ? view.authorId : null;
 
   const authorPosts = useMemo(
@@ -137,13 +162,6 @@ export function SimulationView({
         description: character.description,
       };
     }
-    if (authorId === USER_AUTHOR_ID) {
-      return {
-        displayName: USER_DISPLAY_NAME,
-        handle: USER_HANDLE,
-        description: null,
-      };
-    }
     // Unknown author (e.g. the roster failed to load): fall back to post data.
     const author = authorPosts[0]?.author;
     if (author) {
@@ -157,13 +175,13 @@ export function SimulationView({
     return null;
   }, [authorId, authorPosts, characters]);
 
-  const isOwnTimeline = authorId === USER_AUTHOR_ID;
-
-  const handleStop = (): void => {
-    setStopping(true);
+  const handleStatusChange = (): void => {
+    setChangingStatus(true);
     setStopError(null);
-    void api
-      .stopSimulation(simulation.id)
+    const update = isStopped
+      ? api.resumeSimulation(simulation.id)
+      : api.stopSimulation(simulation.id);
+    void update
       .then((updated) => {
         onSimulationUpdated(updated);
       })
@@ -171,7 +189,7 @@ export function SimulationView({
         setStopError(toErrorMessage(cause));
       })
       .finally(() => {
-        setStopping(false);
+        setChangingStatus(false);
       });
   };
 
@@ -180,54 +198,34 @@ export function SimulationView({
     .join(" / ");
 
   const sidebar = (
-    <div className="space-y-3">
-      <nav className="rounded-2xl border border-line bg-surface p-2">
-        <button
-          type="button"
-          onClick={goHome}
-          aria-current={view.kind === "home"}
-          className={`flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm transition ${
-            view.kind === "home"
-              ? "bg-accent/12 font-semibold text-ink ring-1 ring-accent/40"
-              : "text-ink-muted hover:bg-surface-hover hover:text-ink"
-          }`}
-        >
-          <span aria-hidden="true">🏠</span>
-          ホーム（あなたのスレッド）
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            openAuthor(USER_AUTHOR_ID);
-          }}
-          aria-current={isOwnTimeline}
-          className={`flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm transition ${
-            isOwnTimeline
-              ? "bg-accent/12 font-semibold text-ink ring-1 ring-accent/40"
-              : "text-ink-muted hover:bg-surface-hover hover:text-ink"
-          }`}
-        >
-          <span aria-hidden="true">👤</span>
-          あなたのタイムライン
-        </button>
-      </nav>
-
-      <CharacterPicker
-        characters={characters}
-        loading={charactersLoading}
-        selectedId={authorId}
-        onSelect={(character) => {
-          openAuthor(character.id);
-        }}
-      />
-    </div>
+    <CharacterPicker
+      characters={characters}
+      loading={charactersLoading}
+      selectedId={authorId}
+      onSelect={(character) => {
+        openAuthor(character.id);
+      }}
+      onCreate={() => {
+        setSidebarOpen(false);
+        setEditor({ characterId: null });
+      }}
+      onEdit={(character) => {
+        setSidebarOpen(false);
+        setEditor({ characterId: character.id });
+      }}
+    />
   );
 
   return (
     <div className="min-h-dvh">
       <header className="sticky top-0 z-30 border-b border-line bg-canvas/85 backdrop-blur-md">
         <div className="mx-auto flex w-full max-w-[1000px] items-center gap-3 px-4 py-2.5">
-          <div className="flex min-w-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={goHome}
+            aria-label="炎上シミュレータのホームへ戻る"
+            className="flex min-w-0 items-center gap-2 rounded-lg text-left hover:opacity-80"
+          >
             <span className="text-lg leading-none" aria-hidden="true">
               🔥
             </span>
@@ -240,12 +238,22 @@ export function SimulationView({
                 {isStopped ? "・停止中" : ""}
               </p>
             </div>
-          </div>
+          </button>
 
           <div className="ml-auto flex shrink-0 items-center gap-2">
             <span className="hidden sm:block">
               <ConnectionBadge connection={events.connection} />
             </span>
+
+            <button
+              type="button"
+              onClick={onToggleTheme}
+              aria-label={theme === "dark" ? "ライトモードに切り替える" : "ダークモードに切り替える"}
+              title={theme === "dark" ? "ライトモード" : "ダークモード"}
+              className="flex h-7 w-7 items-center justify-center rounded-full border border-line text-sm text-ink-muted transition hover:border-line-strong hover:text-ink"
+            >
+              <span aria-hidden="true">{theme === "dark" ? "☀️" : "🌙"}</span>
+            </button>
 
             <button
               type="button"
@@ -257,24 +265,23 @@ export function SimulationView({
               キャラ{characters.length > 0 ? `(${String(characters.length)})` : ""}
             </button>
 
-            {!isStopped ? (
-              <button
-                type="button"
-                onClick={handleStop}
-                disabled={stopping}
-                className="hidden rounded-full border border-line px-3 py-1 text-xs text-ink-muted transition hover:border-danger/60 hover:text-danger disabled:opacity-50 sm:block"
-              >
-                {stopping ? "停止中…" : "停止"}
-              </button>
-            ) : null}
-
             <button
               type="button"
-              onClick={onRestart}
-              disabled={restarting}
-              className="rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-ink transition hover:bg-white/15 disabled:opacity-50"
+              onClick={handleStatusChange}
+              disabled={changingStatus}
+              className={`rounded-full border px-3 py-1 text-xs transition disabled:opacity-50 ${
+                isStopped
+                  ? "border-accent/50 text-accent hover:bg-accent/10"
+                  : "border-line text-ink-muted hover:border-danger/60 hover:text-danger"
+              }`}
             >
-              {restarting ? "作成中…" : "新しいスレッド"}
+              {changingStatus
+                ? isStopped
+                  ? "再開中…"
+                  : "停止中…"
+                : isStopped
+                  ? "再開"
+                  : "停止"}
             </button>
           </div>
         </div>
@@ -307,27 +314,38 @@ export function SimulationView({
                   avatarUrl={profile.avatarUrl}
                   description={profile.description}
                   postCount={authorPosts.length}
-                  {...(isOwnTimeline || isStopped
-                    ? {}
-                    : { onMention: handleMention })}
+                  {...(isStopped ? {} : { onMention: handleMention })}
+                  onEdit={() => setEditor({ characterId: authorId })}
                 />
               ) : null}
             </>
           ) : (
-            <Composer
-              simulationId={simulation.id}
-              characters={characters}
-              disabled={isStopped}
-              {...(isStopped
-                ? {
-                    disabledReason:
-                      "このシミュレーションは停止しています。「新しいスレッド」から続けてください。",
-                  }
-                : {})}
-              onPosted={events.addLocalPost}
-              pendingMention={pendingMention}
-              onPendingMentionConsumed={consumePendingMention}
-            />
+            <>
+              <CharacterProfile
+                displayName={userProfile.displayName}
+                handle={userProfile.handle}
+                avatarUrl={userProfile.avatarUrl}
+                description={userProfile.description}
+                postCount={userPostCount}
+                onEdit={() => setUserEditorOpen(true)}
+              />
+              <Composer
+                simulationId={simulation.id}
+                characters={characters}
+                userProfile={userProfile}
+                disabled={isStopped}
+                {...(isStopped
+                  ? {
+                      disabledReason:
+                        "このシミュレーションは停止しています。",
+                    }
+                  : {})}
+                onPosted={events.addLocalPost}
+                onOpenUser={goHome}
+                pendingMention={pendingMention}
+                onPendingMentionConsumed={consumePendingMention}
+              />
+            </>
           )}
 
           {bootstrapError ? (
@@ -345,7 +363,7 @@ export function SimulationView({
           {stopError ? (
             <div className="px-4 pt-3">
               <ErrorBanner
-                message="停止できませんでした"
+                message={isStopped ? "再開できませんでした" : "停止できませんでした"}
                 detail={stopError}
                 onDismiss={() => {
                   setStopError(null);
@@ -360,6 +378,16 @@ export function SimulationView({
                 message="キャラクター一覧を取得できませんでした"
                 detail={charactersError}
                 onRetry={onReloadCharacters}
+              />
+            </div>
+          ) : null}
+
+          {userProfileError ? (
+            <div className="px-4 pt-3">
+              <ErrorBanner
+                message="ユーザープロフィールを取得できませんでした"
+                detail={userProfileError}
+                onRetry={onReloadUserProfile}
               />
             </div>
           ) : null}
@@ -399,6 +427,7 @@ export function SimulationView({
               rootPosts={homeThreads}
               allPosts={events.posts}
               characters={characters}
+              userProfile={userProfile}
               thinking={events.thinking}
               loading={events.loading}
               canPost={canPost}
@@ -415,15 +444,12 @@ export function SimulationView({
               rootPosts={authorPosts}
               allPosts={events.posts}
               characters={characters}
-              thinking={[]}
+              userProfile={userProfile}
+              thinking={events.thinking}
               loading={events.loading}
               canPost={canPost}
               emptyTitle="まだ投稿がありません"
-              emptyBody={
-                isOwnTimeline
-                  ? "あなたの投稿・返信・リポストがここに並びます。"
-                  : "このキャラクターはまだこのシミュレーションで発言していません。"
-              }
+              emptyBody="このキャラクターはまだこのシミュレーションで発言していません。"
               onOpenAuthor={openAuthor}
               onPosted={events.addLocalPost}
             />
@@ -449,6 +475,30 @@ export function SimulationView({
             {sidebar}
           </div>
         </div>
+      ) : null}
+
+      {editor ? (
+        <CharacterEditor
+          characterId={editor.characterId}
+          onClose={() => setEditor(null)}
+          onSaved={(saved) => {
+            setEditor(null);
+            onReloadCharacters();
+            openAuthor(saved.id);
+          }}
+        />
+      ) : null}
+
+      {userEditorOpen ? (
+        <UserProfileEditor
+          profile={userProfile}
+          onClose={() => setUserEditorOpen(false)}
+          onSaved={(saved) => {
+            onUserProfileUpdated(saved);
+            setUserEditorOpen(false);
+            events.reload();
+          }}
+        />
       ) : null}
     </div>
   );

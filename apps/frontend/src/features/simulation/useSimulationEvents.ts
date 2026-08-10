@@ -129,7 +129,9 @@ function reducer(state: State, action: Action): State {
     case "processing": {
       if (
         state.thinking.some(
-          (entry) => entry.characterId === action.character.characterId,
+          (entry) =>
+            entry.characterId === action.character.characterId &&
+            entry.targetPostId === action.character.targetPostId,
         )
       ) {
         return state;
@@ -228,6 +230,7 @@ export function useSimulationEvents(
           dispatch({
             kind: "processing",
             character: {
+              targetPostId: event.targetPostId,
               characterId: event.characterId,
               handle: event.handle,
               displayName: event.displayName,
