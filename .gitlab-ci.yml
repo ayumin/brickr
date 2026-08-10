@@ -67,8 +67,8 @@ default:
 "frontend:test":
   stage: test
   script:
-    - pnpm --filter @enjo/frontend test -- --coverage
-  coverage: '/All files[^|]*\|[^|]*\s+([\d\.]+)/'
+    - pnpm --filter @enjo/frontend test --coverage
+  coverage: '/Statements\s*:\s*([\d.]+)%/'
   artifacts:
     reports:
       coverage_report:
@@ -78,8 +78,8 @@ default:
 "backend:test":
   stage: test
   script:
-    - pnpm --filter @enjo/backend test -- --coverage
-  coverage: '/All files[^|]*\|[^|]*\s+([\d\.]+)/'
+    - pnpm --filter @enjo/backend test --coverage
+  coverage: '/Statements\s*:\s*([\d.]+)%/'
   artifacts:
     reports:
       coverage_report:
@@ -89,8 +89,8 @@ default:
 "shared:test":
   stage: test
   script:
-    - pnpm --filter @enjo/shared test -- --coverage
-  coverage: '/All files[^|]*\|[^|]*\s+([\d\.]+)/'
+    - pnpm --filter @enjo/shared test --coverage
+  coverage: '/Statements\s*:\s*([\d.]+)%/'
   artifacts:
     reports:
       coverage_report:
