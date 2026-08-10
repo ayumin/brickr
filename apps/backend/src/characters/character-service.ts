@@ -23,6 +23,8 @@ import {
   CharacterPersonaParseError,
   type CharacterPersonaGenerator,
 } from "./character-generator.js";
+import { CHARACTER_SEEDS } from "./character-seeds.js";
+import { DEMO_AVATAR_COUNT, demoAvatarDataUrl } from "./demo-avatar.js";
 
 /**
  * Strips the persona and behaviour fields.
@@ -103,6 +105,8 @@ export class CharacterGenerationError extends Error {
 
 export class CharacterService {
   private readonly bulkCreationJobs = new Map<string, CharacterBulkCreationJobDto>();
+  /** Seed avatars occupy the start of the pool; generated characters continue after them. */
+  private nextDemoAvatarIndex = CHARACTER_SEEDS.length % DEMO_AVATAR_COUNT;
 
   constructor(
     private readonly characters: CharacterRepository,
@@ -234,6 +238,7 @@ export class CharacterService {
   ): Promise<CharacterDto[]> {
     const [defaultProfile] = await this.modelProfiles.findAll();
     if (!defaultProfile) throw new ModelProfileNotFoundError("default");
+    const avatarStart = this.reserveDemoAvatars(count);
 
     let personas;
     try {
@@ -242,7 +247,7 @@ export class CharacterService {
       throw new CharacterGenerationError({ cause });
     }
 
-    const entries = personas.map((persona) => {
+    const entries = personas.map((persona, index) => {
       const id = randomUUID();
       const suffix = id.replaceAll("-", "").slice(0, 8);
       return {
@@ -261,6 +266,7 @@ export class CharacterService {
           quoteProbability: randomProbability(this.random),
           influence: randomProbability(this.random),
           modelProfileId: defaultProfile.id,
+          avatarUrl: demoAvatarDataUrl(avatarStart + index),
         },
       };
     });
@@ -318,6 +324,12 @@ export class CharacterService {
       if (!oldestId) return;
       this.bulkCreationJobs.delete(oldestId);
     }
+  }
+
+  private reserveDemoAvatars(count: number): number {
+    const start = this.nextDemoAvatarIndex;
+    this.nextDemoAvatarIndex = (start + count) % DEMO_AVATAR_COUNT;
+    return start;
   }
 
   async update(id: string, input: SaveCharacterRequest): Promise<CharacterConfigDto> {

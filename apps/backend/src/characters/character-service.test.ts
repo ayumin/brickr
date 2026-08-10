@@ -158,6 +158,8 @@ describe("CharacterService", () => {
     expect(characters).toHaveLength(3);
     expect(new Set(created.map((character) => character.id)).size).toBe(3);
     expect(new Set(created.map((character) => character.handle)).size).toBe(3);
+    expect(new Set(created.map((character) => character.avatarUrl)).size).toBe(3);
+    expect(created.every((character) => character.avatarUrl?.startsWith("data:image/jpeg;base64,"))).toBe(true);
     expect(created[0]).not.toHaveProperty("modelProfileId");
     expect(characters[0]).toMatchObject({
       displayName: "LLM Character 1",
