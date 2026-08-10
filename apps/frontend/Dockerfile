@@ -15,6 +15,9 @@ RUN pnpm install --filter @enjo/frontend... --no-frozen-lockfile
 COPY packages/shared ./packages/shared
 COPY apps/frontend ./apps/frontend
 
+# Fail the image build if a future context change overwrites pnpm's links.
+RUN test -x /app/apps/frontend/node_modules/.bin/vite
+
 WORKDIR /app/apps/frontend
 
 EXPOSE 5173
