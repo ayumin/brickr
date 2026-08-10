@@ -265,9 +265,10 @@ git diff --check
 
 リポジトリ直下の`.gitlab-ci.yml`は、Branch、Tag、Merge RequestのPipelineで次を実行します。
 
-1. `typecheck`と`test`を並列実行
-2. 両方が成功した場合に`build`を実行
-3. Frontendの`apps/frontend/dist/`を1週間Artifactとして保存
+1. Shared、Backend、Frontendの型検査を個別ジョブで並列実行
+2. BackendとFrontendのテストを個別ジョブで並列実行
+3. すべて成功した場合にFrontendの`build`を実行
+4. Frontendの`apps/frontend/dist/`を1週間Artifactとして保存
 
 CIは開発環境と同じNode.js 22と、`packageManager`で固定しているpnpm 11.21.0を使用します。依存関係は
 `pnpm-lock.yaml`に基づいて固定され、pnpm storeはLockfile単位でキャッシュされます。

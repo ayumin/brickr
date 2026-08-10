@@ -26,23 +26,41 @@ default:
     - pnpm install --frozen-lockfile
     - pnpm --filter @enjo/backend db:generate
 
-typecheck:
+"shared:typecheck":
   stage: verify
   script:
-    - pnpm typecheck
+    - pnpm --filter @enjo/shared typecheck
 
-test:
+"backend:typecheck":
   stage: verify
   script:
-    - pnpm test
+    - pnpm --filter @enjo/backend typecheck
 
-build:
+"frontend:typecheck":
+  stage: verify
+  script:
+    - pnpm --filter @enjo/frontend typecheck
+
+"backend:test":
+  stage: verify
+  script:
+    - pnpm --filter @enjo/backend test
+
+"frontend:test":
+  stage: verify
+  script:
+    - pnpm --filter @enjo/frontend test
+
+"frontend:build":
   stage: build
   needs:
-    - typecheck
-    - test
+    - "shared:typecheck"
+    - "backend:typecheck"
+    - "frontend:typecheck"
+    - "backend:test"
+    - "frontend:test"
   script:
-    - pnpm build
+    - pnpm --filter @enjo/frontend build
   artifacts:
     name: "brickr-frontend-$CI_COMMIT_SHORT_SHA"
     paths:
