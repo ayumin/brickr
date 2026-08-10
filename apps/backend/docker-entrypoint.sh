@@ -14,6 +14,12 @@ until pnpm exec prisma db push --skip-generate --accept-data-loss; do
   sleep 2
 done
 
+# The Prisma schema is bind-mounted in development and can be newer than the
+# client generated when the Docker image was built. Regenerate it on every
+# container start so schema changes (for example Post.imageUrl) are available
+# before the seed and API server run.
+pnpm exec prisma generate
+
 pnpm exec tsx prisma/seed.ts
 
 exec "$@"
