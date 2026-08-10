@@ -1204,6 +1204,9 @@ simulation.failed
 表示する場合は、Timeline上部ではなく反応対象のPost直下に表示してください。
 Eventには対象を特定する`targetPostId`を含めます。
 
+接続状態表示は操作可能にし、クリックでFrontendのSSE接続を明示的に
+切断・再接続できるようにします。切断中もREST APIとBackend側の生成は継続します。
+
 ---
 
 # 45. Backend API
@@ -1382,12 +1385,11 @@ What's happening?
 
 @skeptic この企画どう思う？
 
-[Select responders]
-
                         [Post]
 ```
 
-MVPでは画像投稿は必須ではありません。
+通常の新規PostにはPNG / JPEG / GIF / WebP画像を1枚添付できます。
+最大サイズは5MBです。ReplyとQuote Postには新しい画像を添付できません。
 
 ---
 
@@ -1412,6 +1414,7 @@ Behavior、利用するModelProfileを編集できます。
 
 ホームでは投稿Composerの上にUser ProfileをCharacter Profileと同じ形式で表示します。
 UserはdisplayName、description、avatarを編集できます。識別子`you`とhandle`@you`は固定です。
+Light / Dark modeの切り替えもUser Profileの設定変更画面に置きます。
 
 ---
 
@@ -1628,6 +1631,8 @@ MVPでは以下を実装します。
 27. Character作成・編集UI
 28. Light / Dark mode切り替え
 29. User Profile表示・編集
+30. 通常Postへの画像添付（Reply / Quoteは除く）
+31. 添付画像をLLMのマルチモーダル入力として渡し、Characterが内容を解釈できること
 
 ---
 
@@ -1641,7 +1646,6 @@ MVPでは以下を実装しないでください。
 - Sentiment Analysis
 - Marketing Review
 - Social Media Risk Prediction
-- Image Upload
 - Round Consistency
 - Generation Waves
 - scheduledAtベースの仮想時刻
@@ -1678,7 +1682,6 @@ MVP後に必要性を見ながら検討します。
 - より複雑なCharacter Behavior
 - より長いConversation
 - QuoteからのConversation Branch
-- Image Post
 - Conversation Visualization
 - Provider / Model切替UI
 
