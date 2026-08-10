@@ -70,8 +70,12 @@ export class CharacterRepository {
     return row ? toCharacter(row) : null;
   }
 
+  /**
+   * `findFirst`, not `findUnique`: the handle column lost its unique index when
+   * uniqueness moved to the shared `handles` table (CLAUDE.md §66.13).
+   */
   async findByHandle(handle: string): Promise<Character | null> {
-    const row = await this.db.character.findUnique({ where: { handle } });
+    const row = await this.db.character.findFirst({ where: { handle } });
     return row ? toCharacter(row) : null;
   }
 
