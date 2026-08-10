@@ -8,7 +8,6 @@ import type {
 
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { Spinner } from "../../components/Spinner";
-import { api, toErrorMessage } from "../../services/api-client";
 import type { Theme } from "../../services/theme";
 import type { ConnectionState, TimelineView } from "../../types";
 import { CharacterPicker } from "../characters/CharacterPicker";
@@ -27,26 +26,36 @@ const CONNECTION_LABEL: Record<ConnectionState, string> = {
   connecting: "接続中…",
   open: "接続済み",
   reconnecting: "再接続中…",
+  disconnected: "切断中",
 };
 
 const CONNECTION_DOT: Record<ConnectionState, string> = {
   connecting: "bg-ink-faint",
   open: "bg-emerald-400",
   reconnecting: "bg-warn",
+  disconnected: "bg-ink-faint",
 };
 
-function ConnectionBadge({ connection }: { connection: ConnectionState }) {
+function ConnectionBadge({
+  connection,
+  onToggle,
+}: {
+  connection: ConnectionState;
+  onToggle: () => void;
+}) {
   return (
-    <span
+    <button
+      type="button"
+      onClick={onToggle}
       className="flex shrink-0 items-center gap-1.5 rounded-full border border-line bg-surface-raised px-2.5 py-1 text-[11px] text-ink-muted"
-      title="投稿はSSEで順次届きます"
+      title={connection === "disconnected" ? "Backendへ再接続" : "Backendとの接続を切断"}
     >
       <span
         className={`h-1.5 w-1.5 rounded-full ${CONNECTION_DOT[connection]}`}
         aria-hidden="true"
       />
       {CONNECTION_LABEL[connection]}
-    </span>
+    </button>
   );
 }
 
@@ -63,7 +72,6 @@ export type SimulationViewProps = {
   charactersLoading: boolean;
   charactersError: string | null;
   onReloadCharacters: () => void;
-  onSimulationUpdated: (simulation: SimulationDto) => void;
   userProfile: UserProfileDto;
   userProfileError: string | null;
   onReloadUserProfile: () => void;
@@ -80,7 +88,6 @@ export function SimulationView({
   charactersLoading,
   charactersError,
   onReloadCharacters,
-  onSimulationUpdated,
   userProfile,
   userProfileError,
   onReloadUserProfile,
@@ -90,13 +97,12 @@ export function SimulationView({
   bootstrapError,
   onDismissBootstrapError,
 }: SimulationViewProps) {
-  const events = useSimulationEvents(simulation.id);
+  const [streamEnabled, setStreamEnabled] = useState(true);
+  const events = useSimulationEvents(simulation.id, streamEnabled);
 
   const [view, setView] = useState<TimelineView>({ kind: "home" });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [pendingMention, setPendingMention] = useState<string | null>(null);
-  const [changingStatus, setChangingStatus] = useState(false);
-  const [stopError, setStopError] = useState<string | null>(null);
   const [editor, setEditor] = useState<{ characterId: string | null } | null>(null);
   const [userEditorOpen, setUserEditorOpen] = useState(false);
 
@@ -175,24 +181,6 @@ export function SimulationView({
     return null;
   }, [authorId, authorPosts, characters]);
 
-  const handleStatusChange = (): void => {
-    setChangingStatus(true);
-    setStopError(null);
-    const update = isStopped
-      ? api.resumeSimulation(simulation.id)
-      : api.stopSimulation(simulation.id);
-    void update
-      .then((updated) => {
-        onSimulationUpdated(updated);
-      })
-      .catch((cause: unknown) => {
-        setStopError(toErrorMessage(cause));
-      })
-      .finally(() => {
-        setChangingStatus(false);
-      });
-  };
-
   const failureDetail = events.failures
     .map((failure) => `${failure.label}: ${failure.reason}`)
     .join(" / ");
@@ -241,19 +229,10 @@ export function SimulationView({
           </button>
 
           <div className="ml-auto flex shrink-0 items-center gap-2">
-            <span className="hidden sm:block">
-              <ConnectionBadge connection={events.connection} />
-            </span>
-
-            <button
-              type="button"
-              onClick={onToggleTheme}
-              aria-label={theme === "dark" ? "ライトモードに切り替える" : "ダークモードに切り替える"}
-              title={theme === "dark" ? "ライトモード" : "ダークモード"}
-              className="flex h-7 w-7 items-center justify-center rounded-full border border-line text-sm text-ink-muted transition hover:border-line-strong hover:text-ink"
-            >
-              <span aria-hidden="true">{theme === "dark" ? "☀️" : "🌙"}</span>
-            </button>
+            <ConnectionBadge
+              connection={events.connection}
+              onToggle={() => setStreamEnabled((enabled) => !enabled)}
+            />
 
             <button
               type="button"
@@ -265,24 +244,6 @@ export function SimulationView({
               キャラ{characters.length > 0 ? `(${String(characters.length)})` : ""}
             </button>
 
-            <button
-              type="button"
-              onClick={handleStatusChange}
-              disabled={changingStatus}
-              className={`rounded-full border px-3 py-1 text-xs transition disabled:opacity-50 ${
-                isStopped
-                  ? "border-accent/50 text-accent hover:bg-accent/10"
-                  : "border-line text-ink-muted hover:border-danger/60 hover:text-danger"
-              }`}
-            >
-              {changingStatus
-                ? isStopped
-                  ? "再開中…"
-                  : "停止中…"
-                : isStopped
-                  ? "再開"
-                  : "停止"}
-            </button>
           </div>
         </div>
       </header>
@@ -360,17 +321,6 @@ export function SimulationView({
             </div>
           ) : null}
 
-          {stopError ? (
-            <div className="px-4 pt-3">
-              <ErrorBanner
-                message={isStopped ? "再開できませんでした" : "停止できませんでした"}
-                detail={stopError}
-                onDismiss={() => {
-                  setStopError(null);
-                }}
-              />
-            </div>
-          ) : null}
 
           {charactersError ? (
             <div className="px-4 pt-3">
@@ -492,6 +442,8 @@ export function SimulationView({
       {userEditorOpen ? (
         <UserProfileEditor
           profile={userProfile}
+          theme={theme}
+          onToggleTheme={onToggleTheme}
           onClose={() => setUserEditorOpen(false)}
           onSaved={(saved) => {
             onUserProfileUpdated(saved);

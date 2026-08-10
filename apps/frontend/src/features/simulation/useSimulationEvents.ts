@@ -42,6 +42,7 @@ type Action =
   | { kind: "completed" }
   | { kind: "simulationFailed"; reason: string }
   | { kind: "connection"; connection: ConnectionState }
+  | { kind: "disconnected" }
   | { kind: "dismissError" }
   | { kind: "dismissFailures" };
 
@@ -75,10 +76,7 @@ function mergePosts(existing: PostDto[], incoming: PostDto[]): PostDto[] {
 
   let changed = false;
   for (const post of incoming) {
-    const current = byId.get(post.id);
-    if (!current || current.createdAt !== post.createdAt || current.content !== post.content) {
-      changed = true;
-    }
+    changed = true;
     byId.set(post.id, post);
   }
 
@@ -173,6 +171,9 @@ function reducer(state: State, action: Action): State {
         ? state
         : { ...state, connection: action.connection };
 
+    case "disconnected":
+      return { ...state, connection: "disconnected", thinking: [] };
+
     case "dismissError":
       return { ...state, loadError: null, simulationError: null };
 
@@ -207,15 +208,25 @@ export type UseSimulationEventsResult = {
  */
 export function useSimulationEvents(
   simulationId: string,
+  enabled: boolean = true,
 ): UseSimulationEventsResult {
   const [state, dispatch] = useReducer(reducer, INITIAL_STATE);
   const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
+    dispatch({ kind: "reset" });
+  }, [simulationId]);
+
+  useEffect(() => {
+    if (!enabled) {
+      dispatch({ kind: "disconnected" });
+      return;
+    }
+
     let cancelled = false;
     const controller = new AbortController();
 
-    dispatch({ kind: "reset" });
+    dispatch({ kind: "connection", connection: "connecting" });
 
     const handleEvent = (event: SseEvent): void => {
       if (cancelled || event.simulationId !== simulationId) {
@@ -293,7 +304,7 @@ export function useSimulationEvents(
       controller.abort();
       subscription.close();
     };
-  }, [simulationId, reloadToken]);
+  }, [simulationId, reloadToken, enabled]);
 
   const addLocalPost = useCallback((post: PostDto) => {
     dispatch({ kind: "upsertPost", post });

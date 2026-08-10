@@ -24,7 +24,7 @@ export type CharacterFailure = {
 };
 
 /** EventSource lifecycle, mapped to something we can show a human. */
-export type ConnectionState = "connecting" | "open" | "reconnecting";
+export type ConnectionState = "connecting" | "open" | "reconnecting" | "disconnected";
 
 /** Generic async phase used by the bootstrap screens. */
 export type LoadPhase = "loading" | "ready" | "error";

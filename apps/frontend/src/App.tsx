@@ -68,8 +68,13 @@ export default function App() {
         try {
           const existing = await api.getSimulation(storedId);
 
-          // Stopped simulations are restored too: the UI can resume them.
-          setSimulation(existing.simulation);
+          // The UI no longer exposes Simulation lifecycle controls. A legacy
+          // stopped simulation is resumed automatically when restored.
+          const restored =
+            existing.simulation.status === "stopped"
+              ? await api.resumeSimulation(existing.simulation.id)
+              : existing.simulation;
+          setSimulation(restored);
           setPhase("ready");
           return;
         } catch (cause) {
@@ -104,10 +109,6 @@ export default function App() {
     bootstrappedRef.current = true;
     void bootstrap();
   }, [bootstrap]);
-
-  const handleSimulationUpdated = useCallback((updated: SimulationDto) => {
-    setSimulation(updated);
-  }, []);
 
   const dismissError = useCallback(() => {
     setError(null);
@@ -166,7 +167,6 @@ export default function App() {
       charactersLoading={charactersLoading}
       charactersError={charactersError}
       onReloadCharacters={reloadCharacters}
-      onSimulationUpdated={handleSimulationUpdated}
       userProfile={userProfile.profile}
       userProfileError={userProfile.error}
       onReloadUserProfile={userProfile.reload}

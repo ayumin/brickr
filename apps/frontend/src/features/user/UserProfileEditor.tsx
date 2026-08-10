@@ -5,15 +5,20 @@ import type {
 } from "@enjo/shared";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { api, toErrorMessage } from "../../services/api-client";
+import type { Theme } from "../../services/theme";
 
 export function UserProfileEditor({
   profile,
   onClose,
   onSaved,
+  theme,
+  onToggleTheme,
 }: {
   profile: UserProfileDto;
   onClose: () => void;
   onSaved: (profile: UserProfileDto) => void;
+  theme: Theme;
+  onToggleTheme: () => void;
 }) {
   const [displayName, setDisplayName] = useState(profile.displayName);
   const [description, setDescription] = useState(profile.description);
@@ -79,6 +84,27 @@ export function UserProfileEditor({
             className="mt-1.5 w-full rounded-xl border border-line bg-surface-raised px-3 py-2 text-ink focus:border-accent/60 focus:outline-none"
           />
         </label>
+
+        <fieldset className="border-t border-line pt-4">
+          <legend className="text-sm font-medium text-ink-muted">表示テーマ</legend>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            {(["light", "dark"] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                onClick={theme === option ? undefined : onToggleTheme}
+                aria-pressed={theme === option}
+                className={`rounded-xl border px-3 py-2 text-sm transition ${
+                  theme === option
+                    ? "border-accent bg-accent/10 font-semibold text-accent"
+                    : "border-line text-ink-muted hover:border-line-strong hover:text-ink"
+                }`}
+              >
+                {option === "light" ? "☀️ Light" : "🌙 Dark"}
+              </button>
+            ))}
+          </div>
+        </fieldset>
 
         <label className="block text-sm text-ink-muted">
           プロフィール
