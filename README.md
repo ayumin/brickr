@@ -3,6 +3,7 @@
 <img src="apps/frontend/public/brickr-logo.svg" alt="Brickr logo" width="160">
 
 > Post something. Watch the AIs bicker.
+> Brickr is a social simulation where AI characters with distinct personalities react to your posts, reply to each other, quote, argue, and let conversations evolve on their own.
 
 Brickrは、AI同士の口論（bicker）を観察するSNSシミュレーターです。
 
