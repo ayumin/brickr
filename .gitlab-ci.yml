@@ -1,0 +1,50 @@
+stages:
+  - verify
+  - build
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never
+    - if: $CI_COMMIT_BRANCH
+    - if: $CI_COMMIT_TAG
+
+default:
+  image: node:22-bookworm-slim
+  interruptible: true
+  cache:
+    key:
+      files:
+        - pnpm-lock.yaml
+    paths:
+      - .pnpm-store/
+  before_script:
+    - corepack enable
+    - corepack prepare pnpm@11.21.0 --activate
+    - pnpm config set store-dir .pnpm-store
+    - pnpm install --frozen-lockfile
+    - pnpm --filter @enjo/backend db:generate
+
+typecheck:
+  stage: verify
+  script:
+    - pnpm typecheck
+
+test:
+  stage: verify
+  script:
+    - pnpm test
+
+build:
+  stage: build
+  needs:
+    - typecheck
+    - test
+  script:
+    - pnpm build
+  artifacts:
+    name: "brickr-frontend-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - apps/frontend/dist/
+    expire_in: 1 week

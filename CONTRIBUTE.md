@@ -261,6 +261,18 @@ git diff --check
 実Providerを使うテストは、料金、Rate Limit、応答の非決定性があるため通常のTest Suiteへ入れません。
 必要な場合は手動検証として実施し、使用Provider、確認内容、Secretを含まない結果をPRへ記載してください。
 
+## GitLab CI
+
+リポジトリ直下の`.gitlab-ci.yml`は、Branch、Tag、Merge RequestのPipelineで次を実行します。
+
+1. `typecheck`と`test`を並列実行
+2. 両方が成功した場合に`build`を実行
+3. Frontendの`apps/frontend/dist/`を1週間Artifactとして保存
+
+CIは開発環境と同じNode.js 22と、`packageManager`で固定しているpnpm 11.21.0を使用します。依存関係は
+`pnpm-lock.yaml`に基づいて固定され、pnpm storeはLockfile単位でキャッシュされます。
+テストは外部LLM APIやPostgreSQLへ接続しないため、APIキーやDatabase Serviceは不要です。
+
 ## Pull Request
 
 Pull Requestは、レビュアーが目的と影響を短時間で確認できる大きさにしてください。
