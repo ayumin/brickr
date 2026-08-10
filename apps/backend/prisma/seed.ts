@@ -1,6 +1,7 @@
 import { CHARACTER_SEEDS } from "../src/characters/character-seeds.js";
 import { MODEL_PROFILE_SEEDS } from "../src/model-profiles/model-profile-seeds.js";
 import { prisma } from "../src/persistence/prisma.js";
+import { USER_AUTHOR_ID, USER_DISPLAY_NAME } from "@enjo/shared";
 
 /**
  * Idempotent seed: model profiles first, then characters.
@@ -8,6 +9,16 @@ import { prisma } from "../src/persistence/prisma.js";
  * Runs on every container start, so it upserts rather than inserts.
  */
 async function main(): Promise<void> {
+  await prisma.userProfile.upsert({
+    where: { id: USER_AUTHOR_ID },
+    create: {
+      id: USER_AUTHOR_ID,
+      displayName: USER_DISPLAY_NAME,
+      description: "",
+    },
+    update: {},
+  });
+
   for (const profile of MODEL_PROFILE_SEEDS) {
     await prisma.modelProfile.upsert({
       where: { id: profile.id },

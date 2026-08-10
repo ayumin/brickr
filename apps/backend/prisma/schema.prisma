@@ -1,7 +1,7 @@
 // Enjo Simulator — MVP schema.
 //
-// Only the four tables the MVP needs: characters, model_profiles,
-// simulations, posts. Do not add tables until something actually needs them.
+// Keep the schema small: characters, model_profiles, simulations, posts, and
+// the singleton editable user profile.
 
 generator client {
   provider = "prisma-client-js"
@@ -96,4 +96,16 @@ model Post {
   @@index([replyTo])
   @@index([quoteOf])
   @@map("posts")
+}
+
+model UserProfile {
+  /// Singleton row for the human author (`authorId = "you"`).
+  id          String   @id
+  displayName String   @map("display_name")
+  description String   @default("")
+  avatarUrl   String?  @map("avatar_url")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("user_profiles")
 }

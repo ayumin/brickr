@@ -101,6 +101,13 @@ export class SimulationService {
     return toSimulationDto(simulation);
   }
 
+  async resume(id: string): Promise<SimulationDto> {
+    await this.requireSimulation(id);
+    this.stopped.delete(id);
+    const simulation = await this.simulations.updateStatus(id, "active");
+    return toSimulationDto(simulation);
+  }
+
   /**
    * Persists the user's post, publishes it immediately, and kicks off character
    * generation in the background. The caller does not wait for the characters.
@@ -197,6 +204,12 @@ export class SimulationService {
       (character) => this.processCharacter(character, target, allCharacters),
     );
 
+    for (const result of results) {
+      if ("value" in result && result.value !== null) {
+        generatedIds.push(result.value.id);
+      }
+    }
+
     if (depth >= this.options.maxCascadeDepth) return;
 
     // Characters react to what the previous round produced. Done sequentially
@@ -287,6 +300,7 @@ export class SimulationService {
     this.events.publish({
       type: "character.processing",
       simulationId,
+      targetPostId: target.id,
       characterId: character.id,
       handle: character.handle,
       displayName: character.displayName,

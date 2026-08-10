@@ -1,6 +1,7 @@
 import type { PostDto } from "@enjo/shared";
 import type { CharacterRepository } from "../characters/character-repository.js";
 import type { Character } from "../characters/character.js";
+import type { UserProfileRepository } from "../user-profile/user-profile-repository.js";
 import { resolveKnownMentions } from "./mention-parser.js";
 import { toPostDto, toPostDtos } from "./post-mapper.js";
 import type { NewPost, Post } from "./post.js";
@@ -22,6 +23,7 @@ export class PostService {
   constructor(
     private readonly posts: PostRepository,
     private readonly characters: CharacterRepository,
+    private readonly userProfiles: UserProfileRepository,
   ) {}
 
   async publish(input: PublishInput): Promise<Post> {
@@ -48,20 +50,22 @@ export class PostService {
   }
 
   async listBySimulation(simulationId: string): Promise<PostDto[]> {
-    const [posts, characters] = await Promise.all([
+    const [posts, characters, userProfile] = await Promise.all([
       this.posts.findBySimulation(simulationId),
       this.characters.findAll(),
+      this.userProfiles.get(),
     ]);
-    return toPostDtos(posts, indexById(characters));
+    return toPostDtos(posts, indexById(characters), userProfile);
   }
 
   /** Maps one post, loading its quoted post if it has one. */
   async toDto(post: Post): Promise<PostDto> {
-    const [characters, quoted] = await Promise.all([
+    const [characters, quoted, userProfile] = await Promise.all([
       this.characters.findAll(),
       post.quoteOf ? this.posts.findById(post.quoteOf) : Promise.resolve(null),
+      this.userProfiles.get(),
     ]);
-    return toPostDto(post, indexById(characters), quoted);
+    return toPostDto(post, indexById(characters), quoted, userProfile);
   }
 }
 

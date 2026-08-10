@@ -12,3 +12,4 @@ export * from "./post.js";
 export * from "./simulation.js";
 export * from "./events.js";
 export * from "./errors.js";
+export * from "./user-profile.js";

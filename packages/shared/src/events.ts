@@ -25,6 +25,8 @@ export type PostCreatedEvent = {
 export type CharacterProcessingEvent = {
   type: "character.processing";
   simulationId: string;
+  /** The post this character is currently preparing a response to. */
+  targetPostId: string;
   characterId: string;
   handle: string;
   displayName: string;

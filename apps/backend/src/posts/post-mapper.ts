@@ -1,14 +1,8 @@
 import type { PostAuthorDto, PostDto, QuotedPostDto } from "@enjo/shared";
-import { USER_AUTHOR_ID, USER_DISPLAY_NAME, USER_HANDLE } from "@enjo/shared";
+import { USER_AUTHOR_ID, USER_HANDLE } from "@enjo/shared";
 import type { Character } from "../characters/character.js";
+import type { UserProfile } from "../user-profile/user-profile.js";
 import type { Post } from "./post.js";
-
-export const USER_AUTHOR: PostAuthorDto = {
-  id: USER_AUTHOR_ID,
-  kind: "user",
-  handle: USER_HANDLE,
-  displayName: USER_DISPLAY_NAME,
-};
 
 /**
  * Resolves an author id to the denormalised author DTO the timeline renders.
@@ -18,8 +12,17 @@ export const USER_AUTHOR: PostAuthorDto = {
 export function toAuthorDto(
   authorId: string,
   charactersById: Map<string, Character>,
+  userProfile: UserProfile,
 ): PostAuthorDto {
-  if (authorId === USER_AUTHOR_ID) return USER_AUTHOR;
+  if (authorId === USER_AUTHOR_ID) {
+    return {
+      id: USER_AUTHOR_ID,
+      kind: "user",
+      handle: USER_HANDLE,
+      displayName: userProfile.displayName,
+      ...(userProfile.avatarUrl ? { avatarUrl: userProfile.avatarUrl } : {}),
+    };
+  }
 
   const character = charactersById.get(authorId);
   if (!character) {
@@ -38,10 +41,11 @@ export function toAuthorDto(
 function toQuotedPostDto(
   post: Post,
   charactersById: Map<string, Character>,
+  userProfile: UserProfile,
 ): QuotedPostDto {
   return {
     id: post.id,
-    author: toAuthorDto(post.authorId, charactersById),
+    author: toAuthorDto(post.authorId, charactersById, userProfile),
     content: post.content,
     createdAt: post.createdAt.toISOString(),
   };
@@ -51,17 +55,20 @@ export function toPostDto(
   post: Post,
   charactersById: Map<string, Character>,
   quotedPost: Post | null,
+  userProfile: UserProfile,
 ): PostDto {
   return {
     id: post.id,
     simulationId: post.simulationId,
     authorId: post.authorId,
-    author: toAuthorDto(post.authorId, charactersById),
+    author: toAuthorDto(post.authorId, charactersById, userProfile),
     content: post.content,
     mentions: post.mentions,
     replyTo: post.replyTo,
     quoteOf: post.quoteOf,
-    quotedPost: quotedPost ? toQuotedPostDto(quotedPost, charactersById) : null,
+    quotedPost: quotedPost
+      ? toQuotedPostDto(quotedPost, charactersById, userProfile)
+      : null,
     createdAt: post.createdAt.toISOString(),
   };
 }
@@ -70,12 +77,18 @@ export function toPostDto(
 export function toPostDtos(
   posts: Post[],
   charactersById: Map<string, Character>,
+  userProfile: UserProfile,
   extraQuoted: Post[] = [],
 ): PostDto[] {
   const byId = new Map<string, Post>();
   for (const post of [...posts, ...extraQuoted]) byId.set(post.id, post);
 
   return posts.map((post) =>
-    toPostDto(post, charactersById, post.quoteOf ? (byId.get(post.quoteOf) ?? null) : null),
+    toPostDto(
+      post,
+      charactersById,
+      post.quoteOf ? (byId.get(post.quoteOf) ?? null) : null,
+      userProfile,
+    ),
   );
 }

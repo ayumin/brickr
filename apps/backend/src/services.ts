@@ -6,6 +6,7 @@ import { LLMClient } from "./llm/llm-client.js";
 import type { LLMProviderRegistry } from "./llm/provider-registry.js";
 import { createProviderRegistry } from "./llm/provider-registry.js";
 import { ModelProfileRepository } from "./model-profiles/model-profile-repository.js";
+import { ModelProfileService } from "./model-profiles/model-profile-service.js";
 import type { Db } from "./persistence/prisma.js";
 import { PostRepository } from "./posts/post-repository.js";
 import { PostService } from "./posts/post-service.js";
@@ -14,9 +15,13 @@ import { EventHub } from "./simulation/event-hub.js";
 import { SimulationRepository } from "./simulation/simulation-repository.js";
 import type { SimulationLogger } from "./simulation/simulation-service.js";
 import { SimulationService } from "./simulation/simulation-service.js";
+import { UserProfileRepository } from "./user-profile/user-profile-repository.js";
+import { UserProfileService } from "./user-profile/user-profile-service.js";
 
 export type AppServices = {
   characters: CharacterService;
+  modelProfiles: ModelProfileService;
+  userProfile: UserProfileService;
   posts: PostService;
   simulations: SimulationService;
   events: EventHub;
@@ -32,6 +37,7 @@ export function buildServices(db: Db, logger: SimulationLogger): AppServices {
   const modelProfileRepository = new ModelProfileRepository(db);
   const postRepository = new PostRepository(db);
   const simulationRepository = new SimulationRepository(db);
+  const userProfileRepository = new UserProfileRepository(db);
 
   const providerRegistry = createProviderRegistry();
   const llmClient = new LLMClient(
@@ -40,7 +46,11 @@ export function buildServices(db: Db, logger: SimulationLogger): AppServices {
     { debug: (msg) => logger.info({}, msg) },
   );
 
-  const postService = new PostService(postRepository, characterRepository);
+  const postService = new PostService(
+    postRepository,
+    characterRepository,
+    userProfileRepository,
+  );
   const threadService = new ThreadService(postRepository, env.simulation.contextPostLimit);
   const agentService = new AgentService(llmClient, modelProfileRepository);
   const events = new EventHub();
@@ -62,7 +72,9 @@ export function buildServices(db: Db, logger: SimulationLogger): AppServices {
   );
 
   return {
-    characters: new CharacterService(characterRepository),
+    characters: new CharacterService(characterRepository, modelProfileRepository),
+    modelProfiles: new ModelProfileService(modelProfileRepository),
+    userProfile: new UserProfileService(userProfileRepository),
     posts: postService,
     simulations,
     events,

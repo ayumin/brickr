@@ -54,3 +54,5 @@ export type CharacterSeed = Omit<
       | "influence"
     >
   >;
+
+export type SaveCharacter = Omit<Character, "id">;

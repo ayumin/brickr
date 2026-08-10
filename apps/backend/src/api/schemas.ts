@@ -21,4 +21,29 @@ export const createPostSchema = z.object({
   quoteOf: id.optional(),
 });
 
+const probability = z.number().min(0).max(1);
+
+export const saveCharacterSchema = z.object({
+  handle: z.string().trim().toLowerCase().regex(/^[a-z0-9_]{1,32}$/u),
+  displayName: z.string().trim().min(1).max(80),
+  description: z.string().trim().min(1).max(500),
+  rolePrompt: z.string().trim().min(1).max(4_000),
+  tonePrompt: z.string().trim().min(1).max(4_000),
+  dialectPrompt: z.string().trim().max(2_000).optional(),
+  interests: z.array(z.string().trim().min(1).max(80)).max(20),
+  activityLevel: probability,
+  responseProbability: probability,
+  replyProbability: probability,
+  quoteProbability: probability,
+  influence: probability,
+  modelProfileId: id,
+  avatarUrl: z.string().trim().url().max(2_048).optional(),
+});
+
+export const saveUserProfileSchema = z.object({
+  displayName: z.string().trim().min(1).max(80),
+  description: z.string().trim().max(500),
+  avatarUrl: z.string().trim().url().max(2_048).optional(),
+});
+
 export const idParams = z.object({ id });

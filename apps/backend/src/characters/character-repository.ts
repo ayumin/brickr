@@ -1,5 +1,5 @@
 import type { Db } from "../persistence/prisma.js";
-import type { Character } from "./character.js";
+import type { Character, SaveCharacter } from "./character.js";
 
 type CharacterRow = {
   id: string;
@@ -52,6 +52,11 @@ export class CharacterRepository {
     return row ? toCharacter(row) : null;
   }
 
+  async findByHandle(handle: string): Promise<Character | null> {
+    const row = await this.db.character.findUnique({ where: { handle } });
+    return row ? toCharacter(row) : null;
+  }
+
   async findByHandles(handles: string[]): Promise<Character[]> {
     if (handles.length === 0) return [];
     const rows = await this.db.character.findMany({
@@ -65,4 +70,39 @@ export class CharacterRepository {
     const rows = await this.db.character.findMany({ where: { id: { in: ids } } });
     return rows.map(toCharacter);
   }
+
+
+  async create(id: string, input: SaveCharacter): Promise<Character> {
+    const row = await this.db.character.create({
+      data: { id, ...toWriteData(input) },
+    });
+    return toCharacter(row);
+  }
+
+  async update(id: string, input: SaveCharacter): Promise<Character> {
+    const row = await this.db.character.update({
+      where: { id },
+      data: toWriteData(input),
+    });
+    return toCharacter(row);
+  }
+}
+
+function toWriteData(input: SaveCharacter) {
+  return {
+    handle: input.handle,
+    displayName: input.displayName,
+    description: input.description,
+    rolePrompt: input.rolePrompt,
+    tonePrompt: input.tonePrompt,
+    dialectPrompt: input.dialectPrompt ?? null,
+    interests: input.interests,
+    activityLevel: input.activityLevel,
+    responseProbability: input.responseProbability,
+    replyProbability: input.replyProbability,
+    quoteProbability: input.quoteProbability,
+    influence: input.influence,
+    modelProfileId: input.modelProfileId,
+    avatarUrl: input.avatarUrl ?? null,
+  };
 }

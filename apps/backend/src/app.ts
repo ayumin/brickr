@@ -16,7 +16,7 @@ export async function buildApp(db: Db): Promise<FastifyInstance> {
 
   await app.register(cors, {
     origin: env.corsOrigins.includes("*") ? true : env.corsOrigins,
-    methods: ["GET", "POST", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "OPTIONS"],
   });
 
   const services = buildServices(db, app.log);
