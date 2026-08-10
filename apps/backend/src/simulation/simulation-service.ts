@@ -21,6 +21,7 @@ const MAX_CASCADE_RESPONDERS = 2;
 export type SubmitUserPostInput = {
   simulationId: string;
   content: string;
+  imageUrl?: string;
   responderIds: string[];
   replyTo?: string | null;
   quoteOf?: string | null;
@@ -125,6 +126,7 @@ export class SimulationService {
       simulationId: input.simulationId,
       authorId: USER_AUTHOR_ID,
       content: input.content,
+      ...(input.imageUrl ? { imageUrl: input.imageUrl } : {}),
       replyTo: input.replyTo ?? null,
       quoteOf: input.quoteOf ?? null,
     });

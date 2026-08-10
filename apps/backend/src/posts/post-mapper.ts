@@ -47,6 +47,7 @@ function toQuotedPostDto(
     id: post.id,
     author: toAuthorDto(post.authorId, charactersById, userProfile),
     content: post.content,
+    ...(post.imageUrl ? { imageUrl: post.imageUrl } : {}),
     createdAt: post.createdAt.toISOString(),
   };
 }
@@ -63,6 +64,7 @@ export function toPostDto(
     authorId: post.authorId,
     author: toAuthorDto(post.authorId, charactersById, userProfile),
     content: post.content,
+    ...(post.imageUrl ? { imageUrl: post.imageUrl } : {}),
     mentions: post.mentions,
     replyTo: post.replyTo,
     quoteOf: post.quoteOf,

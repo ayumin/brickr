@@ -6,6 +6,7 @@ type PostRow = {
   simulationId: string;
   authorId: string;
   content: string;
+  imageUrl: string | null;
   mentions: string[];
   replyTo: string | null;
   quoteOf: string | null;
@@ -18,6 +19,7 @@ function toPost(row: PostRow): Post {
     simulationId: row.simulationId,
     authorId: row.authorId,
     content: row.content,
+    ...(row.imageUrl ? { imageUrl: row.imageUrl } : {}),
     mentions: row.mentions,
     replyTo: row.replyTo,
     quoteOf: row.quoteOf,
@@ -34,6 +36,7 @@ export class PostRepository {
         simulationId: input.simulationId,
         authorId: input.authorId,
         content: input.content,
+        imageUrl: input.imageUrl ?? null,
         mentions: input.mentions,
         replyTo: input.replyTo ?? null,
         quoteOf: input.quoteOf ?? null,

@@ -31,4 +31,26 @@ describe("toPostDto user profile", () => {
       avatarUrl: "https://example.com/avatar.png",
     });
   });
+
+  it("includes a post image in the API DTO", () => {
+    const post: Post = {
+      id: "post-image",
+      simulationId: "sim-1",
+      authorId: USER_AUTHOR_ID,
+      content: "image",
+      imageUrl: "data:image/png;base64,iVBORw0KGgo=",
+      mentions: [],
+      replyTo: null,
+      quoteOf: null,
+      createdAt: new Date("2026-01-01T00:00:00Z"),
+    };
+
+    const dto = toPostDto(post, new Map(), null, {
+      id: USER_AUTHOR_ID,
+      displayName: "ユーザー",
+      description: "",
+    });
+
+    expect(dto.imageUrl).toBe(post.imageUrl);
+  });
 });

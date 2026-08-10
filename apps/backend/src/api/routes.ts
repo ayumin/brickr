@@ -154,6 +154,7 @@ export async function registerRoutes(
       const post = await services.simulations.submitUserPost({
         simulationId: params.data.id,
         content: body.data.content,
+        imageUrl: body.data.imageUrl,
         responderIds: body.data.responderIds ?? [],
         replyTo: body.data.replyTo ?? null,
         quoteOf: body.data.quoteOf ?? null,

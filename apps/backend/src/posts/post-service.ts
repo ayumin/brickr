@@ -11,6 +11,7 @@ export type PublishInput = {
   simulationId: string;
   authorId: string;
   content: string;
+  imageUrl?: string;
   replyTo?: string | null;
   quoteOf?: string | null;
 };
@@ -37,6 +38,7 @@ export class PostService {
       simulationId: input.simulationId,
       authorId: input.authorId,
       content: input.content,
+      ...(input.imageUrl ? { imageUrl: input.imageUrl } : {}),
       mentions,
       replyTo: input.replyTo ?? null,
       quoteOf: input.quoteOf ?? null,

@@ -1,4 +1,5 @@
 import cors from "@fastify/cors";
+import { MAX_IMAGE_DATA_URL_LENGTH } from "@enjo/shared";
 import Fastify, { type FastifyError, type FastifyInstance } from "fastify";
 import { registerRoutes } from "./api/routes.js";
 import { env } from "./config/env.js";
@@ -7,6 +8,8 @@ import { buildServices } from "./services.js";
 
 export async function buildApp(db: Db): Promise<FastifyInstance> {
   const app = Fastify({
+    // A 5 MiB image expands when encoded as a JSON data URL.
+    bodyLimit: MAX_IMAGE_DATA_URL_LENGTH + 16_384,
     logger: {
       level: env.logLevel,
       // API keys must never reach the logs.

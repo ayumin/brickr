@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { MAX_POST_LENGTH } from "@enjo/shared";
+import { MAX_IMAGE_BYTES, MAX_POST_LENGTH } from "@enjo/shared";
 import type {
   CharacterDto,
   CreatePostRequest,
@@ -14,6 +14,8 @@ import { api, toErrorMessage } from "../../services/api-client";
 import type { ComposerScope } from "../../types";
 import { QuotePost } from "../timeline/QuotePost";
 import { MentionInput } from "./MentionInput";
+
+const ACCEPTED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
 
 export type ComposerProps = {
   simulationId: string;
@@ -57,6 +59,7 @@ export function Composer({
   const [content, setContent] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
 
   // Replying to a character pre-fills the mention, like a normal SNS client.
   useEffect(() => {
@@ -87,7 +90,7 @@ export function Composer({
 
   const remaining = MAX_POST_LENGTH - content.length;
   const overLimit = remaining < 0;
-  const isEmpty = content.trim().length === 0;
+  const isEmpty = content.trim().length === 0 && imageUrl === null;
   const canSubmit = !disabled && !submitting && !isEmpty && !overLimit;
 
   const submit = async (): Promise<void> => {
@@ -101,6 +104,7 @@ export function Composer({
     // an @mention in the body is the only way to force a specific character.
     const request: CreatePostRequest = {
       content: content.trim(),
+      ...(!scope && imageUrl ? { imageUrl } : {}),
       ...(scope?.mode === "reply" ? { replyTo: scope.post.id } : {}),
       ...(scope?.mode === "quote" ? { quoteOf: scope.post.id } : {}),
     };
@@ -110,6 +114,7 @@ export function Composer({
       // Show the user's own post immediately; SSE brings the characters later.
       onPosted(post);
       setContent("");
+      setImageUrl(null);
       onCancel?.();
     } catch (cause) {
       setError(toErrorMessage(cause));
@@ -124,6 +129,28 @@ export function Composer({
       : scope?.mode === "reply"
         ? "返信を書く…"
         : "いま何が起きてる？　@ でキャラクターを指名できます";
+
+  const selectImage = (file: File | undefined): void => {
+    if (!file) return;
+    if (!ACCEPTED_IMAGE_TYPES.has(file.type)) {
+      setError("PNG、JPEG、GIF、WebP形式の画像を選択してください。");
+      return;
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      setError("画像は5MB以下にしてください。");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        setImageUrl(reader.result);
+        setError(null);
+      }
+    };
+    reader.onerror = () => setError("画像を読み込めませんでした。");
+    reader.readAsDataURL(file);
+  };
 
   return (
     <form
@@ -180,9 +207,43 @@ export function Composer({
                 id: scope.post.id,
                 author: scope.post.author,
                 content: scope.post.content,
+                ...(scope.post.imageUrl ? { imageUrl: scope.post.imageUrl } : {}),
                 createdAt: scope.post.createdAt,
               }}
             />
+          ) : null}
+
+          {!scope ? (
+            <div className="mt-2">
+              {imageUrl ? (
+                <div className="relative overflow-hidden rounded-xl border border-line bg-surface-raised">
+                  <img
+                    src={imageUrl}
+                    alt="添付画像のプレビュー"
+                    className="max-h-80 w-full object-contain"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setImageUrl(null)}
+                    className="absolute right-2 top-2 rounded-full bg-black/70 px-2.5 py-1 text-xs text-white hover:bg-black/85"
+                  >
+                    削除
+                  </button>
+                </div>
+              ) : (
+                <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-line px-3 py-1.5 text-xs text-ink-muted transition hover:border-accent/50 hover:text-accent">
+                  <span aria-hidden="true">🖼️</span>
+                  画像を添付
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/gif,image/webp"
+                    disabled={disabled || submitting}
+                    onChange={(event) => selectImage(event.currentTarget.files?.[0])}
+                    className="sr-only"
+                  />
+                </label>
+              )}
+            </div>
           ) : null}
 
           <div className="mt-2 flex items-center justify-end gap-3">

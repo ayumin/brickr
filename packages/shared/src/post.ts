@@ -15,6 +15,7 @@ export type QuotedPostDto = {
   id: string;
   author: PostAuthorDto;
   content: string;
+  imageUrl?: string;
   createdAt: string;
 };
 
@@ -24,6 +25,8 @@ export type PostDto = {
   authorId: string;
   author: PostAuthorDto;
   content: string;
+  /** Optional image attachment. Only allowed on a top-level user post. */
+  imageUrl?: string;
   /** Handles mentioned in the body, without the leading "@". */
   mentions: string[];
   replyTo: string | null;
@@ -34,6 +37,7 @@ export type PostDto = {
 
 export type CreatePostRequest = {
   content: string;
+  imageUrl?: string;
   /** Characters the user explicitly asks to respond. */
   responderIds?: string[];
   /** Set when the user replies to an existing post. */

@@ -77,6 +77,7 @@ model Post {
   authorId String @map("author_id")
 
   content  String
+  imageUrl String? @map("image_url") @db.Text
   mentions String[] @default([])
 
   replyTo String? @map("reply_to")

@@ -3,6 +3,7 @@ import type { PostDto } from "@enjo/shared";
 
 import { Avatar } from "../../components/Avatar";
 import { QuotePost, formatAbsoluteTime, formatRelativeTime } from "./QuotePost";
+import { PostImage } from "./PostImage";
 
 /** Handles are ASCII (see character seeds), so this stays deliberately narrow. */
 const MENTION_PATTERN = /@([A-Za-z0-9_]{1,32})/g;
@@ -201,6 +202,8 @@ export function PostCard({
         >
           {renderContent(post.content, knownHandles, onOpenHandle)}
         </p>
+
+        {post.imageUrl ? <PostImage src={post.imageUrl} /> : null}
 
         {post.quotedPost ? (
           <QuotePost

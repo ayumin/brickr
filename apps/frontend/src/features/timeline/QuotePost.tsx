@@ -1,6 +1,7 @@
 import type { QuotedPostDto } from "@enjo/shared";
 
 import { Avatar } from "../../components/Avatar";
+import { PostImage } from "./PostImage";
 
 /**
  * Tiny relative-time formatter (no date library, CLAUDE.md keeps deps small).
@@ -113,6 +114,7 @@ export function QuotePost({ post, onOpenAuthor }: QuotePostProps) {
       <p className="mt-1 text-[14px] break-words whitespace-pre-wrap text-ink-muted">
         {post.content}
       </p>
+      {post.imageUrl ? <PostImage src={post.imageUrl} alt="引用された投稿の画像" /> : null}
     </article>
   );
 }

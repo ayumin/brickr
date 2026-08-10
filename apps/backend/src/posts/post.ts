@@ -5,6 +5,7 @@ export type Post = {
   /** Character id, or `USER_AUTHOR_ID` for the human user. */
   authorId: string;
   content: string;
+  imageUrl?: string;
   /** Handles referenced in the body, without the leading "@". */
   mentions: string[];
   replyTo: string | null;
@@ -17,6 +18,7 @@ export type NewPost = {
   simulationId: string;
   authorId: string;
   content: string;
+  imageUrl?: string;
   mentions: string[];
   replyTo?: string | null;
   quoteOf?: string | null;
