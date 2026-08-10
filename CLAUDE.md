@@ -304,6 +304,7 @@ Frontendは以下を担当します。
 - REST API Client
 - SSE Client
 - Loading / Error表示
+- Light / Dark mode切り替え
 
 Frontendの役割は、
 
@@ -398,6 +399,7 @@ Character
 ModelProfile
 Post
 Simulation
+UserProfile
 ```
 
 必要性が出るまでDomain Objectを増やさないでください。
@@ -1199,6 +1201,8 @@ simulation.failed
 ```
 
 `character.processing` はUI上で「考え中」を表示する場合のみ利用してください。
+表示する場合は、Timeline上部ではなく反応対象のPost直下に表示してください。
+Eventには対象を特定する`targetPostId`を含めます。
 
 ---
 
@@ -1225,6 +1229,12 @@ GET /api/health
 ```http
 GET /api/characters
 GET /api/characters/:id
+GET /api/characters/:id/config
+POST /api/characters
+PUT /api/characters/:id
+GET /api/model-profiles
+GET /api/user-profile
+PUT /api/user-profile
 ```
 
 Frontend向けCharacter DTOには内部PromptやAPI設定を含めないでください。
@@ -1237,6 +1247,7 @@ Frontend向けCharacter DTOには内部PromptやAPI設定を含めないでく�
 POST /api/simulations
 GET  /api/simulations/:id
 POST /api/simulations/:id/stop
+POST /api/simulations/:id/resume
 ```
 
 ---
@@ -1316,7 +1327,7 @@ export type CharacterDto = {
 };
 ```
 
-以下は通常のFrontend APIには返しません。
+以下は通常の一覧・プロフィールAPIには返しません。
 
 ```text
 rolePrompt
@@ -1327,6 +1338,9 @@ provider configuration
 internal probabilities
 API keys
 ```
+
+Character作成・編集画面向けの専用Config APIでは、Persona Prompt、Behavior、
+ModelProfile IDを返して構いません。API KeyやProvider credentialは返しません。
 
 ---
 
@@ -1348,6 +1362,9 @@ LLM Provider名は主役ではありません。
 
 CharacterのPersonaがUIから伝わることを優先してください。
 
+独立した「ホーム」ナビゲーション項目は置かず、ヘッダーのサービス名または
+ユーザーのavatarから、投稿Composerのあるホームへ戻れるようにします。
+
 ---
 
 # 49. Composer
@@ -1356,7 +1373,6 @@ Composerでは以下を可能にします。
 
 - Text入力
 - @mention
-- Explicit Character選択
 - Post
 
 Example:
@@ -1386,7 +1402,16 @@ Character Profileでは、
 
 程度を表示します。
 
+Character一覧内のdescription previewは最大30文字程度に省略し、
+全文はCharacter Profileで表示します。
+
 内部PromptをそのままUIへ表示する必要はありません。
+
+Character作成・編集画面では、Personaを構成するrole / tone / dialect Prompt、
+Behavior、利用するModelProfileを編集できます。
+
+ホームでは投稿Composerの上にUser ProfileをCharacter Profileと同じ形式で表示します。
+UserはdisplayName、description、avatarを編集できます。識別子`you`とhandle`@you`は固定です。
 
 ---
 
@@ -1479,6 +1504,7 @@ characters
 model_profiles
 simulations
 posts
+user_profiles
 ```
 
 必要性が出るまでTableを増やさないでください。
@@ -1598,6 +1624,10 @@ MVPでは以下を実装します。
 23. Character同士の会話
 24. SSEによる順次表示
 25. 一部Provider失敗時の継続
+26. Simulationの停止と再開
+27. Character作成・編集UI
+28. Light / Dark mode切り替え
+29. User Profile表示・編集
 
 ---
 
@@ -1649,8 +1679,6 @@ MVP後に必要性を見ながら検討します。
 - より長いConversation
 - QuoteからのConversation Branch
 - Image Post
-- Character Creation UI
-- Character Management UI
 - Conversation Visualization
 - Provider / Model切替UI
 
