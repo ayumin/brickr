@@ -8,6 +8,8 @@
     "dev": "dotenv -e ../../.env -- tsx watch --clear-screen=false src/server.ts",
     "dev:raw": "tsx watch --clear-screen=false src/server.ts",
     "start": "dotenv -e ../../.env -- tsx src/server.ts",
+    "lint": "eslint src prisma vitest.config.ts",
+    "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
