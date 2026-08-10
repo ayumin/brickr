@@ -21,6 +21,7 @@ const expectedPaths = [
   "/api/user-profile",
   "/api/simulations",
   "/api/simulations/{id}",
+  "/api/simulations/{id}/analysis",
   "/api/simulations/{id}/stop",
   "/api/simulations/{id}/resume",
   "/api/simulations/{id}/posts",

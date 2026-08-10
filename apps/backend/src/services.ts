@@ -14,6 +14,7 @@ import { PostService } from "./posts/post-service.js";
 import { ThreadService } from "./posts/thread-service.js";
 import { EventHub } from "./simulation/event-hub.js";
 import { SimulationRepository } from "./simulation/simulation-repository.js";
+import { SimulationAnalysisService } from "./simulation/simulation-analysis-service.js";
 import type { SimulationLogger } from "./simulation/simulation-service.js";
 import { SimulationService } from "./simulation/simulation-service.js";
 import { UserProfileRepository } from "./user-profile/user-profile-repository.js";
@@ -28,6 +29,7 @@ export type AppServices = {
   userProfile: UserProfileService;
   posts: PostService;
   simulations: SimulationService;
+  simulationAnalysis: SimulationAnalysisService;
   events: EventHub;
   providerRegistry: LLMProviderRegistry;
   applicationSettings: ApplicationSettingsService;
@@ -81,6 +83,12 @@ export async function buildServices(db: Db, logger: SimulationLogger): Promise<A
     runtime.values.simulation,
     logger,
   );
+  const simulationAnalysis = new SimulationAnalysisService(
+    simulationRepository,
+    postService,
+    llmClient,
+    providerRegistry,
+  );
 
   const modelProfiles = new ModelProfileService(
     modelProfileRepository,
@@ -109,6 +117,7 @@ export async function buildServices(db: Db, logger: SimulationLogger): Promise<A
     userProfile: new UserProfileService(userProfileRepository),
     posts: postService,
     simulations,
+    simulationAnalysis,
     events,
     providerRegistry,
     applicationSettings,

@@ -26,6 +26,7 @@ import {
   saveCharacterSchema,
   saveUserProfileSchema,
   updateApplicationSettingsSchema,
+  updateSimulationSchema,
 } from "./schemas.js";
 
 export async function registerRoutes(
@@ -231,6 +232,10 @@ export async function registerRoutes(
 
   // -- simulations ----------------------------------------------------------
 
+  app.get("/api/simulations", async () => ({
+    simulations: await services.simulations.list(),
+  }));
+
   app.post("/api/simulations", async (request, reply) => {
     const body = createSimulationSchema.safeParse(request.body ?? {});
     if (!body.success) {
@@ -243,6 +248,22 @@ export async function registerRoutes(
 
   app.get("/api/simulations/:id", async (request, reply) =>
     withSimulation(request, reply, async (id) => services.simulations.get(id)),
+  );
+
+  app.put("/api/simulations/:id", async (request, reply) => {
+    const body = updateSimulationSchema.safeParse(request.body);
+    if (!body.success) {
+      return sendError(reply, 400, "invalid_body", "title is invalid", body.error.issues);
+    }
+    return withSimulation(request, reply, async (id) => ({
+      simulation: await services.simulations.rename(id, body.data.title),
+    }));
+  });
+
+  app.get("/api/simulations/:id/analysis", async (request, reply) =>
+    withSimulation(request, reply, async (id) => ({
+      analysis: await services.simulationAnalysis.analyze(id),
+    })),
   );
 
   app.post("/api/simulations/:id/stop", async (request, reply) =>

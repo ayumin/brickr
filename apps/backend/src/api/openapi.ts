@@ -441,6 +441,21 @@ export const openApiDocument: OpenAPIV3.Document = {
       },
     },
     "/api/simulations": {
+      get: {
+        operationId: "listSimulations",
+        tags: ["Simulations"],
+        summary: "List simulation history",
+        responses: {
+          "200": jsonResponse("Simulation history", {
+            type: "object",
+            required: ["simulations"],
+            properties: {
+              simulations: { type: "array", items: ref("SimulationSummary") },
+            },
+          }),
+          "500": errorResponses["500"],
+        },
+      },
       post: {
         operationId: "createSimulation",
         tags: ["Simulations"],
@@ -477,6 +492,41 @@ export const openApiDocument: OpenAPIV3.Document = {
               simulation: ref("Simulation"),
               posts: { type: "array", items: ref("Post") },
             },
+          }),
+          ...errorResponses,
+        },
+      },
+      put: {
+        operationId: "updateSimulation",
+        tags: ["Simulations"],
+        summary: "Rename a simulation",
+        parameters: [idParameter("Simulation ID")],
+        requestBody: jsonBody({
+          type: "object",
+          required: ["title"],
+          properties: { title: { type: "string", minLength: 1, maxLength: 120 } },
+        }),
+        responses: {
+          "200": jsonResponse("Renamed simulation", {
+            type: "object",
+            required: ["simulation"],
+            properties: { simulation: ref("Simulation") },
+          }),
+          ...errorResponses,
+        },
+      },
+    },
+    "/api/simulations/{id}/analysis": {
+      get: {
+        operationId: "analyzeSimulation",
+        tags: ["Simulations"],
+        summary: "Analyze posts in a simulation",
+        parameters: [idParameter("Simulation ID")],
+        responses: {
+          "200": jsonResponse("Simulation analysis", {
+            type: "object",
+            required: ["analysis"],
+            properties: { analysis: ref("SimulationAnalysis") },
           }),
           ...errorResponses,
         },
@@ -775,6 +825,64 @@ export const openApiDocument: OpenAPIV3.Document = {
           title: { type: "string", nullable: true },
           status: { type: "string", enum: ["active", "stopped"] },
           createdAt: { type: "string", format: "date-time" },
+        },
+      },
+      SimulationSummary: {
+        allOf: [
+          ref("Simulation"),
+          {
+            type: "object",
+            required: ["postCount"],
+            properties: { postCount: { type: "integer", minimum: 0 } },
+          },
+        ],
+      },
+      SimulationAnalysis: {
+        type: "object",
+        required: ["simulation", "summary", "postCount", "authorCount", "replyCount", "repostCount", "ranking", "authorRanking"],
+        properties: {
+          simulation: ref("Simulation"),
+          summary: ref("SimulationContentSummary"),
+          postCount: { type: "integer", minimum: 0 },
+          authorCount: { type: "integer", minimum: 0 },
+          replyCount: { type: "integer", minimum: 0 },
+          repostCount: { type: "integer", minimum: 0 },
+          ranking: { type: "array", items: ref("SimulationPostRanking") },
+          authorRanking: { type: "array", items: ref("SimulationAuthorRanking") },
+        },
+      },
+      SimulationContentSummary: {
+        type: "object",
+        required: ["overallTopics", "postOverview", "highEngagementTopics", "lowEngagementTopics"],
+        properties: {
+          overallTopics: { type: "string" },
+          postOverview: { type: "string" },
+          highEngagementTopics: { type: "string" },
+          lowEngagementTopics: { type: "string" },
+        },
+      },
+      SimulationPostRanking: {
+        type: "object",
+        required: ["postId", "content", "author", "replyCount", "repostCount", "score", "createdAt"],
+        properties: {
+          postId: { type: "string" },
+          content: { type: "string" },
+          author: ref("PostAuthor"),
+          replyCount: { type: "integer", minimum: 0 },
+          repostCount: { type: "integer", minimum: 0 },
+          score: { type: "integer", minimum: 0 },
+          createdAt: { type: "string", format: "date-time" },
+        },
+      },
+      SimulationAuthorRanking: {
+        type: "object",
+        required: ["author", "postCount", "replyCount", "repostCount", "receivedReactionCount"],
+        properties: {
+          author: ref("PostAuthor"),
+          postCount: { type: "integer", minimum: 0 },
+          replyCount: { type: "integer", minimum: 0 },
+          repostCount: { type: "integer", minimum: 0 },
+          receivedReactionCount: { type: "integer", minimum: 0 },
         },
       },
       PostAuthor: {

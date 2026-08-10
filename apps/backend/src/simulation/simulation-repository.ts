@@ -1,6 +1,6 @@
 import type { SimulationStatus } from "@enjo/shared";
 import type { Db } from "../persistence/prisma.js";
-import type { Simulation } from "./simulation.js";
+import type { Simulation, SimulationSummary } from "./simulation.js";
 
 type SimulationRow = {
   id: string;
@@ -28,9 +28,25 @@ export class SimulationRepository {
     return toSimulation(row);
   }
 
+  async findAll(): Promise<SimulationSummary[]> {
+    const rows = await this.db.simulation.findMany({
+      include: { _count: { select: { posts: true } } },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    });
+    return rows.map((row) => ({
+      ...toSimulation(row),
+      postCount: row._count.posts,
+    }));
+  }
+
   async findById(id: string): Promise<Simulation | null> {
     const row = await this.db.simulation.findUnique({ where: { id } });
     return row ? toSimulation(row) : null;
+  }
+
+  async updateTitle(id: string, title: string): Promise<Simulation> {
+    const row = await this.db.simulation.update({ where: { id }, data: { title } });
+    return toSimulation(row);
   }
 
   async updateStatus(id: string, status: SimulationStatus): Promise<Simulation> {

@@ -21,6 +21,10 @@ export const createSimulationSchema = z.object({
   title: z.string().trim().min(1).max(120).optional(),
 });
 
+export const updateSimulationSchema = z.object({
+  title: z.string().trim().min(1).max(120),
+});
+
 const imageDataUrl = z
   .string()
   .max(MAX_IMAGE_DATA_URL_LENGTH)

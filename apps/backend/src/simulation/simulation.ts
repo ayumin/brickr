@@ -7,6 +7,10 @@ export type Simulation = {
   createdAt: Date;
 };
 
+export type SimulationSummary = Simulation & {
+  postCount: number;
+};
+
 /** The two post shapes a character can produce. Plain `post` is a standalone comment. */
 export const RESPONSE_ACTIONS = ["reply", "quote", "post"] as const;
 

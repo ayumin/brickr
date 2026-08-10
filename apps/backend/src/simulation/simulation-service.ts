@@ -1,4 +1,8 @@
-import type { SimulationDto, SimulationResponse } from "@enjo/shared";
+import type {
+  SimulationDto,
+  SimulationResponse,
+  SimulationSummaryDto,
+} from "@enjo/shared";
 import { USER_AUTHOR_ID, USER_HANDLE } from "@enjo/shared";
 import type { AgentService } from "../agents/agent-service.js";
 import type { CharacterRepository } from "../characters/character-repository.js";
@@ -89,10 +93,23 @@ export class SimulationService {
     return toSimulationDto(simulation);
   }
 
+  async list(): Promise<SimulationSummaryDto[]> {
+    const simulations = await this.simulations.findAll();
+    return simulations.map((simulation) => ({
+      ...toSimulationDto(simulation),
+      postCount: simulation.postCount,
+    }));
+  }
+
   async get(id: string): Promise<SimulationResponse> {
     const simulation = await this.requireSimulation(id);
     const posts = await this.posts.listBySimulation(id);
     return { simulation: toSimulationDto(simulation), posts };
+  }
+
+  async rename(id: string, title: string): Promise<SimulationDto> {
+    await this.requireSimulation(id);
+    return toSimulationDto(await this.simulations.updateTitle(id, title));
   }
 
   async stop(id: string): Promise<SimulationDto> {
