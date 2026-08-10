@@ -33,11 +33,14 @@ export type Character = {
 
   modelProfileId: string;
   avatarUrl?: string;
+  /** Present when the character is logically deleted. */
+  deletedAt?: Date;
 };
 
 /** Seed shape: behaviour values may be omitted and fall back to defaults. */
 export type CharacterSeed = Omit<
   Character,
+  | "deletedAt"
   | "activityLevel"
   | "responseProbability"
   | "replyProbability"
@@ -55,4 +58,4 @@ export type CharacterSeed = Omit<
     >
   >;
 
-export type SaveCharacter = Omit<Character, "id">;
+export type SaveCharacter = Omit<Character, "id" | "deletedAt">;

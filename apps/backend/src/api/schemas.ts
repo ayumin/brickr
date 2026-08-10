@@ -1,4 +1,5 @@
 import {
+  EDITABLE_APPLICATION_SETTING_NAMES,
   MAX_AVATAR_DATA_URL_LENGTH,
   MAX_AVATAR_IMAGE_BYTES,
   MAX_IMAGE_DATA_URL_LENGTH,
@@ -93,6 +94,15 @@ export const saveCharacterSchema = z.object({
 
 export const bulkDeleteCharactersSchema = z.object({
   ids: z.array(id).min(1).max(100),
+  mode: z.enum(["soft", "hard"]).optional(),
+});
+
+export const deleteCharacterQuerySchema = z.object({
+  mode: z.enum(["soft", "hard"]).optional(),
+});
+
+export const importCharactersCsvSchema = z.object({
+  csv: z.string().min(1).max(50 * 1024 * 1024),
 });
 
 export const bulkCreateCharactersSchema = z.object({
@@ -103,6 +113,15 @@ export const saveUserProfileSchema = z.object({
   displayName: z.string().trim().min(1).max(80),
   description: z.string().trim().max(500),
   avatarUrl: avatarSource.optional(),
+});
+
+export const updateApplicationSettingsSchema = z.object({
+  overrides: z
+    .partialRecord(
+      z.enum(EDITABLE_APPLICATION_SETTING_NAMES),
+      z.union([z.string().max(200), z.null()]),
+    )
+    .refine((value) => Object.keys(value).length > 0, "at least one override is required"),
 });
 
 export const idParams = z.object({ id });

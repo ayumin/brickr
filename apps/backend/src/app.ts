@@ -7,6 +7,15 @@ import { env } from "./config/env.js";
 import type { Db } from "./persistence/prisma.js";
 import { buildServices } from "./services.js";
 
+export const CORS_METHODS = ["GET", "POST", "PUT", "DELETE", "OPTIONS"];
+
+export async function registerCors(app: FastifyInstance): Promise<void> {
+  await app.register(cors, {
+    origin: env.corsOrigins.includes("*") ? true : env.corsOrigins,
+    methods: CORS_METHODS,
+  });
+}
+
 export async function buildApp(db: Db): Promise<FastifyInstance> {
   const app = Fastify({
     // A 5 MiB image expands when encoded as a JSON data URL.
@@ -18,10 +27,7 @@ export async function buildApp(db: Db): Promise<FastifyInstance> {
     },
   });
 
-  await app.register(cors, {
-    origin: env.corsOrigins.includes("*") ? true : env.corsOrigins,
-    methods: ["GET", "POST", "PUT", "OPTIONS"],
-  });
+  await registerCors(app);
 
   await registerOpenApi(app);
 

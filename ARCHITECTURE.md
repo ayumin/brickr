@@ -140,10 +140,12 @@ OpenAPI仕様のテストは全公開Pathと`operationId`の一意性、UI/JSON�
 | `GET` | `/api/characters/management` | 管理テーブル用Character一覧 |
 | `POST` | `/api/characters` | Character作成 |
 | `PUT` | `/api/characters/:id` | Character更新 |
-| `DELETE` | `/api/characters/:id` | Characterの論理削除 |
+| `GET` | `/api/characters/export` | 投稿数を含むCharacter CSV出力 |
+| `POST` | `/api/characters/import` | Character CSVの新規作成・更新 |
+| `DELETE` | `/api/characters/:id` | Characterの論理削除または完全削除 |
 | `POST` | `/api/characters/bulk-create` | Character一括生成Job開始 |
 | `GET` | `/api/character-bulk-jobs/:id` | 一括生成進捗取得 |
-| `POST` | `/api/characters/bulk-delete` | Character一括論理削除 |
+| `POST` | `/api/characters/bulk-delete` | Character一括論理削除または完全削除 |
 | `GET` | `/api/model-profiles` | Provider Model同期と選択肢取得 |
 | `GET/PUT` | `/api/user-profile` | User Profile取得・更新 |
 | `POST` | `/api/simulations` | Simulation作成 |
@@ -191,13 +193,31 @@ erDiagram
 重要な判断:
 
 - `Post.authorId`はCharacterへの外部キーではありません。固定IDのUserとCharacterが同じPostを使うためです。
-- Character削除は`deletedAt`による論理削除です。過去Postの投稿者表示を維持します。
+- Characterの論理削除は`deletedAt`を設定し、過去Postを維持します。完全削除では、外部キーを
+  持たない`Post.authorId`をCharacter削除前に明示的に削除します。この2操作は同一Transactionで
+  実行され、対象Postを参照する他のReply/QuoteはSelf Relationの`onDelete: SetNull`に従います。
 - ReplyとQuoteはPostのSelf Relationです。Quote専用テーブルやRepost Entityはありません。
 - `quotedPost`はDTO生成時に1階層だけ平坦化します。再帰的な巨大Payloadを防ぎます。
 - Avatarと投稿画像は現在Data URLとしてText列へ保存します。
 
 Seedは再実行可能なupsertで、User Profile、ModelProfile、初期Characterを投入します。
 Docker Backendは起動時にSchema適用、Prisma Client生成、Seedを実行します。
+
+通常のCharacter一覧EndpointはアクティブなCharacterだけを返し、タイムラインの候補と右パネルに
+使用します。管理一覧Endpointは論理削除済みも返し、`isDeleted`で表示を切り替えます。
+
+Character CSVは日本語ヘッダーを使用し、管理画面と同じ設定値にProvider、Model、投稿数、停止
+フラグを加えた形式です。インポートはIDまたはhandleで既存Character（論理削除済みを含む）を
+照合し、一致すれば更新、どちらも一致しなければ新規作成します。停止フラグは`deletedAt`へ反映
+します。`投稿数`は集計結果なので入力値を保存せず、インポート時に無視します。CSVに未登録の
+ModelProfileが含まれる場合はProvider/Model列から作成します。旧英語ヘッダーのCSVも入力できます。
+
+画面から変更可能な実行設定は`application_settings`へ環境変数名と上書き値を保存します。
+有効値の優先順位は「DB上書き > 環境変数 > コード既定値」です。APIキー、
+`USE_MOCK_LLM`、Host・Port・CORS・Log Levelは読み取り専用で、DBには保存しません。
+RuntimeSettingsは同じ設定Objectを更新するため、LLMのTimeout/Retry、Responder数、
+Context上限、並列数、Cascade深度はサーバー再起動なしで後続処理へ反映されます。
+既定Modelの変更時は対応するdefault ModelProfileも同期します。
 
 ## 6. 投稿生成フロー
 

@@ -5,6 +5,7 @@ import {
   createPostSchema,
   saveCharacterSchema,
   saveUserProfileSchema,
+  updateApplicationSettingsSchema,
 } from "./schemas.js";
 
 const PNG_DATA_URL = "data:image/png;base64,iVBORw0KGgo=";
@@ -123,5 +124,29 @@ describe("bulkCreateCharactersSchema", () => {
     expect(bulkCreateCharactersSchema.safeParse({ count: 0 }).success).toBe(false);
     expect(bulkCreateCharactersSchema.safeParse({ count: 1.5 }).success).toBe(false);
     expect(bulkCreateCharactersSchema.safeParse({ count: 101 }).success).toBe(false);
+  });
+});
+
+describe("updateApplicationSettingsSchema", () => {
+  it("accepts a partial override and a reset", () => {
+    expect(
+      updateApplicationSettingsSchema.safeParse({
+        overrides: { MAX_CASCADE_DEPTH: "5" },
+      }).success,
+    ).toBe(true);
+    expect(
+      updateApplicationSettingsSchema.safeParse({
+        overrides: { MAX_CASCADE_DEPTH: null },
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejects readonly and empty setting changes", () => {
+    expect(
+      updateApplicationSettingsSchema.safeParse({
+        overrides: { OPENAI_API_KEY: "not-allowed" },
+      }).success,
+    ).toBe(false);
+    expect(updateApplicationSettingsSchema.safeParse({ overrides: {} }).success).toBe(false);
   });
 });

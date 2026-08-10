@@ -17,6 +17,7 @@ type CharacterRow = {
   influence: number;
   modelProfileId: string;
   avatarUrl: string | null;
+  deletedAt: Date | null;
 };
 
 function toCharacter(row: CharacterRow): Character {
@@ -36,6 +37,7 @@ function toCharacter(row: CharacterRow): Character {
     influence: row.influence,
     modelProfileId: row.modelProfileId,
     ...(row.avatarUrl ? { avatarUrl: row.avatarUrl } : {}),
+    ...(row.deletedAt ? { deletedAt: row.deletedAt } : {}),
   };
 }
 
@@ -54,6 +56,11 @@ export class CharacterRepository {
   async findAllIncludingDeleted(): Promise<Character[]> {
     const rows = await this.db.character.findMany({ orderBy: { id: "asc" } });
     return rows.map(toCharacter);
+  }
+
+  async findByIdIncludingDeleted(id: string): Promise<Character | null> {
+    const row = await this.db.character.findUnique({ where: { id } });
+    return row ? toCharacter(row) : null;
   }
 
   async findById(id: string): Promise<Character | null> {
@@ -82,6 +89,23 @@ export class CharacterRepository {
       where: { id: { in: ids }, deletedAt: null },
     });
     return rows.map(toCharacter);
+  }
+
+  async findByIdsIncludingDeleted(ids: string[]): Promise<Character[]> {
+    if (ids.length === 0) return [];
+    const rows = await this.db.character.findMany({ where: { id: { in: ids } } });
+    return rows.map(toCharacter);
+  }
+
+  /** Management read-model aggregate; Post.authorId intentionally has no FK. */
+  async countPostsByCharacterIds(ids: string[]): Promise<Map<string, number>> {
+    if (ids.length === 0) return new Map();
+    const rows = await this.db.post.groupBy({
+      by: ["authorId"],
+      where: { authorId: { in: ids } },
+      _count: { _all: true },
+    });
+    return new Map(rows.map((row) => [row.authorId, row._count._all]));
   }
 
 
@@ -127,6 +151,43 @@ export class CharacterRepository {
       where: { id: { in: ids }, deletedAt: null },
       data: { deletedAt: new Date() },
     });
+  }
+
+  async restore(id: string): Promise<void> {
+    await this.db.character.update({
+      where: { id },
+      data: { deletedAt: null },
+    });
+  }
+
+  async hardDeleteMany(ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    await this.db.$transaction([
+      this.db.post.deleteMany({ where: { authorId: { in: ids } } }),
+      this.db.character.deleteMany({ where: { id: { in: ids } } }),
+    ]);
+  }
+
+  async importMany(
+    entries: Array<{ id: string; input: SaveCharacter; isDeleted: boolean }>,
+  ): Promise<void> {
+    if (entries.length === 0) return;
+    await this.db.$transaction(
+      entries.map(({ id, input, isDeleted }) =>
+        this.db.character.upsert({
+          where: { id },
+          create: {
+            id,
+            ...toWriteData(input),
+            deletedAt: isDeleted ? new Date() : null,
+          },
+          update: {
+            ...toWriteData(input),
+            deletedAt: isDeleted ? new Date() : null,
+          },
+        }),
+      ),
+    );
   }
 }
 

@@ -32,6 +32,8 @@ export type CharacterConfigDto = CharacterDto & {
 
 /** Settings needed by the character management table, without persona prompts. */
 export type CharacterManagementDto = CharacterDto & {
+  isDeleted: boolean;
+  postCount: number;
   activityLevel: number;
   responseProbability: number;
   replyProbability: number;
@@ -69,8 +71,15 @@ export type DeleteCharacterResponse = {
   deletedId: string;
 };
 
+export type RestoreCharacterResponse = {
+  restoredId: string;
+};
+
+export type CharacterDeletionMode = "soft" | "hard";
+
 export type BulkDeleteCharactersRequest = {
   ids: string[];
+  mode?: CharacterDeletionMode;
 };
 
 export type BulkDeleteCharactersResponse = {
@@ -98,6 +107,21 @@ export type CharacterBulkCreationJobDto = {
 
 export type CharacterBulkCreationJobResponse = {
   job: CharacterBulkCreationJobDto;
+};
+
+export type ExportCharactersCsvResponse = {
+  filename: string;
+  csv: string;
+};
+
+export type ImportCharactersCsvRequest = {
+  csv: string;
+};
+
+export type ImportCharactersCsvResponse = {
+  importedCount: number;
+  createdCount: number;
+  updatedCount: number;
 };
 
 export type ModelProfileDto = {

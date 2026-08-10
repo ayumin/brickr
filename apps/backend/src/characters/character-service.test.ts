@@ -45,17 +45,32 @@ function makeService(
   initial: Character[] = [],
   profiles: ModelProfile[] = [PROFILE],
   generate?: (count: number) => Promise<GeneratedCharacterPersona[]>,
+  postCounts: Map<string, number> = new Map(),
 ) {
   const characters = [...initial];
 
   const characterRepository = {
-    findAll: (): Promise<Character[]> => Promise.resolve([...characters]),
+    findAll: (): Promise<Character[]> =>
+      Promise.resolve(characters.filter((character) => !character.deletedAt)),
+    findAllIncludingDeleted: (): Promise<Character[]> => Promise.resolve([...characters]),
     findById: (id: string): Promise<Character | null> =>
+      Promise.resolve(
+        characters.find((character) => character.id === id && !character.deletedAt) ?? null,
+      ),
+    findByIdIncludingDeleted: (id: string): Promise<Character | null> =>
       Promise.resolve(characters.find((character) => character.id === id) ?? null),
     findByHandle: (handle: string): Promise<Character | null> =>
       Promise.resolve(characters.find((character) => character.handle === handle) ?? null),
     findByIds: (ids: string[]): Promise<Character[]> =>
+      Promise.resolve(
+        characters.filter((character) => ids.includes(character.id) && !character.deletedAt),
+      ),
+    findByIdsIncludingDeleted: (ids: string[]): Promise<Character[]> =>
       Promise.resolve(characters.filter((character) => ids.includes(character.id))),
+    countPostsByCharacterIds: (ids: string[]): Promise<Map<string, number>> =>
+      Promise.resolve(
+        new Map(ids.map((id) => [id, postCounts.get(id) ?? 0])),
+      ),
     create: (id: string, input: SaveCharacter): Promise<Character> => {
       const character = { id, ...input };
       characters.push(character);
@@ -83,6 +98,11 @@ function makeService(
       for (let index = characters.length - 1; index >= 0; index -= 1) {
         if (ids.includes(characters[index]!.id)) characters.splice(index, 1);
       }
+      return Promise.resolve();
+    },
+    restore: (id: string): Promise<void> => {
+      const character = characters.find((candidate) => candidate.id === id);
+      if (character) delete character.deletedAt;
       return Promise.resolve();
     },
   } as unknown as CharacterRepository;
@@ -226,12 +246,19 @@ describe("CharacterService", () => {
 
   it("lists model and behaviour settings without exposing persona prompts", async () => {
     const existing = makeCharacter("character-1");
-    const { service } = makeService([existing]);
+    const { service } = makeService(
+      [existing],
+      [PROFILE],
+      undefined,
+      new Map([[existing.id, 7]]),
+    );
 
     const [managementDto] = await service.listManagementDtos();
 
     expect(managementDto).toMatchObject({
       id: existing.id,
+      isDeleted: false,
+      postCount: 7,
       modelProfileId: REQUEST.modelProfileId,
       activityLevel: REQUEST.activityLevel,
       responseProbability: REQUEST.responseProbability,
@@ -241,6 +268,23 @@ describe("CharacterService", () => {
     });
     expect(managementDto).not.toHaveProperty("rolePrompt");
     expect(managementDto).not.toHaveProperty("tonePrompt");
+  });
+
+  it("keeps stopped characters out of the public list but includes them in management", async () => {
+    const active = makeCharacter("character-active");
+    const stopped = {
+      ...makeCharacter("character-stopped", { ...REQUEST, handle: "stopped" }),
+      deletedAt: new Date("2026-01-01T00:00:00Z"),
+    };
+    const { service } = makeService([active, stopped]);
+
+    await expect(service.listDtos()).resolves.toHaveLength(1);
+    await expect(service.listManagementDtos()).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: active.id, isDeleted: false }),
+        expect.objectContaining({ id: stopped.id, isDeleted: true }),
+      ]),
+    );
   });
 
   it("rejects a handle already used by another character", async () => {
@@ -282,6 +326,18 @@ describe("CharacterService", () => {
     await expect(service.delete("missing")).rejects.toBeInstanceOf(
       CharacterNotFoundError,
     );
+  });
+
+  it("restores a logically deleted character", async () => {
+    const stopped = {
+      ...makeCharacter("character-stopped"),
+      deletedAt: new Date("2026-01-01T00:00:00Z"),
+    };
+    const { service, characters } = makeService([stopped]);
+
+    await expect(service.restore(stopped.id)).resolves.toBe(stopped.id);
+    expect(characters[0]?.deletedAt).toBeUndefined();
+    await expect(service.listDtos()).resolves.toHaveLength(1);
   });
 
   it("bulk deletes existing unique ids and ignores missing ids", async () => {

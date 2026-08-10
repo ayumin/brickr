@@ -3,13 +3,22 @@ import type {
   CharacterDto,
   CharacterBulkCreationJobDto,
   CharacterManagementDto,
+  CharacterDeletionMode,
+  ExportCharactersCsvResponse,
+  ImportCharactersCsvResponse,
   SaveCharacterRequest,
 } from "@enjo/shared";
 import { randomUUID } from "node:crypto";
 import { LLMError, LLMTimeoutError } from "../llm/provider.js";
 import type { ModelProfileRepository } from "../model-profiles/model-profile-repository.js";
+import type { ModelProfile } from "../model-profiles/model-profile.js";
 import type { CharacterRepository } from "./character-repository.js";
 import type { Character, SaveCharacter } from "./character.js";
+import {
+  CharacterCsvError,
+  exportCharactersCsv,
+  parseCharactersCsv,
+} from "./character-csv.js";
 import {
   CharacterPersonaParseError,
   type CharacterPersonaGenerator,
@@ -49,9 +58,12 @@ export function toCharacterConfigDto(character: Character): CharacterConfigDto {
 
 export function toCharacterManagementDto(
   character: Character,
+  postCount: number,
 ): CharacterManagementDto {
   return {
     ...toCharacterDto(character),
+    isDeleted: Boolean(character.deletedAt),
+    postCount,
     activityLevel: character.activityLevel,
     responseProbability: character.responseProbability,
     replyProbability: character.replyProbability,
@@ -105,8 +117,98 @@ export class CharacterService {
   }
 
   async listManagementDtos(): Promise<CharacterManagementDto[]> {
-    const all = await this.characters.findAll();
-    return all.map(toCharacterManagementDto);
+    const all = await this.characters.findAllIncludingDeleted();
+    const postCounts = await this.characters.countPostsByCharacterIds(
+      all.map((character) => character.id),
+    );
+    return all.map((character) =>
+      toCharacterManagementDto(character, postCounts.get(character.id) ?? 0),
+    );
+  }
+
+  async exportCsv(): Promise<ExportCharactersCsvResponse> {
+    const [characters, profiles] = await Promise.all([
+      this.characters.findAllIncludingDeleted(),
+      this.modelProfiles.findAll(),
+    ]);
+    const postCounts = await this.characters.countPostsByCharacterIds(
+      characters.map((character) => character.id),
+    );
+    return {
+      filename: `brickr-characters-${new Date().toISOString().slice(0, 10)}.csv`,
+      csv: exportCharactersCsv(
+        characters,
+        new Map(profiles.map((profile) => [profile.id, profile])),
+        postCounts,
+      ),
+    };
+  }
+
+  async importCsv(csv: string): Promise<ImportCharactersCsvResponse> {
+    const rows = parseCharactersCsv(csv);
+    const [existingCharacters, existingProfiles] = await Promise.all([
+      this.characters.findAllIncludingDeleted(),
+      this.modelProfiles.findAll(),
+    ]);
+    const byId = new Map(existingCharacters.map((character) => [character.id, character]));
+    const byHandle = new Map(existingCharacters.map((character) => [character.handle, character]));
+    const profiles = new Map(existingProfiles.map((profile) => [profile.id, profile]));
+    const missingProfiles = new Map<string, ModelProfile>();
+    const entries: Array<{ id: string; input: SaveCharacter; isDeleted: boolean }> = [];
+    let createdCount = 0;
+
+    for (const row of rows) {
+      const idMatch = row.id ? byId.get(row.id) : undefined;
+      const handleMatch = byHandle.get(row.handle);
+      if (idMatch && handleMatch && idMatch.id !== handleMatch.id) {
+        throw new CharacterCsvError(
+          `id「${row.id}」とhandle「@${row.handle}」が別の既存キャラクターを指しています。`,
+        );
+      }
+      const existing = idMatch ?? handleMatch;
+      const id = existing?.id ?? (row.id || randomUUID());
+      if (!existing) createdCount += 1;
+
+      if (!profiles.has(row.modelProfileId) && !missingProfiles.has(row.modelProfileId)) {
+        missingProfiles.set(row.modelProfileId, {
+          id: row.modelProfileId,
+          providerId: row.providerId,
+          model: row.model,
+        });
+      }
+      entries.push({
+        id,
+        isDeleted: row.isDeleted,
+        input: {
+          handle: row.handle,
+          displayName: row.displayName,
+          description: row.description,
+          rolePrompt: row.rolePrompt,
+          tonePrompt: row.tonePrompt,
+          ...(row.dialectPrompt ? { dialectPrompt: row.dialectPrompt } : {}),
+          interests: row.interests,
+          activityLevel: row.activityLevel,
+          responseProbability: row.responseProbability,
+          replyProbability: row.replyProbability,
+          quoteProbability: row.quoteProbability,
+          influence: row.influence,
+          modelProfileId: row.modelProfileId,
+          ...(row.avatarUrl ? { avatarUrl: row.avatarUrl } : {}),
+        },
+      });
+    }
+
+    await this.modelProfiles.ensureAll([...missingProfiles.values()]);
+    try {
+      await this.characters.importMany(entries);
+    } catch (cause) {
+      throw new CharacterCsvError("CSVのキャラクターを保存できませんでした。重複するidまたはhandleを確認してください。", { cause });
+    }
+    return {
+      importedCount: entries.length,
+      createdCount,
+      updatedCount: entries.length - createdCount,
+    };
   }
 
   async findDto(id: string): Promise<CharacterDto | null> {
@@ -115,7 +217,7 @@ export class CharacterService {
   }
 
   async findConfigDto(id: string): Promise<CharacterConfigDto | null> {
-    const character = await this.characters.findById(id);
+    const character = await this.characters.findByIdIncludingDeleted(id);
     return character ? toCharacterConfigDto(character) : null;
   }
 
@@ -219,7 +321,7 @@ export class CharacterService {
   }
 
   async update(id: string, input: SaveCharacterRequest): Promise<CharacterConfigDto> {
-    const existing = await this.characters.findById(id);
+    const existing = await this.characters.findByIdIncludingDeleted(id);
     if (!existing) throw new CharacterNotFoundError(id);
 
     await this.assertModelProfile(input.modelProfileId);
@@ -228,19 +330,32 @@ export class CharacterService {
     return toCharacterConfigDto(character);
   }
 
-  async delete(id: string): Promise<string> {
-    if (!(await this.characters.findById(id))) {
+  async delete(id: string, mode: CharacterDeletionMode = "soft"): Promise<string> {
+    if (!(await this.characters.findByIdIncludingDeleted(id))) {
       throw new CharacterNotFoundError(id);
     }
-    await this.characters.delete(id);
+    if (mode === "hard") await this.characters.hardDeleteMany([id]);
+    else await this.characters.delete(id);
     return id;
   }
 
-  async deleteMany(ids: string[]): Promise<string[]> {
+  async restore(id: string): Promise<string> {
+    if (!(await this.characters.findByIdIncludingDeleted(id))) {
+      throw new CharacterNotFoundError(id);
+    }
+    await this.characters.restore(id);
+    return id;
+  }
+
+  async deleteMany(
+    ids: string[],
+    mode: CharacterDeletionMode = "soft",
+  ): Promise<string[]> {
     const uniqueIds = [...new Set(ids)];
-    const existing = await this.characters.findByIds(uniqueIds);
+    const existing = await this.characters.findByIdsIncludingDeleted(uniqueIds);
     const deletedIds = existing.map((character) => character.id);
-    await this.characters.deleteMany(deletedIds);
+    if (mode === "hard") await this.characters.hardDeleteMany(deletedIds);
+    else await this.characters.deleteMany(deletedIds);
     return deletedIds;
   }
 

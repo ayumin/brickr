@@ -6,10 +6,14 @@ import { registerRoutes } from "./routes.js";
 
 const expectedPaths = [
   "/api/health",
+  "/api/application-settings",
   "/api/characters",
   "/api/characters/management",
+  "/api/characters/export",
+  "/api/characters/import",
   "/api/characters/{id}",
   "/api/characters/{id}/config",
+  "/api/characters/{id}/restore",
   "/api/characters/bulk-create",
   "/api/character-bulk-jobs/{id}",
   "/api/characters/bulk-delete",

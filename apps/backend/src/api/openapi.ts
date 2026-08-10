@@ -76,6 +76,79 @@ export const openApiDocument: OpenAPIV3.Document = {
         },
       },
     },
+    "/api/application-settings": {
+      get: {
+        operationId: "getApplicationSettings",
+        tags: ["System", "Models"],
+        summary: "Get safe application settings and in-process LLM usage",
+        description:
+          "Returns an allowlisted view of environment configuration. API key values and database credentials are never included. Token usage resets when the backend process restarts.",
+        responses: {
+          "200": jsonResponse("Application settings", {
+            type: "object",
+            required: ["environment", "llm"],
+            properties: {
+              environment: {
+                type: "array",
+                items: {
+                  type: "object",
+                  required: ["name", "description", "value", "secret", "editable", "source", "inputType"],
+                  properties: {
+                    name: { type: "string" },
+                    description: { type: "string" },
+                    value: { type: "string" },
+                    secret: { type: "boolean" },
+                    editable: { type: "boolean" },
+                    source: { type: "string", enum: ["environment", "override"] },
+                    inputType: { type: "string", enum: ["text", "number", "toggle"] },
+                  },
+                },
+              },
+              llm: {
+                type: "object",
+                required: ["providers", "models", "usage"],
+                properties: {
+                  providers: { type: "array", items: { type: "object" } },
+                  models: { type: "array", items: ref("ModelProfile") },
+                  usage: {
+                    type: "object",
+                    required: ["trackedSince", "entries"],
+                    properties: {
+                      trackedSince: { type: "string", format: "date-time" },
+                      entries: { type: "array", items: { type: "object" } },
+                    },
+                  },
+                },
+              },
+            },
+          }),
+          "500": errorResponses["500"],
+        },
+      },
+      put: {
+        operationId: "updateApplicationSettings",
+        tags: ["System", "Models"],
+        summary: "Save or remove editable application setting overrides",
+        requestBody: jsonBody({
+          type: "object",
+          required: ["overrides"],
+          properties: {
+            overrides: {
+              type: "object",
+              additionalProperties: {
+                type: "string",
+                nullable: true,
+              },
+            },
+          },
+        }),
+        responses: {
+          "200": jsonResponse("Updated application settings", { type: "object" }),
+          "400": errorResponses["400"],
+          "500": errorResponses["500"],
+        },
+      },
+    },
     "/api/characters": {
       get: {
         operationId: "listCharacters",
@@ -110,7 +183,7 @@ export const openApiDocument: OpenAPIV3.Document = {
       get: {
         operationId: "listCharactersForManagement",
         tags: ["Characters"],
-        summary: "List character management rows",
+        summary: "List active and logically deleted character management rows",
         responses: {
           "200": jsonResponse("Character management rows", {
             type: "object",
@@ -119,6 +192,50 @@ export const openApiDocument: OpenAPIV3.Document = {
               characters: { type: "array", items: ref("CharacterManagement") },
             },
           }),
+          "500": errorResponses["500"],
+        },
+      },
+    },
+    "/api/characters/export": {
+      get: {
+        operationId: "exportCharactersCsv",
+        tags: ["Characters"],
+        summary: "Export all characters as CSV including post counts and deletion status",
+        responses: {
+          "200": jsonResponse("CSV export", {
+            type: "object",
+            required: ["filename", "csv"],
+            properties: {
+              filename: { type: "string" },
+              csv: { type: "string" },
+            },
+          }),
+          "500": errorResponses["500"],
+        },
+      },
+    },
+    "/api/characters/import": {
+      post: {
+        operationId: "importCharactersCsv",
+        tags: ["Characters"],
+        summary: "Create or update characters from an exported CSV",
+        description: "Matches existing characters by ID or handle. The postCount column is ignored.",
+        requestBody: jsonBody({
+          type: "object",
+          required: ["csv"],
+          properties: { csv: { type: "string" } },
+        }),
+        responses: {
+          "200": jsonResponse("Import summary", {
+            type: "object",
+            required: ["importedCount", "createdCount", "updatedCount"],
+            properties: {
+              importedCount: { type: "integer", minimum: 0 },
+              createdCount: { type: "integer", minimum: 0 },
+              updatedCount: { type: "integer", minimum: 0 },
+            },
+          }),
+          "400": errorResponses["400"],
           "500": errorResponses["500"],
         },
       },
@@ -157,7 +274,15 @@ export const openApiDocument: OpenAPIV3.Document = {
         operationId: "deleteCharacter",
         tags: ["Characters"],
         summary: "Delete a character",
-        parameters: [idParameter("Character ID")],
+        parameters: [
+          idParameter("Character ID"),
+          {
+            name: "mode",
+            in: "query",
+            required: false,
+            schema: { type: "string", enum: ["soft", "hard"], default: "soft" },
+          },
+        ],
         responses: {
           "200": jsonResponse("Deleted character ID", {
             type: "object",
@@ -179,6 +304,22 @@ export const openApiDocument: OpenAPIV3.Document = {
             type: "object",
             required: ["character"],
             properties: { character: ref("CharacterConfig") },
+          }),
+          ...errorResponses,
+        },
+      },
+    },
+    "/api/characters/{id}/restore": {
+      post: {
+        operationId: "restoreCharacter",
+        tags: ["Characters"],
+        summary: "Restore a logically deleted character",
+        parameters: [idParameter("Character ID")],
+        responses: {
+          "200": jsonResponse("Restored character ID", {
+            type: "object",
+            required: ["restoredId"],
+            properties: { restoredId: { type: "string" } },
           }),
           ...errorResponses,
         },
@@ -236,6 +377,7 @@ export const openApiDocument: OpenAPIV3.Document = {
               maxItems: 100,
               items: { type: "string", minLength: 1, maxLength: 64 },
             },
+            mode: { type: "string", enum: ["soft", "hard"], default: "soft" },
           },
         }),
         responses: {
@@ -519,6 +661,8 @@ export const openApiDocument: OpenAPIV3.Document = {
           {
             type: "object",
             required: [
+              "isDeleted",
+              "postCount",
               "activityLevel",
               "responseProbability",
               "replyProbability",
@@ -527,6 +671,11 @@ export const openApiDocument: OpenAPIV3.Document = {
               "modelProfileId",
             ],
             properties: {
+              isDeleted: {
+                type: "boolean",
+                description: "Whether the character is logically deleted (stopped)",
+              },
+              postCount: { type: "integer", minimum: 0 },
               activityLevel: { type: "number", minimum: 0, maximum: 1 },
               responseProbability: { type: "number", minimum: 0, maximum: 1 },
               replyProbability: { type: "number", minimum: 0, maximum: 1 },

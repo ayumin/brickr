@@ -5,6 +5,8 @@
  * talks to our own backend — no LLM SDKs, no API keys (CLAUDE.md §8, §55).
  */
 import type {
+  ApplicationSettingsResponse,
+  UpdateApplicationSettingsRequest,
   BulkDeleteCharactersResponse,
   CharacterDto,
   CharacterConfigDto,
@@ -13,16 +15,20 @@ import type {
   CharacterConfigResponse,
   CharacterManagementDto,
   CharacterManagementResponse,
+  CharacterDeletionMode,
   CharactersResponse,
   CreatePostRequest,
   CreatePostResponse,
   CreateSimulationRequest,
   CreateSimulationResponse,
   DeleteCharacterResponse,
+  ExportCharactersCsvResponse,
+  ImportCharactersCsvResponse,
   ModelProfileDto,
   ModelProfilesResponse,
   PostDto,
   PostsResponse,
+  RestoreCharacterResponse,
   SaveCharacterRequest,
   SaveUserProfileRequest,
   SimulationDto,
@@ -164,6 +170,22 @@ export const api = {
     return request<HealthResponse>("/api/health", signal ? { signal } : {});
   },
 
+  getApplicationSettings(signal?: AbortSignal): Promise<ApplicationSettingsResponse> {
+    return request<ApplicationSettingsResponse>(
+      "/api/application-settings",
+      signal ? { signal } : {},
+    );
+  },
+
+  updateApplicationSettings(
+    body: UpdateApplicationSettingsRequest,
+  ): Promise<ApplicationSettingsResponse> {
+    return request<ApplicationSettingsResponse>("/api/application-settings", {
+      method: "PUT",
+      body,
+    });
+  },
+
   async getCharacters(signal?: AbortSignal): Promise<CharacterDto[]> {
     const data = await request<CharactersResponse>(
       "/api/characters",
@@ -239,20 +261,45 @@ export const api = {
     return data.character;
   },
 
-  async deleteCharacter(id: string): Promise<string> {
+  async deleteCharacter(
+    id: string,
+    mode: CharacterDeletionMode = "soft",
+  ): Promise<string> {
     const data = await request<DeleteCharacterResponse>(
-      `/api/characters/${encodeURIComponent(id)}`,
+      `/api/characters/${encodeURIComponent(id)}?mode=${encodeURIComponent(mode)}`,
       { method: "DELETE" },
     );
     return data.deletedId;
   },
 
-  async deleteCharacters(ids: string[]): Promise<string[]> {
+  async restoreCharacter(id: string): Promise<string> {
+    const data = await request<RestoreCharacterResponse>(
+      `/api/characters/${encodeURIComponent(id)}/restore`,
+      { method: "POST" },
+    );
+    return data.restoredId;
+  },
+
+  async deleteCharacters(
+    ids: string[],
+    mode: CharacterDeletionMode = "soft",
+  ): Promise<string[]> {
     const data = await request<BulkDeleteCharactersResponse>(
       "/api/characters/bulk-delete",
-      { method: "POST", body: { ids } },
+      { method: "POST", body: { ids, mode } },
     );
     return data.deletedIds;
+  },
+
+  exportCharactersCsv(): Promise<ExportCharactersCsvResponse> {
+    return request<ExportCharactersCsvResponse>("/api/characters/export");
+  },
+
+  importCharactersCsv(csv: string): Promise<ImportCharactersCsvResponse> {
+    return request<ImportCharactersCsvResponse>("/api/characters/import", {
+      method: "POST",
+      body: { csv },
+    });
   },
 
   async getModelProfiles(signal?: AbortSignal): Promise<ModelProfileDto[]> {

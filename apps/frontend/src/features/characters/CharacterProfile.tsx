@@ -1,4 +1,5 @@
 import { Avatar } from "../../components/Avatar";
+import { Icon } from "../../components/Icon";
 
 export type CharacterProfileProps = {
   displayName: string;
@@ -47,9 +48,11 @@ export function CharacterProfile({
               <button
                 type="button"
                 onClick={onEdit}
-                className="rounded-full border border-line px-3 py-1.5 text-xs text-ink-muted hover:text-ink"
+                aria-label={`${displayName}の設定を編集`}
+                title="設定を編集"
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-line text-ink-muted transition hover:bg-surface-hover hover:text-ink"
               >
-                設定を編集
+                <Icon name="gear" />
               </button>
             ) : null}
             {onMention ? (
@@ -78,7 +81,7 @@ export function CharacterProfile({
         ) : null}
 
         <p className="mt-3 text-xs text-ink-faint">
-          このシミュレーションでの投稿数{" "}
+          投稿数{" "}
           <span className="font-semibold text-ink-muted">
             {postCount}
           </span>

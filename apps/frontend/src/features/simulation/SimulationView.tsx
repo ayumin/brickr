@@ -257,10 +257,6 @@ export function SimulationView({
       onSelect={(character) => {
         openAuthor(character.id);
       }}
-      onCreate={() => {
-        setSidebarOpen(false);
-        setEditor({ characterId: null });
-      }}
       onEdit={(character) => {
         setSidebarOpen(false);
         setEditor({ characterId: character.id });

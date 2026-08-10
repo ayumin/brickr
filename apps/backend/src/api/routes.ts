@@ -1,5 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { AppServices } from "../services.js";
+import { InvalidApplicationSettingError } from "../settings/runtime-settings.js";
+import { CharacterCsvError } from "../characters/character-csv.js";
 import {
   CharacterGenerationError,
   CharacterHandleConflictError,
@@ -18,9 +20,12 @@ import {
   bulkDeleteCharactersSchema,
   createPostSchema,
   createSimulationSchema,
+  deleteCharacterQuerySchema,
   idParams,
+  importCharactersCsvSchema,
   saveCharacterSchema,
   saveUserProfileSchema,
+  updateApplicationSettingsSchema,
 } from "./schemas.js";
 
 export async function registerRoutes(
@@ -32,6 +37,25 @@ export async function registerRoutes(
     providers: services.providerRegistry.availableIds(),
   }));
 
+  app.get("/api/application-settings", async () =>
+    services.applicationSettings.get(),
+  );
+
+  app.put("/api/application-settings", async (request, reply) => {
+    const body = updateApplicationSettingsSchema.safeParse(request.body);
+    if (!body.success) {
+      return sendError(reply, 400, "invalid_body", "application settings are invalid", body.error.issues);
+    }
+    try {
+      return await services.applicationSettings.update(body.data);
+    } catch (error) {
+      if (error instanceof InvalidApplicationSettingError) {
+        return sendError(reply, 400, "invalid_setting", error.message);
+      }
+      throw error;
+    }
+  });
+
   // -- characters -----------------------------------------------------------
 
   app.get("/api/characters", async () => ({
@@ -41,6 +65,24 @@ export async function registerRoutes(
   app.get("/api/characters/management", async () => ({
     characters: await services.characters.listManagementDtos(),
   }));
+
+  app.get("/api/characters/export", async () => services.characters.exportCsv());
+
+  app.post(
+    "/api/characters/import",
+    { bodyLimit: 50 * 1024 * 1024 },
+    async (request, reply) => {
+      const body = importCharactersCsvSchema.safeParse(request.body);
+      if (!body.success) {
+        return sendError(reply, 400, "invalid_body", "CSV data is invalid", body.error.issues);
+      }
+      try {
+        return await services.characters.importCsv(body.data.csv);
+      } catch (error) {
+        return handleDomainError(reply, error);
+      }
+    },
+  );
 
   app.get("/api/characters/:id", async (request, reply) => {
     const params = idParams.safeParse(request.params);
@@ -124,8 +166,29 @@ export async function registerRoutes(
     if (!params.success) {
       return sendError(reply, 400, "invalid_params", "character id is invalid");
     }
+    const query = deleteCharacterQuerySchema.safeParse(request.query);
+    if (!query.success) {
+      return sendError(reply, 400, "invalid_query", "deletion mode is invalid");
+    }
     try {
-      return { deletedId: await services.characters.delete(params.data.id) };
+      return {
+        deletedId: await services.characters.delete(
+          params.data.id,
+          query.data.mode ?? "soft",
+        ),
+      };
+    } catch (error) {
+      return handleDomainError(reply, error);
+    }
+  });
+
+  app.post("/api/characters/:id/restore", async (request, reply) => {
+    const params = idParams.safeParse(request.params);
+    if (!params.success) {
+      return sendError(reply, 400, "invalid_params", "character id is invalid");
+    }
+    try {
+      return { restoredId: await services.characters.restore(params.data.id) };
     } catch (error) {
       return handleDomainError(reply, error);
     }
@@ -142,7 +205,12 @@ export async function registerRoutes(
         body.error.issues,
       );
     }
-    return { deletedIds: await services.characters.deleteMany(body.data.ids) };
+    return {
+      deletedIds: await services.characters.deleteMany(
+        body.data.ids,
+        body.data.mode ?? "soft",
+      ),
+    };
   });
 
   app.get("/api/model-profiles", async () => ({
@@ -268,6 +336,9 @@ function handleDomainError(reply: FastifyReply, error: unknown): FastifyReply {
   }
   if (error instanceof CharacterGenerationError) {
     return sendError(reply, 502, "character_generation_failed", error.message);
+  }
+  if (error instanceof CharacterCsvError) {
+    return sendError(reply, 400, "invalid_csv", error.message);
   }
   if (error instanceof SimulationNotFoundError) {
     return sendError(reply, 404, "not_found", error.message);

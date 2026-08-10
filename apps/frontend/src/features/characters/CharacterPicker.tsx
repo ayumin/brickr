@@ -13,7 +13,6 @@ export type CharacterPickerProps = {
   loading?: boolean;
   selectedId?: string | null;
   onSelect: (character: CharacterDto) => void;
-  onCreate: () => void;
   onEdit: (character: CharacterDto) => void;
   onOpenList: () => void;
 };
@@ -28,7 +27,6 @@ export function CharacterPicker({
   loading = false,
   selectedId,
   onSelect,
-  onCreate,
   onEdit,
   onOpenList,
 }: CharacterPickerProps) {
@@ -60,23 +58,15 @@ export function CharacterPicker({
         <button
           type="button"
           onClick={onOpenList}
-          className="rounded-md text-left text-sm font-semibold text-ink transition hover:text-accent"
+          title="キャラクター一覧を開く"
+          className="flex items-center gap-2 rounded-md text-left text-sm font-semibold text-ink transition hover:text-accent"
         >
-          キャラクター
+          <Icon name="list" className="text-base" />
+          キャラクター一覧
         </button>
-        <div className="flex items-center gap-2">
-          <span className="rounded-full bg-surface-raised px-2 py-0.5 text-xs text-ink-muted">
-            {characters.length}人
-          </span>
-          <button
-            type="button"
-            onClick={onCreate}
-            className="rounded-full bg-accent-strong px-2.5 py-1 text-xs font-semibold text-white hover:bg-accent"
-          >
-            <Icon name="plus-lg" className="mr-1" />
-            作成
-          </button>
-        </div>
+        <span className="rounded-full bg-surface-raised px-2 py-0.5 text-xs text-ink-muted">
+          {characters.length}人
+        </span>
       </header>
 
       <div className="px-3 pt-3">
@@ -134,7 +124,7 @@ export function CharacterPicker({
                         </span>
                       </span>
                       <span
-                        className="mt-0.5 block text-xs leading-snug text-ink-muted"
+                        className="mt-0.5 block text-[11px] leading-snug text-ink-muted"
                         title={character.description}
                       >
                         {truncateProfile(character.description)}
@@ -144,10 +134,11 @@ export function CharacterPicker({
                   <button
                     type="button"
                     onClick={() => onEdit(character)}
-                    aria-label={`${character.displayName}を編集`}
-                    className="m-1 rounded-lg px-2 py-1.5 text-xs text-ink-faint hover:bg-surface-hover hover:text-ink"
+                    aria-label={`${character.displayName}の設定を編集`}
+                    title="設定を編集"
+                    className="m-1 flex h-8 w-8 items-center justify-center rounded-full text-ink-faint transition hover:bg-surface-hover hover:text-ink"
                   >
-                    編集
+                    <Icon name="gear" />
                   </button>
                 </div>
               </li>
