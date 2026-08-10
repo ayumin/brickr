@@ -1,6 +1,7 @@
 import cors from "@fastify/cors";
 import { MAX_IMAGE_DATA_URL_LENGTH } from "@enjo/shared";
 import Fastify, { type FastifyError, type FastifyInstance } from "fastify";
+import { registerOpenApi } from "./api/openapi.js";
 import { registerRoutes } from "./api/routes.js";
 import { env } from "./config/env.js";
 import type { Db } from "./persistence/prisma.js";
@@ -21,6 +22,8 @@ export async function buildApp(db: Db): Promise<FastifyInstance> {
     origin: env.corsOrigins.includes("*") ? true : env.corsOrigins,
     methods: ["GET", "POST", "PUT", "OPTIONS"],
   });
+
+  await registerOpenApi(app);
 
   const services = buildServices(db, app.log);
   await registerRoutes(app, services);
