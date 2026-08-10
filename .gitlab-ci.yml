@@ -126,3 +126,15 @@ default:
     paths:
       - packages/shared/dist/
     expire_in: 1 week
+
+# Security scanner jobs use their own minimal images that do not have Node.js
+# or corepack. Override before_script to prevent the default Node.js setup
+# from running inside those images (which would fail with "corepack: not found").
+secret_detection:
+  before_script: []
+
+semgrep-sast:
+  before_script: []
+
+gemnasium-dependency_scanning:
+  before_script: []
