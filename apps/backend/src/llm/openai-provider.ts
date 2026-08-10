@@ -6,6 +6,7 @@
  */
 
 import OpenAI from "openai";
+import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { env } from "../config/env.js";
 import {
   LLMError,
@@ -19,12 +20,6 @@ const PROVIDER_ID = "openai" as const;
 type OpenAIProviderOptions = {
   apiKey?: string;
   defaultModel?: string;
-};
-
-/** OpenAI chat message shape, kept minimal on purpose. */
-type ChatMessage = {
-  role: "system" | "user" | "assistant";
-  content: string;
 };
 
 export class OpenAIProvider implements LLMProvider {
@@ -50,12 +45,9 @@ export class OpenAIProvider implements LLMProvider {
       throw new LLMError("openai is not configured (missing API key)", PROVIDER_ID, false);
     }
 
-    const messages: ChatMessage[] = [
+    const messages: ChatCompletionMessageParam[] = [
       { role: "system", content: request.systemPrompt },
-      ...request.messages.map((message) => ({
-        role: message.role,
-        content: message.content,
-      })),
+      ...request.messages.map(toOpenAIMessage),
     ];
 
     try {
@@ -84,6 +76,27 @@ export class OpenAIProvider implements LLMProvider {
       throw toLLMError(error);
     }
   }
+}
+
+export function toOpenAIMessage(
+  message: LLMGenerateRequest["messages"][number],
+): ChatCompletionMessageParam {
+  if (message.role === "assistant") {
+    return { role: "assistant", content: message.content };
+  }
+  if (!message.images || message.images.length === 0) {
+    return { role: "user", content: message.content };
+  }
+  return {
+    role: "user",
+    content: [
+      { type: "text", text: message.content },
+      ...message.images.map((image) => ({
+        type: "image_url" as const,
+        image_url: { url: `data:${image.mediaType};base64,${image.data}` },
+      })),
+    ],
+  };
 }
 
 function toLLMError(error: unknown): LLMError {

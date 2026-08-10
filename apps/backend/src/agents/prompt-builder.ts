@@ -1,6 +1,7 @@
 import { USER_HANDLE } from "@enjo/shared";
 import type { Character } from "../characters/character.js";
 import type { LLMMessage } from "../llm/provider.js";
+import { parseImageDataUrl } from "../llm/image-data-url.js";
 import type { Post } from "../posts/post.js";
 import type { ResponseAction } from "../simulation/simulation.js";
 
@@ -66,6 +67,15 @@ export function buildMessages(input: {
 }): LLMMessage[] {
   const { character, target, posts, action, resolveHandle } = input;
 
+  const images = posts.flatMap((post) => {
+    if (!post.imageUrl) return [];
+    const image = parseImageDataUrl(post.imageUrl);
+    return image ? [{ postId: post.id, image }] : [];
+  });
+  const imageNumberByPostId = new Map(
+    images.map(({ postId }, index) => [postId, index + 1]),
+  );
+
   const transcript = posts
     .map((post) => {
       const handle = resolveHandle(post.authorId);
@@ -74,7 +84,7 @@ export function buildMessages(input: {
       if (post.replyTo) marks.push(`@${resolveHandle(authorOf(posts, post.replyTo))} への返信`);
       if (post.quoteOf) marks.push(`@${resolveHandle(authorOf(posts, post.quoteOf))} の引用`);
       const prefix = marks.length > 0 ? `[${marks.join(" / ")}] ` : "";
-      return `${label}:\n${prefix}${post.content}`;
+      return `${label}:\n${prefix}${contextContent(post, imageNumberByPostId.get(post.id))}`;
     })
     .join("\n\n");
 
@@ -90,14 +100,18 @@ export function buildMessages(input: {
     "",
     isSelfTarget
       ? "上のタイムライン全体を踏まえて投稿してください。"
-      : `反応する対象は @${targetHandle} の次の投稿です。\n「${truncate(target.content, 200)}」`,
+      : `反応する対象は @${targetHandle} の次の投稿です。\n「${truncate(contextContent(target, imageNumberByPostId.get(target.id)), 200)}」`,
     "",
     ACTION_INSTRUCTIONS[action],
     "",
     `@${character.handle} としての投稿本文を1つだけ書いてください。`,
   ].join("\n");
 
-  return [{ role: "user", content: instruction }];
+  return [{
+    role: "user",
+    content: instruction,
+    ...(images.length > 0 ? { images: images.map(({ image }) => image) } : {}),
+  }];
 }
 
 function authorOf(posts: Post[], postId: string): string {
@@ -106,4 +120,12 @@ function authorOf(posts: Post[], postId: string): string {
 
 function truncate(text: string, limit: number): string {
   return text.length <= limit ? text : `${text.slice(0, limit)}…`;
+}
+
+function contextContent(post: Post, imageNumber?: number): string {
+  if (!post.imageUrl) return post.content;
+  const marker = imageNumber === undefined ? "[画像添付あり]" : `[添付画像${imageNumber}]`;
+  return post.content.length > 0
+    ? `${post.content}\n${marker}`
+    : marker;
 }

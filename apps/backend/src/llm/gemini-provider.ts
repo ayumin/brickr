@@ -5,7 +5,7 @@
  * abstractions from `provider.ts`.
  */
 
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, type Content, type Part } from "@google/genai";
 import { env } from "../config/env.js";
 import {
   LLMError,
@@ -19,12 +19,6 @@ const PROVIDER_ID = "gemini" as const;
 type GeminiProviderOptions = {
   apiKey?: string;
   defaultModel?: string;
-};
-
-/** Gemini calls the assistant role "model". */
-type GeminiContent = {
-  role: "user" | "model";
-  parts: [{ text: string }];
 };
 
 export class GeminiProvider implements LLMProvider {
@@ -49,10 +43,7 @@ export class GeminiProvider implements LLMProvider {
       throw new LLMError("gemini is not configured (missing API key)", PROVIDER_ID, false);
     }
 
-    const contents: GeminiContent[] = request.messages.map((message) => ({
-      role: message.role === "assistant" ? "model" : "user",
-      parts: [{ text: message.content }],
-    }));
+    const contents: Content[] = request.messages.map(toGeminiContent);
 
     try {
       const response = await client.models.generateContent({
@@ -77,6 +68,19 @@ export class GeminiProvider implements LLMProvider {
       throw toLLMError(error);
     }
   }
+}
+
+/** Gemini calls the assistant role "model". */
+export function toGeminiContent(
+  message: LLMGenerateRequest["messages"][number],
+): Content {
+  const parts: Part[] = [
+    { text: message.content },
+    ...(message.images ?? []).map((image) => ({
+      inlineData: { mimeType: image.mediaType, data: image.data },
+    })),
+  ];
+  return { role: message.role === "assistant" ? "model" : "user", parts };
 }
 
 function toLLMError(error: unknown): LLMError {

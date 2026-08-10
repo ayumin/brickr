@@ -49,7 +49,8 @@ function lastUserMessage(messages: LLMGenerateRequest["messages"]): string {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
     if (message !== undefined && message.role === "user") {
-      return message.content;
+      const imageMarker = message.images?.length ? ` [添付画像${message.images.length}件]` : "";
+      return `${message.content}${imageMarker}`;
     }
   }
   return "";

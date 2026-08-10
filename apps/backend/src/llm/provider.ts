@@ -12,9 +12,19 @@ export type ProviderId = (typeof PROVIDER_IDS)[number];
 
 export type LLMRole = "user" | "assistant";
 
+export type LLMImageMediaType = "image/png" | "image/jpeg" | "image/gif" | "image/webp";
+
+export type LLMImage = {
+  mediaType: LLMImageMediaType;
+  /** Raw base64 payload without the data-URL prefix. */
+  data: string;
+};
+
 export type LLMMessage = {
   role: LLMRole;
   content: string;
+  /** Images referred to by this message, in the same order as its labels. */
+  images?: LLMImage[];
 };
 
 export type LLMGenerateRequest = {

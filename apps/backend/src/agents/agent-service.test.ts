@@ -213,6 +213,28 @@ describe("AgentService.generate", () => {
       expect(messages[0]?.content).toContain(targetPost.content);
     });
 
+    it("sends attached post images to the LLM with a matching transcript label", async () => {
+      const { client, calls } = makeFakeClient(() => "画像を見ると、この構成は分かりやすいです。");
+      const { repository } = makeFakeModelProfiles([OPENAI_PROFILE]);
+      const imagePost = makePost({
+        id: "image-post",
+        content: "この図をどう思う？",
+        imageUrl: "data:image/png;base64,aGVsbG8=",
+      });
+
+      await new AgentService(client, repository).generate({
+        ...makeRequest(architect),
+        target: imagePost,
+        posts: [imagePost],
+      });
+
+      const message = calls[0]?.request.messages[0];
+      expect(message?.content).toContain("[添付画像1]");
+      expect(message?.images).toEqual([
+        { mediaType: "image/png", data: "aGVsbG8=" },
+      ]);
+    });
+
     it("bounds the generated length and never sends credential-shaped fields", async () => {
       const { client, calls } = makeFakeClient(() => "本文です。");
       const { repository } = makeFakeModelProfiles([OPENAI_PROFILE]);

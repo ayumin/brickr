@@ -6,6 +6,10 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
+import type {
+  ContentBlockParam,
+  MessageParam,
+} from "@anthropic-ai/sdk/resources/messages/messages";
 import { env } from "../config/env.js";
 import {
   LLMError,
@@ -57,10 +61,7 @@ export class AnthropicProvider implements LLMProvider {
           // Anthropic still uses `max_tokens` (unlike OpenAI's max_completion_tokens).
           max_tokens: request.maxOutputTokens ?? DEFAULT_MAX_TOKENS,
           system: request.systemPrompt,
-          messages: request.messages.map((entry) => ({
-            role: entry.role,
-            content: entry.content,
-          })),
+          messages: request.messages.map(toAnthropicMessage),
           // Thinking is wasted latency for a 100-140 character SNS post.
           thinking: { type: "disabled" },
         },
@@ -81,6 +82,27 @@ export class AnthropicProvider implements LLMProvider {
       throw toLLMError(error);
     }
   }
+}
+
+export function toAnthropicMessage(
+  message: LLMGenerateRequest["messages"][number],
+): MessageParam {
+  if (!message.images || message.images.length === 0) {
+    return { role: message.role, content: message.content };
+  }
+
+  const content: ContentBlockParam[] = [
+    { type: "text", text: message.content },
+    ...message.images.map((image) => ({
+      type: "image" as const,
+      source: {
+        type: "base64" as const,
+        media_type: image.mediaType,
+        data: image.data,
+      },
+    })),
+  ];
+  return { role: message.role, content };
 }
 
 function toLLMError(error: unknown): LLMError {
