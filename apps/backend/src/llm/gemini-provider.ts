@@ -9,6 +9,7 @@ import { GoogleGenAI, type Content, type Part } from "@google/genai";
 import { env } from "../config/env.js";
 import {
   LLMError,
+  type LLMAvailableModel,
   type LLMGenerateRequest,
   type LLMGenerateResult,
   type LLMProvider,
@@ -35,6 +36,32 @@ export class GeminiProvider implements LLMProvider {
 
   get available(): boolean {
     return this.client !== undefined;
+  }
+
+  async listModels(signal?: AbortSignal): Promise<LLMAvailableModel[]> {
+    const client = this.client;
+    if (!client) {
+      throw new LLMError("gemini is not configured (missing API key)", PROVIDER_ID, false);
+    }
+
+    try {
+      const page = await client.models.list({
+        config: {
+          pageSize: 1_000,
+          ...(signal ? { abortSignal: signal } : {}),
+        },
+      });
+      const models: LLMAvailableModel[] = [];
+      for await (const model of page) {
+        const id = geminiGenerationModelId(model.name, model.supportedActions);
+        if (id) {
+          models.push({ id, displayName: model.displayName ?? id });
+        }
+      }
+      return models.sort((a, b) => a.id.localeCompare(b.id));
+    } catch (error) {
+      throw toLLMError(error);
+    }
   }
 
   async generate(request: LLMGenerateRequest): Promise<LLMGenerateResult> {
@@ -74,6 +101,15 @@ export class GeminiProvider implements LLMProvider {
       throw toLLMError(error);
     }
   }
+}
+
+/** Returns the generation request id, or null for embedding/image-only models. */
+export function geminiGenerationModelId(
+  name: string | undefined,
+  supportedActions: readonly string[] | undefined,
+): string | null {
+  if (!name || !supportedActions?.includes("generateContent")) return null;
+  return name.startsWith("models/") ? name.slice("models/".length) : name;
 }
 
 /** Gemini calls the assistant role "model". */

@@ -54,6 +54,13 @@ export type LLMGenerateResult = {
   providerId: ProviderId;
 };
 
+export type LLMAvailableModel = {
+  /** Provider-specific identifier passed back to generation requests. */
+  id: string;
+  /** Human-readable name when the provider supplies one. */
+  displayName: string;
+};
+
 export interface LLMProvider {
   readonly id: ProviderId;
   /** False when the provider has no credentials configured. */
@@ -64,6 +71,8 @@ export interface LLMProvider {
    * fallback has to substitute the model along with the provider.
    */
   readonly defaultModel: string;
+  /** Models available to the configured API key and usable for text generation. */
+  listModels(signal?: AbortSignal): Promise<LLMAvailableModel[]>;
   generate(request: LLMGenerateRequest): Promise<LLMGenerateResult>;
 }
 

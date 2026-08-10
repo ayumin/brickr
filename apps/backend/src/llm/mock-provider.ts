@@ -6,7 +6,12 @@
  * different characters still look different in the timeline.
  */
 
-import type { LLMGenerateRequest, LLMGenerateResult, LLMProvider } from "./provider.js";
+import type {
+  LLMAvailableModel,
+  LLMGenerateRequest,
+  LLMGenerateResult,
+  LLMProvider,
+} from "./provider.js";
 
 const PROVIDER_ID = "mock" as const;
 
@@ -27,6 +32,10 @@ export class MockProvider implements LLMProvider {
   readonly available = true;
   /** No real model behind this; the value is only ever echoed back. */
   readonly defaultModel = "mock";
+
+  listModels(): Promise<LLMAvailableModel[]> {
+    return Promise.resolve([{ id: this.defaultModel, displayName: "Mock" }]);
+  }
 
   async generate(request: LLMGenerateRequest): Promise<LLMGenerateResult> {
     if (request.systemPrompt.includes("[CHARACTER_BATCH_GENERATION]")) {

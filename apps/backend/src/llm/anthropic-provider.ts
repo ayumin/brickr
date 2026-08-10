@@ -13,6 +13,7 @@ import type {
 import { env } from "../config/env.js";
 import {
   LLMError,
+  type LLMAvailableModel,
   type LLMGenerateRequest,
   type LLMGenerateResult,
   type LLMProvider,
@@ -42,6 +43,27 @@ export class AnthropicProvider implements LLMProvider {
 
   get available(): boolean {
     return this.client !== undefined;
+  }
+
+  async listModels(signal?: AbortSignal): Promise<LLMAvailableModel[]> {
+    const client = this.client;
+    if (!client) {
+      throw new LLMError("anthropic is not configured (missing API key)", PROVIDER_ID, false);
+    }
+
+    try {
+      const page = await client.models.list(
+        { limit: 1_000 },
+        signal ? { signal } : undefined,
+      );
+      const models: LLMAvailableModel[] = [];
+      for await (const model of page) {
+        models.push({ id: model.id, displayName: model.display_name });
+      }
+      return models;
+    } catch (error) {
+      throw toLLMError(error);
+    }
   }
 
   async generate(request: LLMGenerateRequest): Promise<LLMGenerateResult> {

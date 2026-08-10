@@ -10,7 +10,27 @@ import { AnthropicProvider } from "./anthropic-provider.js";
 import { GeminiProvider } from "./gemini-provider.js";
 import { MockProvider } from "./mock-provider.js";
 import { OpenAIProvider } from "./openai-provider.js";
-import { LLMError, type LLMProvider, type ProviderId } from "./provider.js";
+import {
+  LLMError,
+  type LLMAvailableModel,
+  type LLMProvider,
+  type ProviderId,
+} from "./provider.js";
+
+export type ProviderModelCatalog = {
+  providerId: ProviderId;
+  models: LLMAvailableModel[];
+};
+
+export type ProviderModelCatalogFailure = {
+  providerId: ProviderId;
+  reason: string;
+};
+
+export type ProviderModelCatalogResult = {
+  catalogs: ProviderModelCatalog[];
+  failures: ProviderModelCatalogFailure[];
+};
 
 export class LLMProviderRegistry {
   private readonly providers: Map<ProviderId, LLMProvider>;
@@ -41,6 +61,33 @@ export class LLMProviderRegistry {
       if (provider.available) ids.push(id);
     }
     return ids;
+  }
+
+  /** Fetch each configured provider independently so one failure does not hide the rest. */
+  async listAvailableModels(signal?: AbortSignal): Promise<ProviderModelCatalogResult> {
+    const available = [...this.providers.values()].filter((provider) => provider.available);
+    const settled = await Promise.allSettled(
+      available.map(async (provider) => ({
+        providerId: provider.id,
+        models: await provider.listModels(signal),
+      })),
+    );
+
+    const catalogs: ProviderModelCatalog[] = [];
+    const failures: ProviderModelCatalogFailure[] = [];
+    settled.forEach((result, index) => {
+      const provider = available[index];
+      if (!provider) return;
+      if (result.status === "fulfilled") {
+        catalogs.push(result.value);
+      } else {
+        failures.push({
+          providerId: provider.id,
+          reason: result.reason instanceof Error ? result.reason.message : String(result.reason),
+        });
+      }
+    });
+    return { catalogs, failures };
   }
 }
 

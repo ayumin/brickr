@@ -10,6 +10,7 @@ import type { ChatCompletionMessageParam } from "openai/resources/chat/completio
 import { env } from "../config/env.js";
 import {
   LLMError,
+  type LLMAvailableModel,
   type LLMGenerateRequest,
   type LLMGenerateResult,
   type LLMProvider,
@@ -37,6 +38,26 @@ export class OpenAIProvider implements LLMProvider {
 
   get available(): boolean {
     return this.client !== undefined;
+  }
+
+  async listModels(signal?: AbortSignal): Promise<LLMAvailableModel[]> {
+    const client = this.client;
+    if (!client) {
+      throw new LLMError("openai is not configured (missing API key)", PROVIDER_ID, false);
+    }
+
+    try {
+      const page = await client.models.list(signal ? { signal } : undefined);
+      const models: LLMAvailableModel[] = [];
+      for await (const model of page) {
+        if (isOpenAICharacterModel(model.id)) {
+          models.push({ id: model.id, displayName: model.id });
+        }
+      }
+      return models.sort((a, b) => a.id.localeCompare(b.id));
+    } catch (error) {
+      throw toLLMError(error);
+    }
   }
 
   async generate(request: LLMGenerateRequest): Promise<LLMGenerateResult> {
@@ -88,6 +109,20 @@ export class OpenAIProvider implements LLMProvider {
       throw toLLMError(error);
     }
   }
+}
+
+/**
+ * OpenAI's Models API reports account availability but not endpoint
+ * capabilities. Keep conversational model families and exclude variants for
+ * audio, image, search, realtime, transcription, and specialist endpoints.
+ */
+export function isOpenAICharacterModel(id: string): boolean {
+  const normalized = id.toLowerCase();
+  const base = normalized.startsWith("ft:") ? normalized.slice(3) : normalized;
+  if (!/^(?:gpt-|chatgpt-|o\d+(?:-|$))/u.test(base)) return false;
+  return !/(?:audio|realtime|transcri|tts|image|search|moderation|deep-research|computer-use|codex)/u.test(
+    base,
+  );
 }
 
 export function toOpenAIMessage(

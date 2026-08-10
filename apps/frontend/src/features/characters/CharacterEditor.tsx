@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type {
   CharacterConfigDto,
   ModelProfileDto,
@@ -42,6 +42,19 @@ export function CharacterEditor({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const providerIds = useMemo(
+    () => [...new Set(profiles.map((profile) => profile.providerId))],
+    [profiles],
+  );
+  const selectedProvider =
+    profiles.find((profile) => profile.id === form.modelProfileId)?.providerId ??
+    providerIds[0] ??
+    "";
+  const providerProfiles = useMemo(
+    () => profiles.filter((profile) => profile.providerId === selectedProvider),
+    [profiles, selectedProvider],
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -258,22 +271,52 @@ export function CharacterEditor({
             </section>
 
             <section className="space-y-4 border-t border-line pt-5">
-              <h3 className="text-sm font-semibold text-ink">LLM</h3>
-              <label className="block text-sm text-ink-muted">
-                Model Profile
-                <select
-                  value={form.modelProfileId}
-                  required
-                  onChange={(event) => setText("modelProfileId", event.currentTarget.value)}
-                  className="mt-1.5 w-full rounded-xl border border-line bg-surface-raised px-3 py-2 text-ink focus:border-accent/60 focus:outline-none"
-                >
-                  {profiles.map((profile) => (
-                    <option key={profile.id} value={profile.id}>
-                      {profile.providerId} / {profile.model}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <div>
+                <h3 className="text-sm font-semibold text-ink">LLM</h3>
+                <p className="mt-1 text-xs text-ink-faint">
+                  APIキーが設定されたProviderのモデルはBackendから自動取得されます。
+                </p>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block text-sm text-ink-muted">
+                  Provider
+                  <select
+                    value={selectedProvider}
+                    required
+                    onChange={(event) => {
+                      const first = profiles.find(
+                        (profile) =>
+                          profile.providerId === event.currentTarget.value,
+                      );
+                      if (first) setText("modelProfileId", first.id);
+                    }}
+                    className="mt-1.5 w-full rounded-xl border border-line bg-surface-raised px-3 py-2 text-ink focus:border-accent/60 focus:outline-none"
+                  >
+                    {providerIds.map((providerId) => (
+                      <option key={providerId} value={providerId}>
+                        {providerId}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block text-sm text-ink-muted">
+                  Model
+                  <select
+                    value={form.modelProfileId}
+                    required
+                    onChange={(event) =>
+                      setText("modelProfileId", event.currentTarget.value)
+                    }
+                    className="mt-1.5 w-full rounded-xl border border-line bg-surface-raised px-3 py-2 text-ink focus:border-accent/60 focus:outline-none"
+                  >
+                    {providerProfiles.map((profile) => (
+                      <option key={profile.id} value={profile.id}>
+                        {profile.model}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
             </section>
 
             <section className="space-y-4 border-t border-line pt-5">

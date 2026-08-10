@@ -17,10 +17,38 @@ export class ModelProfileRepository {
 
   async findAll(): Promise<ModelProfile[]> {
     const rows = await this.db.modelProfile.findMany({ orderBy: { id: "asc" } });
-    return rows.map((row) => ({
+    return rows.map((row: { id: string; providerId: string; model: string }) => ({
       id: row.id,
       providerId: row.providerId as ProviderId,
       model: row.model,
     }));
+  }
+
+  /** Persist newly discovered provider/model pairs without duplicating seeds. */
+  async ensureAll(profiles: readonly ModelProfile[]): Promise<void> {
+    if (profiles.length === 0) return;
+    const existing = await this.findAll();
+    const pairs = new Set(
+      existing.map((profile) => `${profile.providerId}\u0000${profile.model}`),
+    );
+    const missing = profiles.filter((profile) => {
+      const pair = `${profile.providerId}\u0000${profile.model}`;
+      if (pairs.has(pair)) return false;
+      pairs.add(pair);
+      return true;
+    });
+
+    await Promise.all(
+      missing.map((profile) =>
+        this.db.modelProfile.upsert({
+          where: { id: profile.id },
+          create: profile,
+          update: {
+            providerId: profile.providerId,
+            model: profile.model,
+          },
+        }),
+      ),
+    );
   }
 }

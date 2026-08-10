@@ -78,7 +78,12 @@ export function buildServices(db: Db, logger: SimulationLogger): AppServices {
       modelProfileRepository,
       new LLMCharacterPersonaGenerator(llmClient),
     ),
-    modelProfiles: new ModelProfileService(modelProfileRepository),
+    modelProfiles: new ModelProfileService(
+      modelProfileRepository,
+      providerRegistry,
+      logger,
+      env.llm.timeoutMs,
+    ),
     userProfile: new UserProfileService(userProfileRepository),
     posts: postService,
     simulations,
