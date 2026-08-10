@@ -18,11 +18,16 @@ export class ModelProfileService {
     private readonly profiles: ModelProfileRepository,
     private readonly providers: Pick<LLMProviderRegistry, "listAvailableModels">,
     private readonly logger: Pick<SimulationLogger, "warn">,
-    private readonly timeoutMs: number,
+    private readonly timeoutMs: number | (() => number),
   ) {}
 
   async listDtos(): Promise<ModelProfileDto[]> {
     await this.refreshCatalog();
+    return this.listStoredDtos();
+  }
+
+  /** Read the persisted catalog without waiting for provider network requests. */
+  async listStoredDtos(): Promise<ModelProfileDto[]> {
     const profiles = await this.profiles.findAll();
     return profiles
       .map((profile) => ({
@@ -52,7 +57,9 @@ export class ModelProfileService {
 
   private async fetchAndPersistCatalog(): Promise<void> {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    const timeoutMs =
+      typeof this.timeoutMs === "function" ? this.timeoutMs() : this.timeoutMs;
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const result = await this.providers.listAvailableModels(controller.signal);
       await this.profiles.ensureAll(result.catalogs.flatMap(toModelProfiles));

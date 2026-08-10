@@ -104,6 +104,15 @@ export class OpenAIProvider implements LLMProvider {
         text,
         model: completion.model,
         providerId: PROVIDER_ID,
+        ...(completion.usage
+          ? {
+              usage: {
+                inputTokens: completion.usage.prompt_tokens,
+                outputTokens: completion.usage.completion_tokens,
+                totalTokens: completion.usage.total_tokens,
+              },
+            }
+          : {}),
       };
     } catch (error) {
       throw toLLMError(error);

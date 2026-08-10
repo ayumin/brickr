@@ -52,6 +52,11 @@ export type LLMGenerateResult = {
   /** Echo of what actually served the request, for logging. */
   model: string;
   providerId: ProviderId;
+  usage?: {
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+  };
 };
 
 export type LLMAvailableModel = {

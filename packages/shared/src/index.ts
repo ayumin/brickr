@@ -13,3 +13,4 @@ export * from "./simulation.js";
 export * from "./events.js";
 export * from "./errors.js";
 export * from "./user-profile.js";
+export * from "./application-settings.js";

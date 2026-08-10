@@ -74,7 +74,7 @@ export function selectContextPosts(input: ContextSelectionInput): Post[] {
 export class ThreadService {
   constructor(
     private readonly posts: PostRepository,
-    private readonly contextLimit: number,
+    private readonly contextLimit: number | (() => number),
   ) {}
 
   async getCurrentThread(targetPostId: string): Promise<ThreadContext | null> {
@@ -112,9 +112,11 @@ export class ThreadService {
     for (const post of [...replies, ...quotes]) thread.set(post.id, post);
 
     // Ambient context: what else has been said in this simulation lately.
+    const contextLimit =
+      typeof this.contextLimit === "function" ? this.contextLimit() : this.contextLimit;
     const recent = await this.posts.findRecentBySimulation(
       target.simulationId,
-      this.contextLimit,
+      contextLimit,
     );
 
     return {
@@ -123,7 +125,7 @@ export class ThreadService {
         threadPosts: [...thread.values()],
         ambientPosts: recent.filter((post) => !thread.has(post.id)),
         target,
-        limit: this.contextLimit,
+        limit: contextLimit,
       }),
     };
   }

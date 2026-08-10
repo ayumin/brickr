@@ -111,3 +111,11 @@ model UserProfile {
 
   @@map("user_profiles")
 }
+
+model ApplicationSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("application_settings")
+}

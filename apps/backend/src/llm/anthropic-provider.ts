@@ -109,6 +109,11 @@ export class AnthropicProvider implements LLMProvider {
         text,
         model: message.model,
         providerId: PROVIDER_ID,
+        usage: {
+          inputTokens: message.usage.input_tokens,
+          outputTokens: message.usage.output_tokens,
+          totalTokens: message.usage.input_tokens + message.usage.output_tokens,
+        },
       };
     } catch (error) {
       throw toLLMError(error);

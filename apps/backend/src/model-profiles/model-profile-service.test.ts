@@ -73,6 +73,22 @@ describe("ModelProfileService", () => {
       "failed to refresh provider model catalog; keeping stored profiles",
     );
   });
+
+  it("reads stored profiles without contacting providers", async () => {
+    const repository = fakeRepository([SEEDED]);
+    const providers = { listAvailableModels: vi.fn() };
+    const service = new ModelProfileService(
+      repository,
+      providers,
+      { warn: vi.fn() },
+      1_000,
+    );
+
+    await expect(service.listStoredDtos()).resolves.toEqual([
+      { id: "openai-default", providerId: "openai", model: "gpt-default" },
+    ]);
+    expect(providers.listAvailableModels).not.toHaveBeenCalled();
+  });
 });
 
 function fakeRepository(initial: ModelProfile[]): ModelProfileRepository {

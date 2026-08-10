@@ -51,4 +51,8 @@ export class ModelProfileRepository {
       ),
     );
   }
+
+  async updateModel(id: string, model: string): Promise<void> {
+    await this.db.modelProfile.update({ where: { id }, data: { model } });
+  }
 }

@@ -6,6 +6,7 @@
  */
 
 import type { LLMProviderRegistry } from "./provider-registry.js";
+import type { LLMUsageTracker } from "./usage-tracker.js";
 import {
   LLMError,
   LLMTimeoutError,
@@ -33,6 +34,8 @@ export class LLMClient {
     private readonly registry: LLMProviderRegistry,
     private readonly options: LLMClientOptions,
     private readonly logger?: LLMClientLogger,
+    private readonly usageTracker?: LLMUsageTracker,
+    private readonly fallbackModel?: (providerId: ProviderId) => string | undefined,
   ) {}
 
   async generate(
@@ -43,7 +46,12 @@ export class LLMClient {
     // A model name only means something to the provider that serves it, so a
     // substituted provider must bring its own model.
     const request: LLMGenerateRequest =
-      provider.id === providerId ? requested : { ...requested, model: provider.defaultModel };
+      provider.id === providerId
+        ? requested
+        : {
+            ...requested,
+            model: this.fallbackModel?.(provider.id) ?? provider.defaultModel,
+          };
 
     const attempts = Math.max(0, this.options.maxRetries) + 1;
 
@@ -51,7 +59,9 @@ export class LLMClient {
 
     for (let attempt = 1; attempt <= attempts; attempt += 1) {
       try {
-        return await this.callOnce(provider, request);
+        const result = await this.callOnce(provider, request);
+        this.usageTracker?.record(result);
+        return result;
       } catch (error) {
         const normalized = normalizeError(error, provider.id);
         lastError = normalized;

@@ -25,7 +25,7 @@ export async function buildApp(db: Db): Promise<FastifyInstance> {
 
   await registerOpenApi(app);
 
-  const services = buildServices(db, app.log);
+  const services = await buildServices(db, app.log);
   await registerRoutes(app, services);
 
   app.setNotFoundHandler((_request, reply) => {
