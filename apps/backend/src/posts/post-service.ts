@@ -1,4 +1,4 @@
-import type { PostDto } from "@enjo/shared";
+import { USER_HANDLE, type PostDto } from "@enjo/shared";
 import type { CharacterRepository } from "../characters/character-repository.js";
 import type { Character } from "../characters/character.js";
 import type { UserProfileRepository } from "../user-profile/user-profile-repository.js";
@@ -31,7 +31,7 @@ export class PostService {
     const known = await this.characters.findAll();
     const mentions = resolveKnownMentions(
       input.content,
-      known.map((character) => character.handle),
+      [USER_HANDLE, ...known.map((character) => character.handle)],
     );
 
     const newPost: NewPost = {
@@ -54,7 +54,7 @@ export class PostService {
   async listBySimulation(simulationId: string): Promise<PostDto[]> {
     const [posts, characters, userProfile] = await Promise.all([
       this.posts.findBySimulation(simulationId),
-      this.characters.findAll(),
+      this.characters.findAllIncludingDeleted(),
       this.userProfiles.get(),
     ]);
     return toPostDtos(posts, indexById(characters), userProfile);
@@ -63,7 +63,7 @@ export class PostService {
   /** Maps one post, loading its quoted post if it has one. */
   async toDto(post: Post): Promise<PostDto> {
     const [characters, quoted, userProfile] = await Promise.all([
-      this.characters.findAll(),
+      this.characters.findAllIncludingDeleted(),
       post.quoteOf ? this.posts.findById(post.quoteOf) : Promise.resolve(null),
       this.userProfiles.get(),
     ]);
