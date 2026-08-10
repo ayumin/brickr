@@ -1,4 +1,4 @@
-import { USER_AUTHOR_ID, USER_DISPLAY_NAME } from "@enjo/shared";
+import { USER_AUTHOR_ID, USER_DISPLAY_NAME } from "@brickr/shared";
 import type { Db } from "../persistence/prisma.js";
 import type { SaveUserProfile, UserProfile } from "./user-profile.js";
 

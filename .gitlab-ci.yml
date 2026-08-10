@@ -32,42 +32,42 @@ default:
     - corepack prepare pnpm@11.21.0 --activate
     - pnpm config set store-dir .pnpm-store
     - pnpm install --frozen-lockfile
-    - pnpm --filter @enjo/backend db:generate
+    - pnpm --filter @brickr/backend db:generate
 
 "frontend:lint":
   stage: lint
   script:
-    - pnpm --filter @enjo/frontend lint
+    - pnpm --filter @brickr/frontend lint
 
 "backend:lint":
   stage: lint
   script:
-    - pnpm --filter @enjo/backend lint
+    - pnpm --filter @brickr/backend lint
 
 "shared:lint":
   stage: lint
   script:
-    - pnpm --filter @enjo/shared lint
+    - pnpm --filter @brickr/shared lint
 
 "frontend:typecheck":
   stage: typecheck
   script:
-    - pnpm --filter @enjo/frontend typecheck
+    - pnpm --filter @brickr/frontend typecheck
 
 "backend:typecheck":
   stage: typecheck
   script:
-    - pnpm --filter @enjo/backend typecheck
+    - pnpm --filter @brickr/backend typecheck
 
 "shared:typecheck":
   stage: typecheck
   script:
-    - pnpm --filter @enjo/shared typecheck
+    - pnpm --filter @brickr/shared typecheck
 
 "frontend:test":
   stage: test
   script:
-    - pnpm --filter @enjo/frontend test --coverage
+    - pnpm --filter @brickr/frontend test --coverage
   coverage: '/Statements\s*:\s*([\d.]+)%/'
   artifacts:
     reports:
@@ -78,7 +78,7 @@ default:
 "backend:test":
   stage: test
   script:
-    - pnpm --filter @enjo/backend test --coverage
+    - pnpm --filter @brickr/backend test --coverage
   coverage: '/Statements\s*:\s*([\d.]+)%/'
   artifacts:
     reports:
@@ -89,7 +89,7 @@ default:
 "shared:test":
   stage: test
   script:
-    - pnpm --filter @enjo/shared test --coverage
+    - pnpm --filter @brickr/shared test --coverage
   coverage: '/Statements\s*:\s*([\d.]+)%/'
   artifacts:
     reports:
@@ -100,7 +100,7 @@ default:
 "frontend:build":
   stage: build
   script:
-    - pnpm --filter @enjo/frontend build
+    - pnpm --filter @brickr/frontend build
   artifacts:
     name: "brickr-frontend-$CI_COMMIT_SHORT_SHA"
     paths:
@@ -110,7 +110,7 @@ default:
 "backend:build":
   stage: build
   script:
-    - pnpm --filter @enjo/backend build
+    - pnpm --filter @brickr/backend build
   artifacts:
     name: "brickr-backend-$CI_COMMIT_SHORT_SHA"
     paths:
@@ -120,7 +120,7 @@ default:
 "shared:build":
   stage: build
   script:
-    - pnpm --filter @enjo/shared build
+    - pnpm --filter @brickr/shared build
   artifacts:
     name: "brickr-shared-$CI_COMMIT_SHORT_SHA"
     paths:

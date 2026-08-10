@@ -1,4 +1,4 @@
-import type { SimulationStatus } from "@enjo/shared";
+import type { SimulationStatus } from "@brickr/shared";
 import type { Db } from "../persistence/prisma.js";
 import type { Simulation, SimulationSummary } from "./simulation.js";
 

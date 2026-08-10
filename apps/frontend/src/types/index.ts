@@ -1,11 +1,11 @@
 /**
  * UI-only types.
  *
- * Anything that crosses the network boundary lives in `@enjo/shared`.
+ * Anything that crosses the network boundary lives in `@brickr/shared`.
  * Nothing here may describe prompts, providers, models or credentials —
  * the frontend never sees those (CLAUDE.md §8, §47).
  */
-import type { PostDto } from "@enjo/shared";
+import type { PostDto } from "@brickr/shared";
 
 /** A character the backend told us is currently generating ("考え中"). */
 export type ThinkingCharacter = {

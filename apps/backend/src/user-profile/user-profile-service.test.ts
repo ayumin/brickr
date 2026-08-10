@@ -1,4 +1,4 @@
-import { USER_AUTHOR_ID, USER_HANDLE } from "@enjo/shared";
+import { USER_AUTHOR_ID, USER_HANDLE } from "@brickr/shared";
 import { describe, expect, it } from "vitest";
 import type { UserProfileRepository } from "./user-profile-repository.js";
 import { UserProfileService } from "./user-profile-service.js";

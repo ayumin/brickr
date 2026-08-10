@@ -1,5 +1,5 @@
 import cors from "@fastify/cors";
-import { MAX_IMAGE_DATA_URL_LENGTH } from "@enjo/shared";
+import { MAX_IMAGE_DATA_URL_LENGTH } from "@brickr/shared";
 import Fastify, { type FastifyError, type FastifyInstance } from "fastify";
 import { registerOpenApi } from "./api/openapi.js";
 import { registerRoutes } from "./api/routes.js";

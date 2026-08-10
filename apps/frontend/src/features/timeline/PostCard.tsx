@@ -1,4 +1,4 @@
-import type { PostDto } from "@enjo/shared";
+import type { PostDto } from "@brickr/shared";
 
 import { Avatar } from "../../components/Avatar";
 import { Icon } from "../../components/Icon";
@@ -64,7 +64,7 @@ export function PostCard({
 
   return (
     <article
-      className={`enjo-post-in flex gap-3 border-b border-line transition-colors ${
+      className={`brickr-post-in flex gap-3 border-b border-line transition-colors ${
         dense ? "px-4 py-2.5" : "px-4 py-3.5"
       } ${isUser ? "bg-accent-soft/50" : "hover:bg-surface-hover/60"}`}
     >

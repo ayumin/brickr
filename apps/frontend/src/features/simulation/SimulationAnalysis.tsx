@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { SimulationAnalysisDto } from "@enjo/shared";
+import type { SimulationAnalysisDto } from "@brickr/shared";
 
 import { Avatar } from "../../components/Avatar";
 import { ErrorBanner } from "../../components/ErrorBanner";

@@ -1,4 +1,4 @@
-import type { PostDto } from "@enjo/shared";
+import type { PostDto } from "@brickr/shared";
 import { describe, expect, it } from "vitest";
 import {
   parseSimulationSummary,

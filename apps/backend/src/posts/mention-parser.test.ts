@@ -67,7 +67,7 @@ describe("parseMentions", () => {
 
   it("does not treat an email address as a mention", () => {
     expect(parseMentions("user@example.com まで連絡ください")).toEqual([]);
-    expect(parseMentions("問い合わせは info@enjo.test へ")).toEqual([]);
+    expect(parseMentions("問い合わせは info@brickr.test へ")).toEqual([]);
   });
 
   it("parses consecutive mentions separated by a single space", () => {

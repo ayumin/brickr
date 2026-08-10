@@ -3,7 +3,7 @@ import {
   AVATAR_IMAGE_SIZE,
   MAX_AVATAR_IMAGE_BYTES,
   MAX_AVATAR_SOURCE_BYTES,
-} from "@enjo/shared";
+} from "@brickr/shared";
 import { calculateCropLayout } from "./avatar-crop";
 import { Icon } from "./Icon";
 

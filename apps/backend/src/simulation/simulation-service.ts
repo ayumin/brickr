@@ -2,8 +2,8 @@ import type {
   SimulationDto,
   SimulationResponse,
   SimulationSummaryDto,
-} from "@enjo/shared";
-import { USER_AUTHOR_ID, USER_HANDLE } from "@enjo/shared";
+} from "@brickr/shared";
+import { USER_AUTHOR_ID, USER_HANDLE } from "@brickr/shared";
 import type { AgentService } from "../agents/agent-service.js";
 import type { CharacterRepository } from "../characters/character-repository.js";
 import type { Character } from "../characters/character.js";

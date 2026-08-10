@@ -3,7 +3,7 @@ import type {
   CharacterConfigDto,
   ModelProfileDto,
   SaveCharacterRequest,
-} from "@enjo/shared";
+} from "@brickr/shared";
 
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { AvatarUploader } from "../../components/AvatarUploader";

@@ -3,7 +3,7 @@ import type {
   EditableApplicationSettingName,
   EnvironmentSettingDto,
   UpdateApplicationSettingsRequest,
-} from "@enjo/shared";
+} from "@brickr/shared";
 import { env } from "../config/env.js";
 import { estimateLLMCostUsd } from "../llm/pricing.js";
 import type { LLMProviderRegistry } from "../llm/provider-registry.js";

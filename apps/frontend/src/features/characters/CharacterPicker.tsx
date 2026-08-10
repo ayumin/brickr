@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { CharacterDto } from "@enjo/shared";
+import type { CharacterDto } from "@brickr/shared";
 
 import { Avatar } from "../../components/Avatar";
 import { Icon } from "../../components/Icon";

@@ -10,7 +10,7 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
 COPY packages/shared/package.json ./packages/shared/
 COPY apps/frontend/package.json ./apps/frontend/
 
-RUN pnpm install --filter @enjo/frontend... --no-frozen-lockfile
+RUN pnpm install --filter @brickr/frontend... --no-frozen-lockfile
 
 COPY packages/shared ./packages/shared
 COPY apps/frontend ./apps/frontend

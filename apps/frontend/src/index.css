@@ -200,7 +200,7 @@ body {
   background: transparent;
 }
 
-@keyframes enjo-post-in {
+@keyframes brickr-post-in {
   from {
     opacity: 0;
     transform: translateY(6px);
@@ -211,11 +211,11 @@ body {
   }
 }
 
-.enjo-post-in {
-  animation: enjo-post-in 220ms ease-out both;
+.brickr-post-in {
+  animation: brickr-post-in 220ms ease-out both;
 }
 
-@keyframes enjo-dot {
+@keyframes brickr-dot {
   0%,
   60%,
   100% {
@@ -228,24 +228,24 @@ body {
   }
 }
 
-.enjo-dot {
-  animation: enjo-dot 1.2s ease-in-out infinite;
+.brickr-dot {
+  animation: brickr-dot 1.2s ease-in-out infinite;
 }
 
-@keyframes enjo-spin {
+@keyframes brickr-spin {
   to {
     transform: rotate(360deg);
   }
 }
 
-.enjo-spin {
-  animation: enjo-spin 700ms linear infinite;
+.brickr-spin {
+  animation: brickr-spin 700ms linear infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .enjo-post-in,
-  .enjo-dot,
-  .enjo-spin {
+  .brickr-post-in,
+  .brickr-dot,
+  .brickr-spin {
     animation-duration: 0.01ms;
     animation-iteration-count: 1;
   }

@@ -1,4 +1,4 @@
-import { USER_AUTHOR_ID, type PostDto, type SseEvent } from "@enjo/shared";
+import { USER_AUTHOR_ID, type PostDto, type SseEvent } from "@brickr/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentService, GenerateRequest, GeneratedPost } from "../agents/agent-service.js";
 import type { CharacterRepository } from "../characters/character-repository.js";

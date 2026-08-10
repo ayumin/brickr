@@ -51,7 +51,7 @@ export const THEME_OPTIONS = [
 
 export type Theme = (typeof THEME_OPTIONS)[number]["id"];
 
-const THEME_STORAGE_KEY = "enjo.theme";
+const THEME_STORAGE_KEY = "brickr.theme";
 
 export function readPreferredTheme(): Theme {
   try {

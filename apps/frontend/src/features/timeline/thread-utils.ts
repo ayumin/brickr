@@ -16,7 +16,7 @@
  * into a thread, and the flat expansion has to show it for the reply count to
  * stay consistent with what expanding reveals.
  */
-import { USER_AUTHOR_ID, USER_HANDLE, type PostDto } from "@enjo/shared";
+import { USER_AUTHOR_ID, USER_HANDLE, type PostDto } from "@brickr/shared";
 
 /** postId → its direct replies, oldest first. */
 export type ReplyIndex = ReadonlyMap<string, readonly PostDto[]>;

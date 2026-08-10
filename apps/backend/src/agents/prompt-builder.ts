@@ -1,4 +1,4 @@
-import { USER_HANDLE } from "@enjo/shared";
+import { USER_HANDLE } from "@brickr/shared";
 import type { Character } from "../characters/character.js";
 import type { LLMMessage } from "../llm/provider.js";
 import { parseImageDataUrl } from "../llm/image-data-url.js";

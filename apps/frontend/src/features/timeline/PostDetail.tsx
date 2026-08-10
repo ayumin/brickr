@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { CharacterDto, PostDto, UserProfileDto } from "@enjo/shared";
+import type { CharacterDto, PostDto, UserProfileDto } from "@brickr/shared";
 
 import type { ThinkingCharacter } from "../../types";
 import { PostCard } from "./PostCard";

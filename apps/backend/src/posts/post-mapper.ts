@@ -1,5 +1,5 @@
-import type { PostAuthorDto, PostDto, QuotedPostDto } from "@enjo/shared";
-import { USER_AUTHOR_ID, USER_HANDLE } from "@enjo/shared";
+import type { PostAuthorDto, PostDto, QuotedPostDto } from "@brickr/shared";
+import { USER_AUTHOR_ID, USER_HANDLE } from "@brickr/shared";
 import type { Character } from "../characters/character.js";
 import type { UserProfile } from "../user-profile/user-profile.js";
 import type { Post } from "./post.js";

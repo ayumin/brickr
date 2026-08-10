@@ -5,7 +5,7 @@ import {
   MAX_IMAGE_DATA_URL_LENGTH,
   MAX_IMAGE_BYTES,
   MAX_POST_LENGTH,
-} from "@enjo/shared";
+} from "@brickr/shared";
 import { z } from "zod";
 
 /**

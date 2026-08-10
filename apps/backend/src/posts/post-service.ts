@@ -1,4 +1,4 @@
-import { USER_HANDLE, type PostDto } from "@enjo/shared";
+import { USER_HANDLE, type PostDto } from "@brickr/shared";
 import type { CharacterRepository } from "../characters/character-repository.js";
 import type { Character } from "../characters/character.js";
 import type { UserProfileRepository } from "../user-profile/user-profile-repository.js";

@@ -1,4 +1,4 @@
-import { MAX_POST_LENGTH } from "@enjo/shared";
+import { MAX_POST_LENGTH } from "@brickr/shared";
 import { describe, expect, it } from "vitest";
 import { sanitizeGeneratedPost } from "./sanitize.js";
 

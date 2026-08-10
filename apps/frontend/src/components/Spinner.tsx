@@ -13,7 +13,7 @@ export function Spinner({ size = "md", label }: SpinnerProps) {
   return (
     <span className="inline-flex items-center gap-2" role="status">
       <span
-        className={`${SIZE_CLASS[size]} enjo-spin rounded-full border-line-strong border-t-accent`}
+        className={`${SIZE_CLASS[size]} brickr-spin rounded-full border-line-strong border-t-accent`}
       />
       {label ? (
         <span className="text-sm text-ink-muted">{label}</span>

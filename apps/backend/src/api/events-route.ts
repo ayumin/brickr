@@ -1,4 +1,4 @@
-import type { SseEvent } from "@enjo/shared";
+import type { SseEvent } from "@brickr/shared";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import type { AppServices } from "../services.js";
 import { SimulationNotFoundError } from "../simulation/simulation-service.js";

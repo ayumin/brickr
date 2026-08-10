@@ -1,7 +1,7 @@
 import { CHARACTER_SEEDS } from "../src/characters/character-seeds.js";
 import { MODEL_PROFILE_SEEDS } from "../src/model-profiles/model-profile-seeds.js";
 import { prisma } from "../src/persistence/prisma.js";
-import { USER_AUTHOR_ID, USER_DISPLAY_NAME } from "@enjo/shared";
+import { USER_AUTHOR_ID, USER_DISPLAY_NAME } from "@brickr/shared";
 import { demoAvatarDataUrl } from "../src/characters/demo-avatar.js";
 
 /**

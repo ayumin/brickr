@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { CharacterDto } from "@enjo/shared";
+import type { CharacterDto } from "@brickr/shared";
 
 import { api, isAbortError, toErrorMessage } from "../services/api-client";
 

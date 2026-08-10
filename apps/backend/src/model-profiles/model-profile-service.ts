@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { ModelProfileDto } from "@enjo/shared";
+import type { ModelProfileDto } from "@brickr/shared";
 import type {
   LLMProviderRegistry,
   ProviderModelCatalog,

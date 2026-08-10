@@ -1,11 +1,11 @@
 import { useCallback, useMemo, useState } from "react";
-import { USER_AUTHOR_ID } from "@enjo/shared";
+import { USER_AUTHOR_ID } from "@brickr/shared";
 import type {
   CharacterDto,
   SimulationDto,
   SimulationSummaryDto,
   UserProfileDto,
-} from "@enjo/shared";
+} from "@brickr/shared";
 
 import { APP_NAME, APP_TAGLINE } from "../../brand";
 import { BrandLogo } from "../../components/BrandLogo";

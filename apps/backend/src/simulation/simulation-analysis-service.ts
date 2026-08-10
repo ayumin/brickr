@@ -4,7 +4,7 @@ import type {
   SimulationAuthorRankingDto,
   SimulationPostRankingDto,
   SimulationContentSummaryDto,
-} from "@enjo/shared";
+} from "@brickr/shared";
 import { z } from "zod";
 import type { LLMClient } from "../llm/llm-client.js";
 import type { LLMProviderRegistry } from "../llm/provider-registry.js";

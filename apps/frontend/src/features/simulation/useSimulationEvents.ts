@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useReducer, useState } from "react";
-import type { PostDto, SseEvent } from "@enjo/shared";
+import type { PostDto, SseEvent } from "@brickr/shared";
 
 import { api, isAbortError, toErrorMessage } from "../../services/api-client";
 import { subscribeToSimulationEvents } from "../../services/sse-client";

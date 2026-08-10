@@ -1,4 +1,4 @@
-import type { QuotedPostDto } from "@enjo/shared";
+import type { QuotedPostDto } from "@brickr/shared";
 
 import { Avatar } from "../../components/Avatar";
 import { Icon } from "../../components/Icon";

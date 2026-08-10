@@ -4,7 +4,7 @@ import type {
   EditableApplicationSettingName,
   SaveUserProfileRequest,
   UserProfileDto,
-} from "@enjo/shared";
+} from "@brickr/shared";
 import { AvatarUploader } from "../../components/AvatarUploader";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { api, isAbortError, toErrorMessage } from "../../services/api-client";

@@ -26,7 +26,7 @@ importers:
       '@anthropic-ai/sdk':
         specifier: ^0.116.0
         version: 0.116.0(zod@4.4.3)
-      '@enjo/shared':
+      '@brickr/shared':
         specifier: workspace:*
         version: link:../../packages/shared
       '@fastify/cors':
@@ -81,7 +81,7 @@ importers:
 
   apps/frontend:
     dependencies:
-      '@enjo/shared':
+      '@brickr/shared':
         specifier: workspace:*
         version: link:../../packages/shared
       bootstrap-icons:

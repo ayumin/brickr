@@ -1,4 +1,4 @@
-import type { ApiErrorBody } from "@enjo/shared";
+import type { ApiErrorBody } from "@brickr/shared";
 import type { FastifyReply } from "fastify";
 
 export function sendError(

@@ -5,7 +5,7 @@ import type {
   CharacterManagementDto,
   CharacterDeletionMode,
   ModelProfileDto,
-} from "@enjo/shared";
+} from "@brickr/shared";
 
 import { Avatar } from "../../components/Avatar";
 import { ErrorBanner } from "../../components/ErrorBanner";

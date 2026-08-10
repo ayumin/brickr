@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { USER_AUTHOR_ID, USER_HANDLE } from "@enjo/shared";
-import type { PostAuthorDto, PostDto } from "@enjo/shared";
+import { USER_AUTHOR_ID, USER_HANDLE } from "@brickr/shared";
+import type { PostAuthorDto, PostDto } from "@brickr/shared";
 
 import {
   buildReplyIndex,

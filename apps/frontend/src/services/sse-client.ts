@@ -5,8 +5,8 @@
  * EventSource reconnects on its own, so we never hand-roll retries — we only
  * report the connection state upwards so the UI can say 「再接続中」.
  */
-import { SSE_EVENT_TYPES } from "@enjo/shared";
-import type { SseEvent, SseEventType } from "@enjo/shared";
+import { SSE_EVENT_TYPES } from "@brickr/shared";
+import type { SseEvent, SseEventType } from "@brickr/shared";
 
 import { simulationEventsUrl } from "./api-client";
 

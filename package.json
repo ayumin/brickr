@@ -5,14 +5,14 @@
   "packageManager": "pnpm@11.21.0",
   "scripts": {
     "dev": "pnpm -r --parallel dev",
-    "dev:backend": "pnpm --filter @enjo/backend dev",
-    "dev:frontend": "pnpm --filter @enjo/frontend dev",
+    "dev:backend": "pnpm --filter @brickr/backend dev",
+    "dev:frontend": "pnpm --filter @brickr/frontend dev",
     "lint": "pnpm -r lint",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
-    "seed": "pnpm --filter @enjo/backend seed",
-    "db:push": "pnpm --filter @enjo/backend db:push"
+    "seed": "pnpm --filter @brickr/backend seed",
+    "db:push": "pnpm --filter @brickr/backend db:push"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

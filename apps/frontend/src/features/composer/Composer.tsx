@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
-import { MAX_IMAGE_BYTES, MAX_POST_LENGTH } from "@enjo/shared";
+import { MAX_IMAGE_BYTES, MAX_POST_LENGTH } from "@brickr/shared";
 import type {
   CharacterDto,
   CreatePostRequest,
   PostDto,
   UserProfileDto,
-} from "@enjo/shared";
+} from "@brickr/shared";
 
 import { Avatar } from "../../components/Avatar";
 import { ErrorBanner } from "../../components/ErrorBanner";

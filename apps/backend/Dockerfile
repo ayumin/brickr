@@ -16,7 +16,7 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
 COPY packages/shared/package.json ./packages/shared/
 COPY apps/backend/package.json ./apps/backend/
 
-RUN pnpm install --filter @enjo/backend... --no-frozen-lockfile
+RUN pnpm install --filter @brickr/backend... --no-frozen-lockfile
 
 COPY packages/shared ./packages/shared
 COPY apps/backend ./apps/backend

@@ -1,4 +1,4 @@
-import type { SseEvent } from "@enjo/shared";
+import type { SseEvent } from "@brickr/shared";
 
 export type EventListener = (event: SseEvent) => void;
 

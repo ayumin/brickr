@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent, SyntheticEvent } from "react";
-import type { CharacterDto } from "@enjo/shared";
+import type { CharacterDto } from "@brickr/shared";
 
 import { Avatar } from "../../components/Avatar";
 

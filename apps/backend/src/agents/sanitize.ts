@@ -1,4 +1,4 @@
-import { MAX_POST_LENGTH } from "@enjo/shared";
+import { MAX_POST_LENGTH } from "@brickr/shared";
 
 /**
  * Cleans up raw LLM output into something that reads like an SNS post.

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { SimulationDto, SimulationSummaryDto } from "@enjo/shared";
+import type { SimulationDto, SimulationSummaryDto } from "@brickr/shared";
 
 import { APP_FULL_NAME, APP_NAME, APP_TAGLINE } from "./brand";
 import { BrandLogo } from "./components/BrandLogo";
@@ -12,7 +12,7 @@ import { useCharacters } from "./hooks/useCharacters";
 import { useUserProfile } from "./hooks/useUserProfile";
 import type { LoadPhase } from "./types";
 
-const SIMULATION_STORAGE_KEY = "enjo.simulationId";
+const SIMULATION_STORAGE_KEY = "brickr.simulationId";
 
 function readStoredSimulationId(): string | null {
   try {

@@ -2,7 +2,7 @@ import {
   USER_HANDLE,
   type SaveUserProfileRequest,
   type UserProfileDto,
-} from "@enjo/shared";
+} from "@brickr/shared";
 import type { UserProfileRepository } from "./user-profile-repository.js";
 import type { UserProfile } from "./user-profile.js";
 

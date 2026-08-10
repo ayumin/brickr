@@ -1,4 +1,4 @@
-import type { SimulationStatus } from "@enjo/shared";
+import type { SimulationStatus } from "@brickr/shared";
 
 export type Simulation = {
   id: string;

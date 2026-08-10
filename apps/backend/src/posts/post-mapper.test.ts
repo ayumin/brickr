@@ -1,4 +1,4 @@
-import { USER_AUTHOR_ID } from "@enjo/shared";
+import { USER_AUTHOR_ID } from "@brickr/shared";
 import { describe, expect, it } from "vitest";
 import type { Post } from "./post.js";
 import { toPostDto } from "./post-mapper.js";

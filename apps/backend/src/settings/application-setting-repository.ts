@@ -1,4 +1,4 @@
-import type { EditableApplicationSettingName } from "@enjo/shared";
+import type { EditableApplicationSettingName } from "@brickr/shared";
 import type { Db } from "../persistence/prisma.js";
 
 export class ApplicationSettingRepository {

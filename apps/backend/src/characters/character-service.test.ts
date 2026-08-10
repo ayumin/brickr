@@ -1,4 +1,4 @@
-import type { SaveCharacterRequest } from "@enjo/shared";
+import type { SaveCharacterRequest } from "@brickr/shared";
 import { describe, expect, it, vi } from "vitest";
 import type { ModelProfileRepository } from "../model-profiles/model-profile-repository.js";
 import type { ModelProfile } from "../model-profiles/model-profile.js";

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { USER_AUTHOR_ID, USER_HANDLE } from "@enjo/shared";
-import type { CharacterDto, PostDto, UserProfileDto } from "@enjo/shared";
+import { USER_AUTHOR_ID, USER_HANDLE } from "@brickr/shared";
+import type { CharacterDto, PostDto, UserProfileDto } from "@brickr/shared";
 
 import { Avatar } from "../../components/Avatar";
 import { Icon } from "../../components/Icon";
@@ -59,7 +59,7 @@ function ThinkingRow({ character }: { character: ThinkingCharacter }) {
             {[0, 1, 2].map((index) => (
               <span
                 key={index}
-                className="enjo-dot inline-block h-1 w-1 rounded-full bg-ink-muted"
+                className="brickr-dot inline-block h-1 w-1 rounded-full bg-ink-muted"
                 style={{ animationDelay: `${String(index * 150)}ms` }}
               />
             ))}

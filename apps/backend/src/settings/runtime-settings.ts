@@ -1,4 +1,4 @@
-import type { EditableApplicationSettingName } from "@enjo/shared";
+import type { EditableApplicationSettingName } from "@brickr/shared";
 import { env } from "../config/env.js";
 
 export type RuntimeSettingsValues = {

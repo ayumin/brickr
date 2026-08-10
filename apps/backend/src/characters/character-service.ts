@@ -7,7 +7,7 @@ import type {
   ExportCharactersCsvResponse,
   ImportCharactersCsvResponse,
   SaveCharacterRequest,
-} from "@enjo/shared";
+} from "@brickr/shared";
 import { randomUUID } from "node:crypto";
 import { LLMError, LLMTimeoutError } from "../llm/provider.js";
 import type { ModelProfileRepository } from "../model-profiles/model-profile-repository.js";

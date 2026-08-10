@@ -4,7 +4,7 @@ import {
   USER_DISPLAY_NAME,
   USER_HANDLE,
   type UserProfileDto,
-} from "@enjo/shared";
+} from "@brickr/shared";
 import { api, isAbortError, toErrorMessage } from "../services/api-client";
 
 const DEFAULT_PROFILE: UserProfileDto = {
