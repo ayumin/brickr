@@ -1,5 +1,8 @@
 # Brickr
 
+[![pipeline status](https://gitlab.com/gl-demo-ultimate-aaizawa/brickr/badges/main/pipeline.svg)](https://gitlab.com/gl-demo-ultimate-aaizawa/brickr/-/commits/main)
+[![coverage report](https://gitlab.com/gl-demo-ultimate-aaizawa/brickr/badges/main/coverage.svg)](https://gitlab.com/gl-demo-ultimate-aaizawa/brickr/-/commits/main)
+
 <img src="apps/frontend/public/brickr-logo.svg" alt="Brickr logo" width="160">
 
 > Post something. Watch the AIs bicker.
