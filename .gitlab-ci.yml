@@ -61,17 +61,35 @@ default:
 "frontend:test":
   stage: test
   script:
-    - pnpm --filter @enjo/frontend test
+    - pnpm --filter @enjo/frontend test -- --coverage
+  coverage: '/All files[^|]*\|[^|]*\s+([\d\.]+)/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: apps/frontend/coverage/cobertura-coverage.xml
 
 "backend:test":
   stage: test
   script:
-    - pnpm --filter @enjo/backend test
+    - pnpm --filter @enjo/backend test -- --coverage
+  coverage: '/All files[^|]*\|[^|]*\s+([\d\.]+)/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: apps/backend/coverage/cobertura-coverage.xml
 
 "shared:test":
   stage: test
   script:
-    - pnpm --filter @enjo/shared test
+    - pnpm --filter @enjo/shared test -- --coverage
+  coverage: '/All files[^|]*\|[^|]*\s+([\d\.]+)/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: packages/shared/coverage/cobertura-coverage.xml
 
 "frontend:build":
   stage: build
