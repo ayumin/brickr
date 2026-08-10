@@ -56,7 +56,7 @@ PostgreSQLだけをDockerで起動し、スキーマと初期データを準備�
 
 ```bash
 docker compose up -d db
-pnpm --filter @enjo/backend db:generate
+pnpm --filter @brickr/backend db:generate
 pnpm db:push
 pnpm seed
 ```
@@ -196,7 +196,7 @@ docs: explain local database setup
 
 1. `apps/backend/prisma/schema.prisma`を変更します。
 2. RepositoryとMapperを更新します。
-3. `pnpm --filter @enjo/backend db:generate`でPrisma Clientを再生成します。
+3. `pnpm --filter @brickr/backend db:generate`でPrisma Clientを再生成します。
 4. 開発DBで`pnpm db:push`を実行します。
 5. Seedが再実行可能であることを確認します。
 6. 既存データへの影響、nullability、削除時の挙動をPull Requestに記載します。
@@ -243,15 +243,15 @@ docs: explain local database setup
 対象パッケージだけを検証する場合:
 
 ```bash
-pnpm --filter @enjo/backend lint
-pnpm --filter @enjo/backend test
-pnpm --filter @enjo/backend typecheck
-pnpm --filter @enjo/frontend lint
-pnpm --filter @enjo/frontend test
-pnpm --filter @enjo/frontend typecheck
-pnpm --filter @enjo/shared lint
-pnpm --filter @enjo/shared test
-pnpm --filter @enjo/shared typecheck
+pnpm --filter @brickr/backend lint
+pnpm --filter @brickr/backend test
+pnpm --filter @brickr/backend typecheck
+pnpm --filter @brickr/frontend lint
+pnpm --filter @brickr/frontend test
+pnpm --filter @brickr/frontend typecheck
+pnpm --filter @brickr/shared lint
+pnpm --filter @brickr/shared test
+pnpm --filter @brickr/shared typecheck
 ```
 
 Pull Request前の全体検証:

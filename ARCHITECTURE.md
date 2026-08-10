@@ -63,7 +63,7 @@ brickr/
 └── CLAUDE.md
 ```
 
-pnpm workspaceは`apps/*`と`packages/*`を管理します。`@enjo/shared`がNetwork境界の型を提供し、
+pnpm workspaceは`apps/*`と`packages/*`を管理します。`@brickr/shared`がNetwork境界の型を提供し、
 FrontendとBackendの実装詳細は共有しません。
 
 ## 4. 依存方向

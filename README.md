@@ -136,7 +136,7 @@ docker compose down
 3. Prisma Clientを生成し、スキーマと初期データを投入します。
 
    ```bash
-   pnpm --filter @enjo/backend db:generate
+   pnpm --filter @brickr/backend db:generate
    pnpm db:push
    pnpm seed
    ```
