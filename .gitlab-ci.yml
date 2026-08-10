@@ -1,5 +1,7 @@
 stages:
-  - verify
+  - lint
+  - typecheck
+  - test
   - build
 
 workflow:
@@ -26,43 +28,77 @@ default:
     - pnpm install --frozen-lockfile
     - pnpm --filter @enjo/backend db:generate
 
-"shared:typecheck":
-  stage: verify
+"frontend:lint":
+  stage: lint
   script:
-    - pnpm --filter @enjo/shared typecheck
+    - pnpm --filter @enjo/frontend lint
 
-"backend:typecheck":
-  stage: verify
+"backend:lint":
+  stage: lint
   script:
-    - pnpm --filter @enjo/backend typecheck
+    - pnpm --filter @enjo/backend lint
+
+"shared:lint":
+  stage: lint
+  script:
+    - pnpm --filter @enjo/shared lint
 
 "frontend:typecheck":
-  stage: verify
+  stage: typecheck
   script:
     - pnpm --filter @enjo/frontend typecheck
 
-"backend:test":
-  stage: verify
+"backend:typecheck":
+  stage: typecheck
   script:
-    - pnpm --filter @enjo/backend test
+    - pnpm --filter @enjo/backend typecheck
+
+"shared:typecheck":
+  stage: typecheck
+  script:
+    - pnpm --filter @enjo/shared typecheck
 
 "frontend:test":
-  stage: verify
+  stage: test
   script:
     - pnpm --filter @enjo/frontend test
 
+"backend:test":
+  stage: test
+  script:
+    - pnpm --filter @enjo/backend test
+
+"shared:test":
+  stage: test
+  script:
+    - pnpm --filter @enjo/shared test
+
 "frontend:build":
   stage: build
-  needs:
-    - "shared:typecheck"
-    - "backend:typecheck"
-    - "frontend:typecheck"
-    - "backend:test"
-    - "frontend:test"
   script:
     - pnpm --filter @enjo/frontend build
   artifacts:
     name: "brickr-frontend-$CI_COMMIT_SHORT_SHA"
     paths:
       - apps/frontend/dist/
+    expire_in: 1 week
+
+"backend:build":
+  stage: build
+  script:
+    - pnpm --filter @enjo/backend build
+  artifacts:
+    name: "brickr-backend-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - apps/backend/dist/
+    expire_in: 1 week
+
+"shared:build":
+  stage: build
+  script:
+    - pnpm --filter @enjo/shared build
+  artifacts:
+    name: "brickr-shared-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - packages/shared/dist/
     expire_in: 1 week

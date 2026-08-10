@@ -243,15 +243,21 @@ docs: explain local database setup
 対象パッケージだけを検証する場合:
 
 ```bash
+pnpm --filter @enjo/backend lint
 pnpm --filter @enjo/backend test
 pnpm --filter @enjo/backend typecheck
+pnpm --filter @enjo/frontend lint
 pnpm --filter @enjo/frontend test
 pnpm --filter @enjo/frontend typecheck
+pnpm --filter @enjo/shared lint
+pnpm --filter @enjo/shared test
+pnpm --filter @enjo/shared typecheck
 ```
 
 Pull Request前の全体検証:
 
 ```bash
+pnpm lint
 pnpm test
 pnpm typecheck
 pnpm build
@@ -265,10 +271,11 @@ git diff --check
 
 リポジトリ直下の`.gitlab-ci.yml`は、Branch、Tag、Merge RequestのPipelineで次を実行します。
 
-1. Shared、Backend、Frontendの型検査を個別ジョブで並列実行
-2. BackendとFrontendのテストを個別ジョブで並列実行
-3. すべて成功した場合にFrontendの`build`を実行
-4. Frontendの`apps/frontend/dist/`を1週間Artifactとして保存
+1. Frontend、Backend、SharedのLintを並列実行
+2. Frontend、Backend、Sharedの型検査を並列実行
+3. Frontend、Backend、Sharedのテストを並列実行
+4. Frontend、Backend、Sharedを並列ビルド
+5. 各workspaceの`dist/`を1週間Artifactとして保存
 
 CIは開発環境と同じNode.js 22と、`packageManager`で固定しているpnpm 11.21.0を使用します。依存関係は
 `pnpm-lock.yaml`に基づいて固定され、pnpm storeはLockfile単位でキャッシュされます。
@@ -292,6 +299,7 @@ Pull Requestは、レビュアーが目的と影響を短時間で確認でき�
 
 - [ ] 変更範囲が一つの目的にまとまっている
 - [ ] 新しい挙動にテストがある
+- [ ] `pnpm lint`が成功する
 - [ ] `pnpm test`が成功する
 - [ ] `pnpm typecheck`が成功する
 - [ ] `pnpm build`が成功する

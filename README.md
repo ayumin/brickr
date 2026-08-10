@@ -201,6 +201,7 @@ APIキーで取得できた生成モデルだけがModel欄に表示されます
 ## 開発用コマンド
 
 ```bash
+pnpm lint       # 全workspaceのLint
 pnpm test       # FrontendとBackendのテスト
 pnpm typecheck  # 全workspaceの型検査
 pnpm build      # Production build
