@@ -1,0 +1,217 @@
+/**
+ * Derived-thread helpers.
+ *
+ * Pure functions over `PostDto[]` — no React, no fetch, no mutation of the
+ * inputs. The frontend already holds every post in the simulation (REST
+ * hydration + SSE), so every view below is derived state rather than a new
+ * endpoint.
+ *
+ * Terminology used here (matches the backend, CLAUDE.md §28, §36, §38):
+ * - thread starter : `replyTo === null`
+ * - reply          : `replyTo !== null`
+ * - repost         : `quoteOf !== null` — a quote post IS the repost mechanism
+ *
+ * A pure repost has `replyTo === null`, so it is never counted as a reply.
+ * If a post ever carried both fields, `replyTo` wins: it explicitly points
+ * into a thread, and the flat expansion has to show it for the reply count to
+ * stay consistent with what expanding reveals.
+ */
+import { USER_AUTHOR_ID } from "@enjo/shared";
+import type { PostDto } from "@enjo/shared";
+
+/** postId → its direct replies, oldest first. */
+export type ReplyIndex = ReadonlyMap<string, readonly PostDto[]>;
+
+/** postId → the posts that quote (repost) it, oldest first. */
+export type RepostIndex = ReadonlyMap<string, readonly PostDto[]>;
+
+/** Oldest first; ids break ties so equal timestamps stay stable. */
+export function comparePostsChronological(a: PostDto, b: PostDto): number {
+  if (a.createdAt !== b.createdAt) {
+    return a.createdAt < b.createdAt ? -1 : 1;
+  }
+  if (a.id === b.id) {
+    return 0;
+  }
+  return a.id < b.id ? -1 : 1;
+}
+
+/** Newest first, the ordering used by the home and author timelines. */
+export function comparePostsNewestFirst(a: PostDto, b: PostDto): number {
+  return -comparePostsChronological(a, b);
+}
+
+/** True for a post that starts a thread rather than continuing one. */
+export function isThreadStarter(post: PostDto): boolean {
+  return post.replyTo === null;
+}
+
+/** True for a repost (quote post). */
+export function isRepost(post: PostDto): boolean {
+  return post.quoteOf !== null;
+}
+
+/** Convenience lookup used to resolve `replyTo` ids to the actual post. */
+export function indexPostsById(
+  posts: readonly PostDto[],
+): ReadonlyMap<string, PostDto> {
+  const byId = new Map<string, PostDto>();
+  for (const post of posts) {
+    byId.set(post.id, post);
+  }
+  return byId;
+}
+
+/**
+ * Group replies by the post they answer.
+ *
+ * Reposts are not replies, so a post whose `replyTo` is null never lands in
+ * the index — which is what keeps them out of every reply count.
+ */
+export function buildReplyIndex(posts: readonly PostDto[]): ReplyIndex {
+  const index = new Map<string, PostDto[]>();
+
+  for (const post of posts) {
+    const parentId = post.replyTo;
+    if (parentId === null || parentId === post.id) {
+      // Null: a thread starter. Self-reference: corrupt data, ignore it.
+      continue;
+    }
+    const bucket = index.get(parentId);
+    if (bucket) {
+      bucket.push(post);
+    } else {
+      index.set(parentId, [post]);
+    }
+  }
+
+  for (const bucket of index.values()) {
+    bucket.sort(comparePostsChronological);
+  }
+
+  return index;
+}
+
+/**
+ * Group reposts by the post they quote.
+ *
+ * A repost IS a quote post, so `quoteOf` is the repost mechanism. Reposts do
+ * not nest in the UI, so this index is only ever read one level deep.
+ */
+export function buildRepostIndex(posts: readonly PostDto[]): RepostIndex {
+  const index = new Map<string, PostDto[]>();
+
+  for (const post of posts) {
+    const quotedId = post.quoteOf;
+    if (quotedId === null || quotedId === post.id) {
+      continue;
+    }
+    const bucket = index.get(quotedId);
+    if (bucket) {
+      bucket.push(post);
+    } else {
+      index.set(quotedId, [post]);
+    }
+  }
+
+  for (const bucket of index.values()) {
+    bucket.sort(comparePostsChronological);
+  }
+
+  return index;
+}
+
+/** The reposts of one post, oldest first. Never undefined. */
+export function selectReposts(
+  index: RepostIndex,
+  postId: string,
+): readonly PostDto[] {
+  return index.get(postId) ?? [];
+}
+
+/** Direct repost count. Not transitive: reposts do not nest. */
+export function countReposts(index: RepostIndex, postId: string): number {
+  return selectReposts(index, postId).length;
+}
+
+/** Direct replies to one post, oldest first. Never undefined. */
+export function getDirectReplies(
+  index: ReplyIndex,
+  postId: string,
+): readonly PostDto[] {
+  return index.get(postId) ?? [];
+}
+
+/**
+ * Every transitive descendant of a post as ONE flat chronological array.
+ *
+ * The UI renders replies flat (a reply-to-a-reply sits at the same indent as a
+ * direct reply), so the traversal collapses the tree and then sorts by time.
+ * A `visited` set makes it cycle-safe: bad data must not hang the UI.
+ */
+export function flattenReplies(index: ReplyIndex, postId: string): PostDto[] {
+  const collected: PostDto[] = [];
+  const visited = new Set<string>([postId]);
+  const queue: string[] = [postId];
+
+  while (queue.length > 0) {
+    const currentId = queue.shift();
+    if (currentId === undefined) {
+      break;
+    }
+    for (const reply of getDirectReplies(index, currentId)) {
+      if (visited.has(reply.id)) {
+        continue;
+      }
+      visited.add(reply.id);
+      collected.push(reply);
+      queue.push(reply.id);
+    }
+  }
+
+  return collected.sort(comparePostsChronological);
+}
+
+/**
+ * Transitive reply count.
+ *
+ * Deliberately defined as the size of the flat expansion so the number in
+ * 「返信を表示 (N)」 always matches the rows the expander reveals.
+ */
+export function countReplies(index: ReplyIndex, postId: string): number {
+  return flattenReplies(index, postId).length;
+}
+
+/**
+ * The home timeline: thread starters written by the user, newest first.
+ * Character posts are not top-level content any more — they live inside
+ * expanded threads and on character timelines.
+ */
+export function selectUserThreads(posts: readonly PostDto[]): PostDto[] {
+  return posts
+    .filter((post) => post.author.kind === "user" && isThreadStarter(post))
+    .sort(comparePostsNewestFirst);
+}
+
+/** True when a post belongs to the given author id. */
+function isAuthoredBy(post: PostDto, authorId: string): boolean {
+  return post.authorId === authorId || post.author.id === authorId;
+}
+
+/**
+ * One author's timeline: their standalone posts, their replies and their
+ * reposts, newest first.
+ */
+export function selectAuthorTimeline(
+  posts: readonly PostDto[],
+  authorId: string,
+): PostDto[] {
+  return posts
+    .filter((post) => isAuthoredBy(post, authorId))
+    .sort(comparePostsNewestFirst);
+}
+
+/** The human user's own timeline. */
+export function selectUserTimeline(posts: readonly PostDto[]): PostDto[] {
+  return selectAuthorTimeline(posts, USER_AUTHOR_ID);
+}

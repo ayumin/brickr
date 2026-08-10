@@ -1,0 +1,13 @@
+import type { SimulationStatus } from "@enjo/shared";
+
+export type Simulation = {
+  id: string;
+  title: string | null;
+  status: SimulationStatus;
+  createdAt: Date;
+};
+
+/** The two post shapes a character can produce. Plain `post` is a standalone comment. */
+export const RESPONSE_ACTIONS = ["reply", "quote", "post"] as const;
+
+export type ResponseAction = (typeof RESPONSE_ACTIONS)[number];

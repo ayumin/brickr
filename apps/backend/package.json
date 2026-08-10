@@ -1,0 +1,39 @@
+{
+  "name": "@enjo/backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "comment": "Host-side scripts load the single root .env via dotenv-cli. Inside Docker the environment comes from compose, so the entrypoint calls the raw binaries (see docker-entrypoint.sh).",
+  "scripts": {
+    "dev": "dotenv -e ../../.env -- tsx watch --clear-screen=false src/server.ts",
+    "dev:raw": "tsx watch --clear-screen=false src/server.ts",
+    "start": "dotenv -e ../../.env -- tsx src/server.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:push": "dotenv -e ../../.env -- prisma db push --skip-generate --accept-data-loss",
+    "db:generate": "prisma generate",
+    "seed": "dotenv -e ../../.env -- tsx prisma/seed.ts"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.116.0",
+    "@enjo/shared": "workspace:*",
+    "@fastify/cors": "^11.1.0",
+    "@google/genai": "^2.16.0",
+    "@prisma/client": "^6.19.3",
+    "fastify": "^5.11.3",
+    "openai": "^7.4.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "dotenv-cli": "^11.0.0",
+    "prisma": "^6.19.3",
+    "tsx": "^4.23.11",
+    "typescript": "^5.7.3",
+    "vitest": "^4.1.10"
+  }
+}

@@ -1,0 +1,70 @@
+import type { PostDto } from "@enjo/shared";
+import type { CharacterRepository } from "../characters/character-repository.js";
+import type { Character } from "../characters/character.js";
+import { resolveKnownMentions } from "./mention-parser.js";
+import { toPostDto, toPostDtos } from "./post-mapper.js";
+import type { NewPost, Post } from "./post.js";
+import type { PostRepository } from "./post-repository.js";
+
+export type PublishInput = {
+  simulationId: string;
+  authorId: string;
+  content: string;
+  replyTo?: string | null;
+  quoteOf?: string | null;
+};
+
+/**
+ * Creating and reading posts, including mention extraction and DTO mapping.
+ * Every post — user, character, reply, quote — goes through `publish`.
+ */
+export class PostService {
+  constructor(
+    private readonly posts: PostRepository,
+    private readonly characters: CharacterRepository,
+  ) {}
+
+  async publish(input: PublishInput): Promise<Post> {
+    const known = await this.characters.findAll();
+    const mentions = resolveKnownMentions(
+      input.content,
+      known.map((character) => character.handle),
+    );
+
+    const newPost: NewPost = {
+      simulationId: input.simulationId,
+      authorId: input.authorId,
+      content: input.content,
+      mentions,
+      replyTo: input.replyTo ?? null,
+      quoteOf: input.quoteOf ?? null,
+    };
+
+    return this.posts.create(newPost);
+  }
+
+  async findById(id: string): Promise<Post | null> {
+    return this.posts.findById(id);
+  }
+
+  async listBySimulation(simulationId: string): Promise<PostDto[]> {
+    const [posts, characters] = await Promise.all([
+      this.posts.findBySimulation(simulationId),
+      this.characters.findAll(),
+    ]);
+    return toPostDtos(posts, indexById(characters));
+  }
+
+  /** Maps one post, loading its quoted post if it has one. */
+  async toDto(post: Post): Promise<PostDto> {
+    const [characters, quoted] = await Promise.all([
+      this.characters.findAll(),
+      post.quoteOf ? this.posts.findById(post.quoteOf) : Promise.resolve(null),
+    ]);
+    return toPostDto(post, indexById(characters), quoted);
+  }
+}
+
+export function indexById(characters: Character[]): Map<string, Character> {
+  return new Map(characters.map((character) => [character.id, character]));
+}

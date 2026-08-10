@@ -1,0 +1,15 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# pnpm 11 requires opting in per dependency that runs install scripts.
+allowBuilds:
+  # Downloads and generates the Prisma query engine — required.
+  "@prisma/client": true
+  "@prisma/engines": true
+  prisma: true
+  # Fetches the platform esbuild binary that Vite and tsx depend on.
+  esbuild: true
+  # Optional native speedups only; the JS fallbacks are fine.
+  "@google/genai": false
+  protobufjs: false

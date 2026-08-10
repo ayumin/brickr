@@ -1,0 +1,99 @@
+// Enjo Simulator — MVP schema.
+//
+// Only the four tables the MVP needs: characters, model_profiles,
+// simulations, posts. Do not add tables until something actually needs them.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model ModelProfile {
+  id         String   @id
+  providerId String   @map("provider_id")
+  model      String
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  characters Character[]
+
+  @@map("model_profiles")
+}
+
+model Character {
+  id          String @id
+  handle      String @unique
+  displayName String @map("display_name")
+  description String
+
+  // Persona. Never exposed through the public API.
+  rolePrompt    String  @map("role_prompt")
+  tonePrompt    String  @map("tone_prompt")
+  dialectPrompt String? @map("dialect_prompt")
+
+  interests String[] @default([])
+
+  // Behaviour. Also internal-only.
+  activityLevel       Float @default(0.5) @map("activity_level")
+  responseProbability Float @default(0.5) @map("response_probability")
+  replyProbability    Float @default(0.6) @map("reply_probability")
+  quoteProbability    Float @default(0.2) @map("quote_probability")
+  influence           Float @default(0.5)
+
+  modelProfileId String  @map("model_profile_id")
+  avatarUrl      String? @map("avatar_url")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  modelProfile ModelProfile @relation(fields: [modelProfileId], references: [id])
+
+  @@map("characters")
+}
+
+model Simulation {
+  id        String   @id @default(uuid())
+  title     String?
+  status    String   @default("active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  posts Post[]
+
+  @@map("simulations")
+}
+
+model Post {
+  id           String @id @default(uuid())
+  simulationId String @map("simulation_id")
+
+  /// Character id, or the literal "you" for posts written by the user.
+  /// Deliberately not a foreign key: user posts and character posts share
+  /// one table, and the user is not a Character row.
+  authorId String @map("author_id")
+
+  content  String
+  mentions String[] @default([])
+
+  replyTo String? @map("reply_to")
+  quoteOf String? @map("quote_of")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  simulation Simulation @relation(fields: [simulationId], references: [id], onDelete: Cascade)
+
+  replyToPost Post?  @relation("PostReplies", fields: [replyTo], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  replies     Post[] @relation("PostReplies")
+
+  quoteOfPost Post?  @relation("PostQuotes", fields: [quoteOf], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  quotedBy    Post[] @relation("PostQuotes")
+
+  @@index([simulationId, createdAt])
+  @@index([replyTo])
+  @@index([quoteOf])
+  @@map("posts")
+}

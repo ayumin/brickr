@@ -1,0 +1,236 @@
+import { useEffect, useState } from "react";
+import { MAX_POST_LENGTH, USER_DISPLAY_NAME, USER_HANDLE } from "@enjo/shared";
+import type { CharacterDto, CreatePostRequest, PostDto } from "@enjo/shared";
+
+import { Avatar } from "../../components/Avatar";
+import { ErrorBanner } from "../../components/ErrorBanner";
+import { Spinner } from "../../components/Spinner";
+import { api, toErrorMessage } from "../../services/api-client";
+import type { ComposerScope } from "../../types";
+import { QuotePost } from "../timeline/QuotePost";
+import { MentionInput } from "./MentionInput";
+
+export type ComposerProps = {
+  simulationId: string;
+  characters: CharacterDto[];
+  disabled?: boolean;
+  disabledReason?: string;
+  onPosted: (post: PostDto) => void;
+  /**
+   * Inline mode: the post is scoped to an existing post, either as a reply
+   * (`replyTo`) or as a repost/quote (`quoteOf`). Omitted at the top of the
+   * page, where the composer only ever starts new threads.
+   */
+  scope?: ComposerScope | null;
+  /** Inline mode: collapse the composer. */
+  onCancel?: () => void;
+  compact?: boolean;
+  autoFocus?: boolean;
+  /** Handle to append as a mention, e.g. from a profile header. */
+  pendingMention?: string | null;
+  onPendingMentionConsumed?: () => void;
+};
+
+export function Composer({
+  simulationId,
+  characters,
+  disabled = false,
+  disabledReason,
+  onPosted,
+  scope,
+  onCancel,
+  compact = false,
+  autoFocus = false,
+  pendingMention,
+  onPendingMentionConsumed,
+}: ComposerProps) {
+  const [content, setContent] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Replying to a character pre-fills the mention, like a normal SNS client.
+  useEffect(() => {
+    if (!scope || scope.mode !== "reply") {
+      return;
+    }
+    if (scope.post.author.kind !== "character") {
+      return;
+    }
+    const handle = scope.post.author.handle;
+    setContent((current) =>
+      current.trim().length === 0 ? `@${handle} ` : current,
+    );
+  }, [scope]);
+
+  // A mention requested elsewhere (profile header) is appended once.
+  useEffect(() => {
+    if (!pendingMention) {
+      return;
+    }
+    setContent((current) => {
+      const needsSpace =
+        current.length > 0 && !/[\s\n]$/.test(current) ? " " : "";
+      return `${current}${needsSpace}@${pendingMention} `;
+    });
+    onPendingMentionConsumed?.();
+  }, [pendingMention, onPendingMentionConsumed]);
+
+  const remaining = MAX_POST_LENGTH - content.length;
+  const overLimit = remaining < 0;
+  const isEmpty = content.trim().length === 0;
+  const canSubmit = !disabled && !submitting && !isEmpty && !overLimit;
+
+  const submit = async (): Promise<void> => {
+    if (!canSubmit) {
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+
+    // `responderIds` still exists in the API, but the UI no longer populates it:
+    // an @mention in the body is the only way to force a specific character.
+    const request: CreatePostRequest = {
+      content: content.trim(),
+      ...(scope?.mode === "reply" ? { replyTo: scope.post.id } : {}),
+      ...(scope?.mode === "quote" ? { quoteOf: scope.post.id } : {}),
+    };
+
+    try {
+      const post = await api.createPost(simulationId, request);
+      // Show the user's own post immediately; SSE brings the characters later.
+      onPosted(post);
+      setContent("");
+      onCancel?.();
+    } catch (cause) {
+      setError(toErrorMessage(cause));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const placeholder =
+    scope?.mode === "quote"
+      ? "コメントを添えてリポスト…"
+      : scope?.mode === "reply"
+        ? "返信を書く…"
+        : "いま何が起きてる？　@ でキャラクターを指名できます";
+
+  return (
+    <form
+      className={
+        compact
+          ? "border-b border-line bg-black/25 px-4 py-3"
+          : "border-b border-line px-4 py-3"
+      }
+      onSubmit={(event) => {
+        event.preventDefault();
+        void submit();
+      }}
+    >
+      {compact && scope ? (
+        <p className="mb-1.5 text-xs text-ink-faint">
+          {scope.mode === "reply" ? "返信先" : "リポスト元"}:{" "}
+          <span className="text-accent">@{scope.post.author.handle}</span>
+        </p>
+      ) : null}
+
+      <div className="flex gap-3">
+        <Avatar
+          handle={USER_HANDLE}
+          displayName={USER_DISPLAY_NAME}
+          size={compact ? "sm" : "md"}
+        />
+
+        <div className="min-w-0 flex-1">
+          <MentionInput
+            value={content}
+            onChange={setContent}
+            characters={characters}
+            disabled={disabled || submitting}
+            placeholder={placeholder}
+            compact={compact}
+            autoFocus={autoFocus}
+            onSubmit={() => {
+              void submit();
+            }}
+          />
+
+          {scope?.mode === "quote" ? (
+            <QuotePost
+              post={{
+                id: scope.post.id,
+                author: scope.post.author,
+                content: scope.post.content,
+                createdAt: scope.post.createdAt,
+              }}
+            />
+          ) : null}
+
+          <div className="mt-2 flex items-center justify-end gap-3">
+            <span
+              className={`text-xs tabular-nums ${
+                overLimit
+                  ? "text-danger"
+                  : remaining <= 40
+                    ? "text-warn"
+                    : "text-ink-faint"
+              }`}
+            >
+              {content.length} / {MAX_POST_LENGTH}
+            </span>
+
+            {submitting ? <Spinner size="sm" /> : null}
+
+            {onCancel ? (
+              <button
+                type="button"
+                onClick={onCancel}
+                className="rounded-full border border-line px-3 py-1 text-xs text-ink-muted transition hover:border-line-strong hover:text-ink"
+              >
+                キャンセル
+              </button>
+            ) : null}
+
+            <button
+              type="submit"
+              disabled={!canSubmit}
+              className={`rounded-full bg-accent-strong font-semibold text-white transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40 ${
+                compact ? "px-4 py-1 text-xs" : "px-5 py-1.5 text-sm"
+              }`}
+            >
+              {scope?.mode === "reply"
+                ? "返信する"
+                : scope?.mode === "quote"
+                  ? "リポストする"
+                  : "投稿する"}
+            </button>
+          </div>
+
+          {!compact ? (
+            <p className="mt-2 text-right text-[11px] text-ink-faint">
+              ⌘/Ctrl + Enter で投稿
+            </p>
+          ) : null}
+        </div>
+      </div>
+
+      {disabled && disabledReason ? (
+        <p className="mt-3 rounded-xl border border-line bg-black/20 px-3 py-2 text-xs text-ink-muted">
+          {disabledReason}
+        </p>
+      ) : null}
+
+      {error ? (
+        <div className="mt-3">
+          <ErrorBanner
+            message="投稿できませんでした"
+            detail={error}
+            onDismiss={() => {
+              setError(null);
+            }}
+          />
+        </div>
+      ) : null}
+    </form>
+  );
+}
