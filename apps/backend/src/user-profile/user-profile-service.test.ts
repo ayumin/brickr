@@ -83,13 +83,13 @@ describe("UserProfileService.update", () => {
   it("cannot change the handle, which is fixed at signup (§66.1)", async () => {
     const { service } = makeService([hanako]);
 
-    const updated = await service.update("user-1", {
-      displayName: "変更後",
-      description: "",
-      // Present on the request type only as an accident of shape; ignored here.
-    });
-
-    expect(updated.handle).toBe("hanako");
+    await expect(
+      service.update("user-1", {
+        displayName: "変更後",
+        description: "",
+        // Present on the request type only as an accident of shape; ignored here.
+      }),
+    ).resolves.toMatchObject({ handle: "hanako" });
   });
 
   it("only touches the account it was given", async () => {
