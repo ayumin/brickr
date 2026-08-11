@@ -215,9 +215,11 @@ export function UserProfileEditor({
           {section === "my-usage" ? (
             <MyUsagePanel usage={myUsage} loading={loadingMyUsage} error={myUsageError} />
           ) : null}
-          {section === "environment" ? <EnvironmentPanel settings={settings} loading={loadingSettings} onUpdated={setSettings} /> : null}
-          {section === "models" ? <ModelsPanel settings={settings} loading={loadingSettings} /> : null}
-          {section === "usage" ? <UsagePanel settings={settings} loading={loadingSettings} /> : null}
+          {isAdmin && section === "environment" ? (
+            <EnvironmentPanel settings={settings} loading={loadingSettings} onUpdated={setSettings} />
+          ) : null}
+          {isAdmin && section === "models" ? <ModelsPanel settings={settings} loading={loadingSettings} /> : null}
+          {isAdmin && section === "usage" ? <UsagePanel settings={settings} loading={loadingSettings} /> : null}
         </main>
       </div>
     </div>
@@ -425,7 +427,9 @@ function MyUsagePanel({
   loading: boolean;
   error: string | null;
 }) {
-  if (loading) return <p className="py-12 text-center text-sm text-ink-muted">消費トークンを読み込んでいます…</p>;
+  if (loading) {
+    return <p className="py-12 text-center text-sm text-ink-muted">消費トークンを読み込んでいます…</p>;
+  }
   if (error) {
     return <ErrorBanner message="消費トークンを取得できませんでした" detail={error} />;
   }
