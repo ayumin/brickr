@@ -60,7 +60,7 @@ describe("api-client", () => {
 
     it("should reject paths with :// (protocol indicators)", async () => {
       try {
-        await api.health();
+        await request("/api/data?url=ftp://evil.com");
         expect.fail("Should have thrown an error");
       } catch (error) {
         expect(error).toBeInstanceOf(Error);
