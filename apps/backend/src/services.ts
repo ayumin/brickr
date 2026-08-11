@@ -1,5 +1,7 @@
 import { AgentService } from "./agents/agent-service.js";
 import { AuthService } from "./auth/auth-service.js";
+import { InviteCodeRepository } from "./auth/invite-code-repository.js";
+import { InviteCodeService } from "./auth/invite-code-service.js";
 import { SessionRepository } from "./auth/session-repository.js";
 import { UserAccountRepository } from "./auth/user-account-repository.js";
 import { UserAdminService } from "./auth/user-admin-service.js";
@@ -33,6 +35,7 @@ import { RuntimeSettings } from "./settings/runtime-settings.js";
 export type AppServices = {
   auth: AuthService;
   userAdmin: UserAdminService;
+  inviteCodes: InviteCodeService;
   handles: HandleService;
   characters: CharacterService;
   modelProfiles: ModelProfileService;
@@ -58,6 +61,7 @@ export async function buildServices(db: Db, logger: SimulationLogger): Promise<A
   const applicationSettingRepository = new ApplicationSettingRepository(db);
   const userAccountRepository = new UserAccountRepository(db);
   const sessionRepository = new SessionRepository(db);
+  const inviteCodeRepository = new InviteCodeRepository(db);
   const handleRepository = new HandleRepository(db);
   const runtime = new RuntimeSettings();
 
@@ -125,6 +129,7 @@ export async function buildServices(db: Db, logger: SimulationLogger): Promise<A
       sessionTtlMs: env.auth.sessionTtlMs,
     }),
     userAdmin: new UserAdminService(userAccountRepository, sessionRepository),
+    inviteCodes: new InviteCodeService(inviteCodeRepository),
     handles: new HandleService(
       handleRepository,
       characterRepository,

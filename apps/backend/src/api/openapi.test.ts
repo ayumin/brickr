@@ -17,6 +17,7 @@ const expectedPaths = [
   "/api/users/{id}/reset-password",
   "/api/users/{id}/characters",
   "/api/users/{id}/token-usage",
+  "/api/invite-codes",
   "/api/handles/{handle}",
   "/api/application-settings",
   "/api/characters",

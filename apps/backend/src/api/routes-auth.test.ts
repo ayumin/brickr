@@ -71,7 +71,7 @@ const publicRoutes = [
   "/api/auth/session",
 ];
 
-/** Every route that requires admin access (§66.7, §66.15, §66.16). */
+/** Every route that requires admin access (§66.7, §66.9, §66.15, §66.16). */
 const adminRoutes = [
   // User-management routes (§66.7, §66.15)
   { method: "GET" as const, url: "/api/users/management", payload: undefined },
@@ -88,6 +88,9 @@ const adminRoutes = [
     url: "/api/application-settings",
     payload: { overrides: { LLM_TIMEOUT_MS: "5000" } },
   },
+  // Invite-code routes (§66.9, §66.15)
+  { method: "POST" as const, url: "/api/invite-codes", payload: {}, expectedStatus: 201 },
+  { method: "GET" as const, url: "/api/invite-codes", payload: undefined },
 ];
 
 function makeServices(): AppServices {
@@ -130,6 +133,11 @@ function makeServices(): AppServices {
     applicationSettings: {
       get: () => Promise.resolve({ environment: [], llm: {} }),
       update: () => Promise.resolve({ environment: [], llm: {} }),
+    },
+    inviteCodes: {
+      issue: () =>
+        Promise.resolve({ code: "abc123", issuedById: "admin-1", createdAt: new Date() }),
+      list: () => Promise.resolve([]),
     },
   } as unknown as AppServices;
 }
@@ -288,7 +296,7 @@ describe("admin-only endpoints while signed in as an admin", () => {
     await Promise.all(apps.splice(0).map((app) => app.close()));
   });
 
-  it.each(adminRoutes)("allows $method $url", async ({ method, url, payload }) => {
+  it.each(adminRoutes)("allows $method $url", async ({ method, url, payload, expectedStatus }) => {
     const app = await buildApp(adminUser);
     apps.push(app);
 
@@ -298,7 +306,7 @@ describe("admin-only endpoints while signed in as an admin", () => {
       ...(payload === undefined ? {} : { payload }),
     });
 
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode).toBe(expectedStatus ?? 200);
   });
 
   it("passes page and search through to the service", async () => {
@@ -346,5 +354,43 @@ describe("admin-only endpoints while signed in as an admin", () => {
     const response = await app.inject({ method: "GET", url: "/api/users/nobody" });
 
     expect(response.statusCode).toBe(404);
+  });
+
+  it("issues the code as the signed-in admin", async () => {
+    const app = Fastify();
+    apps.push(app);
+    app.decorateRequest("currentUser", null);
+    app.addHook("onRequest", async (request) => {
+      request.currentUser = adminUser;
+    });
+    let issuedBy: string | undefined;
+    const services = {
+      ...makeServices(),
+      inviteCodes: {
+        issue: (issuedById: string) => {
+          issuedBy = issuedById;
+          return Promise.resolve({ code: "abc123", issuedById, createdAt: new Date() });
+        },
+        list: () => Promise.resolve([]),
+      },
+    } as unknown as AppServices;
+    await registerRoutes(app, services);
+    await app.ready();
+
+    const response = await app.inject({ method: "POST", url: "/api/invite-codes", payload: {} });
+
+    expect(response.statusCode).toBe(201);
+    expect(issuedBy).toBe(adminUser.id);
+  });
+
+  // OpenAPI marks the whole body optional, so omitting it entirely (not just
+  // sending `{}`) must succeed too — regression coverage for #24 review (!13).
+  it("issues a non-expiring code when the request has no body at all", async () => {
+    const app = await buildApp(adminUser);
+    apps.push(app);
+
+    const response = await app.inject({ method: "POST", url: "/api/invite-codes" });
+
+    expect(response.statusCode).toBe(201);
   });
 });

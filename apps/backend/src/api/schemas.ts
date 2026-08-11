@@ -196,3 +196,7 @@ export const userManagementQuerySchema = z.object({
   page: z.coerce.number().int().min(1).optional(),
   search: z.string().trim().min(1).max(254).optional(),
 });
+
+export const createInviteCodeSchema = z.object({
+  expiresInDays: z.number().int().min(1).max(365).optional(),
+});

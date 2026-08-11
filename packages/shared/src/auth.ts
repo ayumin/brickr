@@ -95,7 +95,6 @@ export type UserDetailResponse = {
   user: UserManagementDto;
 };
 
-
 /** The temporary password is returned once, for the admin to relay out of band (§66.10). */
 export type ResetPasswordResponse = {
   temporaryPassword: string;
@@ -111,4 +110,31 @@ export type UserTokenUsageResponse = {
   totalInputTokens: number;
   totalOutputTokens: number;
   totalTokens: number;
+};
+
+/** Derived from `usedById`/`expiresAt`, not stored — one less thing that can drift (§66.9). */
+export type InviteCodeStatus = "unused" | "used" | "expired";
+
+/** Admin-only view of an invite code (§66.9, §66.15). The code itself is never hashed. */
+export type InviteCodeDto = {
+  code: string;
+  issuedById: string;
+  usedById?: string;
+  usedAt?: string;
+  expiresAt?: string;
+  createdAt: string;
+  status: InviteCodeStatus;
+};
+
+export type CreateInviteCodeRequest = {
+  /** Omit for a code that never expires. */
+  expiresInDays?: number;
+};
+
+export type CreateInviteCodeResponse = {
+  inviteCode: InviteCodeDto;
+};
+
+export type InviteCodesResponse = {
+  inviteCodes: InviteCodeDto[];
 };
