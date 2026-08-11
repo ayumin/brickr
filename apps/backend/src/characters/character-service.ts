@@ -47,15 +47,22 @@ export function toCharacterDto(character: Character): CharacterDto {
 export type CharacterActor = Pick<UserAccount, "id" | "isAdmin">;
 
 /**
- * `createdByUserId` rides along only for the creator or an admin — never for
- * anyone else, and never for a System-owned (seed) character, which has none.
+ * Whether `createdByUserId` may be shown to this viewer: the creator or an
+ * admin — never anyone else, and never for a System-owned (seed) character,
+ * which has none (CLAUDE.md §66.5).
  */
+function canSeeOwner(
+  character: Pick<Character, "createdByUserId">,
+  viewer: CharacterActor | null,
+): boolean {
+  return viewer !== null && (viewer.isAdmin || viewer.id === character.createdByUserId);
+}
+
 export function toCharacterConfigDto(
   character: Character,
   viewer: CharacterActor | null,
 ): CharacterConfigDto {
-  const canSeeOwner =
-    viewer !== null && (viewer.isAdmin || viewer.id === character.createdByUserId);
+  const ownerVisible = canSeeOwner(character, viewer);
   return {
     ...toCharacterDto(character),
     rolePrompt: character.rolePrompt,
@@ -68,7 +75,7 @@ export function toCharacterConfigDto(
     quoteProbability: character.quoteProbability,
     influence: character.influence,
     modelProfileId: character.modelProfileId,
-    ...(canSeeOwner && character.createdByUserId
+    ...(ownerVisible && character.createdByUserId
       ? { createdByUserId: character.createdByUserId }
       : {}),
   };
@@ -77,7 +84,9 @@ export function toCharacterConfigDto(
 export function toCharacterManagementDto(
   character: Character,
   postCount: number,
+  viewer: CharacterActor | null = null,
 ): CharacterManagementDto {
+  const ownerVisible = canSeeOwner(character, viewer);
   return {
     ...toCharacterDto(character),
     isDeleted: Boolean(character.deletedAt),
@@ -88,6 +97,9 @@ export function toCharacterManagementDto(
     quoteProbability: character.quoteProbability,
     influence: character.influence,
     modelProfileId: character.modelProfileId,
+    ...(ownerVisible && character.createdByUserId
+      ? { createdByUserId: character.createdByUserId }
+      : {}),
   };
 }
 
@@ -144,24 +156,27 @@ export class CharacterService {
     return all.map(toCharacterDto);
   }
 
-  async listManagementDtos(): Promise<CharacterManagementDto[]> {
+  async listManagementDtos(viewer: CharacterActor | null = null): Promise<CharacterManagementDto[]> {
     const all = await this.characters.findAllIncludingDeleted();
     const postCounts = await this.characters.countPostsByCharacterIds(
       all.map((character) => character.id),
     );
     return all.map((character) =>
-      toCharacterManagementDto(character, postCounts.get(character.id) ?? 0),
+      toCharacterManagementDto(character, postCounts.get(character.id) ?? 0, viewer),
     );
   }
 
   /** Admin drilldown onto one user's Characters (§66.5, §66.15). */
-  async listManagementDtosByCreator(userId: string): Promise<CharacterManagementDto[]> {
+  async listManagementDtosByCreator(
+    userId: string,
+    viewer: CharacterActor | null = null,
+  ): Promise<CharacterManagementDto[]> {
     const all = await this.characters.findAllIncludingDeletedByCreatedByUserId(userId);
     const postCounts = await this.characters.countPostsByCharacterIds(
       all.map((character) => character.id),
     );
     return all.map((character) =>
-      toCharacterManagementDto(character, postCounts.get(character.id) ?? 0),
+      toCharacterManagementDto(character, postCounts.get(character.id) ?? 0, viewer),
     );
   }
 

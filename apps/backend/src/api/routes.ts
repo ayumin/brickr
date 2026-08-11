@@ -204,7 +204,8 @@ export async function registerRoutes(
   });
 
   app.get("/api/users/:id/characters", async (request, reply) => {
-    if (!requireAdmin(request, reply)) return reply;
+    const admin = requireAdmin(request, reply);
+    if (!admin) return reply;
 
     const params = idParams.safeParse(request.params);
     if (!params.success) {
@@ -212,7 +213,9 @@ export async function registerRoutes(
     }
     const user = await services.userAdmin.findById(params.data.id);
     if (!user) return sendError(reply, 404, "not_found", "user not found");
-    return { characters: await services.characters.listManagementDtosByCreator(params.data.id) };
+    return {
+      characters: await services.characters.listManagementDtosByCreator(params.data.id, admin),
+    };
   });
 
   app.get("/api/users/:id/token-usage", async (request, reply) => {
@@ -298,8 +301,8 @@ export async function registerRoutes(
     characters: await services.characters.listDtos(),
   }));
 
-  app.get("/api/characters/management", async () => ({
-    characters: await services.characters.listManagementDtos(),
+  app.get("/api/characters/management", async (request) => ({
+    characters: await services.characters.listManagementDtos(request.currentUser),
   }));
 
   app.get("/api/characters/export", async () => services.characters.exportCsv());
