@@ -2,7 +2,7 @@
 export type Post = {
   id: string;
   simulationId: string;
-  /** Character id, or `USER_AUTHOR_ID` for the human user. */
+  /** Character id, or the id of the user account that wrote the post (§66.3). */
   authorId: string;
   content: string;
   imageUrl?: string;

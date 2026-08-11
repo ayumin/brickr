@@ -323,18 +323,27 @@ export async function registerRoutes(
     modelProfiles: await services.modelProfiles.listDtos(),
   }));
 
-  app.get("/api/user-profile", async () => ({
-    profile: await services.userProfile.get(),
-  }));
+  app.get("/api/user-profile", async (request, reply) => {
+    const user = requireUser(request, reply);
+    if (!user) return reply;
+
+    const profile = await services.userProfile.get(user.id);
+    // A live session whose account has gone is not a server fault.
+    if (!profile) return sendError(reply, 404, "not_found", "user profile not found");
+
+    return { profile };
+  });
 
   app.put("/api/user-profile", async (request, reply) => {
-    if (!requireUser(request, reply)) return reply;
+    const user = requireUser(request, reply);
+    if (!user) return reply;
 
     const body = saveUserProfileSchema.safeParse(request.body);
     if (!body.success) {
       return sendError(reply, 400, "invalid_body", "user profile is invalid", body.error.issues);
     }
-    return { profile: await services.userProfile.update(body.data) };
+    // Always the session user's own id, so one account cannot edit another.
+    return { profile: await services.userProfile.update(user.id, body.data) };
   });
 
   // -- simulations ----------------------------------------------------------
@@ -398,7 +407,8 @@ export async function registerRoutes(
   );
 
   app.post("/api/simulations/:id/posts", async (request, reply) => {
-    if (!requireUser(request, reply)) return reply;
+    const user = requireUser(request, reply);
+    if (!user) return reply;
 
     const params = idParams.safeParse(request.params);
     if (!params.success) {
@@ -413,6 +423,7 @@ export async function registerRoutes(
     try {
       const post = await services.simulations.submitUserPost({
         simulationId: params.data.id,
+        authorId: user.id,
         content: body.data.content,
         imageUrl: body.data.imageUrl,
         responderIds: body.data.responderIds ?? [],

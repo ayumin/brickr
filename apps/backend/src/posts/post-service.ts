@@ -1,9 +1,10 @@
-import { USER_HANDLE, type PostDto } from "@brickr/shared";
+import type { PostDto } from "@brickr/shared";
 import type { CharacterRepository } from "../characters/character-repository.js";
 import type { Character } from "../characters/character.js";
 import type { UserProfileRepository } from "../user-profile/user-profile-repository.js";
+import type { UserProfile } from "../user-profile/user-profile.js";
 import { resolveKnownMentions } from "./mention-parser.js";
-import { toPostDto, toPostDtos } from "./post-mapper.js";
+import { indexUsersById, toPostDto, toPostDtos } from "./post-mapper.js";
 import type { NewPost, Post } from "./post.js";
 import type { PostRepository } from "./post-repository.js";
 
@@ -28,10 +29,15 @@ export class PostService {
   ) {}
 
   async publish(input: PublishInput): Promise<Post> {
-    const known = await this.characters.findAll();
+    // Both halves of the shared handle namespace can be mentioned, so a post
+    // naming another user resolves the same way as one naming a character.
+    const [known, userHandles] = await Promise.all([
+      this.characters.findAll(),
+      this.userProfiles.listHandles(),
+    ]);
     const mentions = resolveKnownMentions(
       input.content,
-      [USER_HANDLE, ...known.map((character) => character.handle)],
+      [...userHandles, ...known.map((character) => character.handle)],
     );
 
     const newPost: NewPost = {
@@ -52,22 +58,32 @@ export class PostService {
   }
 
   async listBySimulation(simulationId: string): Promise<PostDto[]> {
-    const [posts, characters, userProfile] = await Promise.all([
-      this.posts.findBySimulation(simulationId),
+    const posts = await this.posts.findBySimulation(simulationId);
+    // Only the authors present in this page are loaded, rather than every
+    // account in the database.
+    const [characters, users] = await Promise.all([
       this.characters.findAllIncludingDeleted(),
-      this.userProfiles.get(),
+      this.userProfiles.findByIds(posts.map((post) => post.authorId)),
     ]);
-    return toPostDtos(posts, indexById(characters), userProfile);
+    return toPostDtos(posts, indexById(characters), indexUsersById(users));
   }
 
   /** Maps one post, loading its quoted post if it has one. */
   async toDto(post: Post): Promise<PostDto> {
-    const [characters, quoted, userProfile] = await Promise.all([
+    const quoted = post.quoteOf ? await this.posts.findById(post.quoteOf) : null;
+    const [characters, users] = await Promise.all([
       this.characters.findAllIncludingDeleted(),
-      post.quoteOf ? this.posts.findById(post.quoteOf) : Promise.resolve(null),
-      this.userProfiles.get(),
+      this.userProfiles.findByIds([
+        post.authorId,
+        ...(quoted ? [quoted.authorId] : []),
+      ]),
     ]);
-    return toPostDto(post, indexById(characters), quoted, userProfile);
+    return toPostDto(post, indexById(characters), quoted, indexUsersById(users));
+  }
+
+  /** Author handles for a thread, used to render the LLM transcript (§66.3). */
+  async findUsersByIds(ids: string[]): Promise<UserProfile[]> {
+    return this.userProfiles.findByIds(ids);
   }
 }
 
