@@ -8,6 +8,7 @@ import {
   InviteCodeInvalidError,
   UnderageSignupError,
 } from "../auth/auth-errors.js";
+import { requireUser } from "../auth/auth-context.js";
 import type { IssuedSession } from "../auth/auth-service.js";
 import {
   readSessionCookie,
@@ -161,7 +162,12 @@ export async function registerRoutes(
 
   app.post(
     "/api/characters/import",
-    { bodyLimit: 50 * 1024 * 1024 },
+    {
+      bodyLimit: 50 * 1024 * 1024,
+      onRequest: async (request, reply) => {
+        requireUser(request, reply);
+      },
+    },
     async (request, reply) => {
       const body = importCharactersCsvSchema.safeParse(request.body);
       if (!body.success) {
@@ -199,6 +205,8 @@ export async function registerRoutes(
   });
 
   app.post("/api/characters", async (request, reply) => {
+    if (!requireUser(request, reply)) return reply;
+
     const body = saveCharacterSchema.safeParse(request.body);
     if (!body.success) {
       return sendError(reply, 400, "invalid_body", "character body is invalid", body.error.issues);
@@ -212,6 +220,8 @@ export async function registerRoutes(
   });
 
   app.post("/api/characters/bulk-create", async (request, reply) => {
+    if (!requireUser(request, reply)) return reply;
+
     const body = bulkCreateCharactersSchema.safeParse(request.body);
     if (!body.success) {
       return sendError(
@@ -237,6 +247,8 @@ export async function registerRoutes(
   });
 
   app.put("/api/characters/:id", async (request, reply) => {
+    if (!requireUser(request, reply)) return reply;
+
     const params = idParams.safeParse(request.params);
     if (!params.success) {
       return sendError(reply, 400, "invalid_params", "character id is invalid");
@@ -253,6 +265,8 @@ export async function registerRoutes(
   });
 
   app.delete("/api/characters/:id", async (request, reply) => {
+    if (!requireUser(request, reply)) return reply;
+
     const params = idParams.safeParse(request.params);
     if (!params.success) {
       return sendError(reply, 400, "invalid_params", "character id is invalid");
@@ -274,6 +288,8 @@ export async function registerRoutes(
   });
 
   app.post("/api/characters/:id/restore", async (request, reply) => {
+    if (!requireUser(request, reply)) return reply;
+
     const params = idParams.safeParse(request.params);
     if (!params.success) {
       return sendError(reply, 400, "invalid_params", "character id is invalid");
@@ -286,6 +302,8 @@ export async function registerRoutes(
   });
 
   app.post("/api/characters/bulk-delete", async (request, reply) => {
+    if (!requireUser(request, reply)) return reply;
+
     const body = bulkDeleteCharactersSchema.safeParse(request.body);
     if (!body.success) {
       return sendError(
@@ -313,6 +331,8 @@ export async function registerRoutes(
   }));
 
   app.put("/api/user-profile", async (request, reply) => {
+    if (!requireUser(request, reply)) return reply;
+
     const body = saveUserProfileSchema.safeParse(request.body);
     if (!body.success) {
       return sendError(reply, 400, "invalid_body", "user profile is invalid", body.error.issues);
@@ -327,6 +347,8 @@ export async function registerRoutes(
   }));
 
   app.post("/api/simulations", async (request, reply) => {
+    if (!requireUser(request, reply)) return reply;
+
     const body = createSimulationSchema.safeParse(request.body ?? {});
     if (!body.success) {
       return sendError(reply, 400, "invalid_body", "title is invalid", body.error.issues);
@@ -341,6 +363,8 @@ export async function registerRoutes(
   );
 
   app.put("/api/simulations/:id", async (request, reply) => {
+    if (!requireUser(request, reply)) return reply;
+
     const body = updateSimulationSchema.safeParse(request.body);
     if (!body.success) {
       return sendError(reply, 400, "invalid_body", "title is invalid", body.error.issues);
@@ -356,17 +380,19 @@ export async function registerRoutes(
     })),
   );
 
-  app.post("/api/simulations/:id/stop", async (request, reply) =>
-    withSimulation(request, reply, async (id) => ({
+  app.post("/api/simulations/:id/stop", async (request, reply) => {
+    if (!requireUser(request, reply)) return reply;
+    return withSimulation(request, reply, async (id) => ({
       simulation: await services.simulations.stop(id),
-    })),
-  );
+    }));
+  });
 
-  app.post("/api/simulations/:id/resume", async (request, reply) =>
-    withSimulation(request, reply, async (id) => ({
+  app.post("/api/simulations/:id/resume", async (request, reply) => {
+    if (!requireUser(request, reply)) return reply;
+    return withSimulation(request, reply, async (id) => ({
       simulation: await services.simulations.resume(id),
-    })),
-  );
+    }));
+  });
 
   // -- posts ----------------------------------------------------------------
 
@@ -377,6 +403,8 @@ export async function registerRoutes(
   );
 
   app.post("/api/simulations/:id/posts", async (request, reply) => {
+    if (!requireUser(request, reply)) return reply;
+
     const params = idParams.safeParse(request.params);
     if (!params.success) {
       return sendError(reply, 400, "invalid_params", "simulation id is invalid");
