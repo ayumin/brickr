@@ -154,7 +154,7 @@ function validatePath(path: string): void {
   }
 }
 
-async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   validatePath(path);
 
   const { method = "GET", body, signal } = options;
