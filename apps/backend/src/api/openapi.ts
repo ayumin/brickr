@@ -164,7 +164,7 @@ export const openApiDocument: OpenAPIV3.Document = {
             in: "path",
             required: true,
             description: "Handle without the `@`, lower-cased",
-            schema: { type: "string", pattern: "^[a-z0-9_]{1,32}$" },
+            schema: { type: "string", pattern: "^@?[A-Za-z0-9_]{1,32}$" },
           },
         ],
         responses: {
