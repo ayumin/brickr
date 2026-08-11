@@ -23,6 +23,7 @@ import {
 import { api } from "../../services/api-client";
 import type { Theme } from "../../services/theme";
 import type { ConnectionState, TimelineView } from "../../types";
+import { useAuth } from "../auth/AuthContext";
 import { CharacterPicker } from "../characters/CharacterPicker";
 import { CharacterEditor } from "../characters/CharacterEditor";
 import { CharacterList } from "../characters/CharacterList";
@@ -133,6 +134,9 @@ export function SimulationView({
   bootstrapError,
   onDismissBootstrapError,
 }: SimulationViewProps) {
+  const { user } = useAuth();
+  const isAdmin = user?.isAdmin ?? false;
+
   const [streamEnabled, setStreamEnabled] = useState(true);
   const events = useSimulationEvents(simulation.id, streamEnabled);
 
@@ -496,6 +500,8 @@ export function SimulationView({
         <SimulationPicker
           simulations={simulations}
           currentId={simulation.id}
+          currentUserId={userProfile.id}
+          isAdmin={isAdmin}
           loading={simulationsLoading}
           error={simulationsError}
           onRetry={onReloadSimulations}
@@ -780,6 +786,8 @@ export function SimulationView({
           {view.kind === "characters" ? (
             <CharacterList
               characters={characters}
+              currentUserId={userProfile.id}
+              isAdmin={isAdmin}
               loading={charactersLoading}
               onCreate={() => setEditor({ characterId: null })}
               onEdit={(character) => setEditor({ characterId: character.id })}
@@ -791,6 +799,8 @@ export function SimulationView({
             <SimulationList
               simulations={simulations}
               currentId={simulation.id}
+              currentUserId={userProfile.id}
+              isAdmin={isAdmin}
               loading={simulationsLoading}
               error={simulationsError}
               onRetry={onReloadSimulations}

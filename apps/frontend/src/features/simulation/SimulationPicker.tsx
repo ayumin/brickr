@@ -4,6 +4,7 @@ import type { SimulationSummaryDto } from "@brickr/shared";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { Icon } from "../../components/Icon";
 import { Spinner } from "../../components/Spinner";
+import { canManageSimulation, simulationCreatorLabel } from "./simulation-ownership";
 
 const PAGE_SIZE = 100;
 
@@ -19,6 +20,8 @@ function formatDate(value: string): string {
 export type SimulationPickerProps = {
   simulations: SimulationSummaryDto[];
   currentId: string;
+  currentUserId: string;
+  isAdmin: boolean;
   loading: boolean;
   error: string | null;
   onRetry: () => void;
@@ -31,6 +34,8 @@ export type SimulationPickerProps = {
 export function SimulationPicker({
   simulations,
   currentId,
+  currentUserId,
+  isAdmin,
   loading,
   error,
   onRetry,
@@ -83,6 +88,7 @@ export function SimulationPicker({
         <ul className="max-h-[60vh] overflow-y-auto p-2 lg:max-h-[calc(100dvh-16rem)]">
           {simulations.slice(0, visibleCount).map((item) => {
             const selected = item.id === currentId;
+            const canManage = canManageSimulation(item, currentUserId, isAdmin);
             return (
               <li key={item.id}>
                 <div
@@ -96,10 +102,13 @@ export function SimulationPicker({
                   </button>
                   <span className="mt-0.5 flex items-center gap-2 text-[11px] text-ink-faint">
                     <span>{formatDate(item.createdAt)}</span>
+                    <span>作成者: {simulationCreatorLabel(item, currentUserId)}</span>
                     <span className="ml-auto">{item.postCount.toLocaleString("ja-JP")}件</span>
-                    <button type="button" onClick={() => onRename(item)} title="名前を変更" aria-label={`${item.title ?? "無題のシミュレーション"}の名前を変更`} className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-surface-raised hover:text-ink">
-                      <Icon name="pencil" />
-                    </button>
+                    {canManage ? (
+                      <button type="button" onClick={() => onRename(item)} title="名前を変更" aria-label={`${item.title ?? "無題のシミュレーション"}の名前を変更`} className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-surface-raised hover:text-ink">
+                        <Icon name="pencil" />
+                      </button>
+                    ) : null}
                     <button type="button" disabled={busy || selected} onClick={() => void run(() => onSelect(item.id))} title={selected ? "表示中" : "このシミュレーションを開く"} aria-label={selected ? "表示中" : "このシミュレーションを開く"} className="flex h-7 w-7 items-center justify-center rounded-full text-accent hover:bg-accent/10 disabled:text-ink-faint">
                       <Icon name="box-arrow-in-right" />
                     </button>

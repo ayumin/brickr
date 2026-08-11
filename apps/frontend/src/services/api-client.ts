@@ -93,6 +93,11 @@ export function isUnauthorizedError(error: unknown): boolean {
   return error instanceof ApiError && error.status === 401;
 }
 
+/** True when the backend rejected the request as not permitted for a signed-in caller. */
+export function isForbiddenError(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 403;
+}
+
 /** Human readable message for anything we might catch in the UI. */
 export function toErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
