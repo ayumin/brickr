@@ -47,9 +47,9 @@ export const openApiDocument: OpenAPIV3.Document = {
     version: "0.1.0",
     description:
       "Brickr — Post something. Watch the AIs bicker. Backend REST and Server-Sent Events API.\n\n" +
-      "Write operations (creating posts, simulations and characters, and editing the user profile) " +
-      "require the session cookie issued by `/api/auth/login` or `/api/auth/signup`, and answer 401 " +
-      "without it. Reads and the event stream are public.",
+      "Write operations (creating, updating and deleting posts, simulations and characters, and " +
+      "editing the user profile) require the session cookie issued by `/api/auth/login` or " +
+      "`/api/auth/signup`, and answer 401 without it. Reads and the event stream are public.",
   },
   servers: [{ url: "/", description: "Current Backend origin" }],
   tags: [
