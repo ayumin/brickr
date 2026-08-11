@@ -6,6 +6,10 @@ import { registerRoutes } from "./routes.js";
 
 const expectedPaths = [
   "/api/health",
+  "/api/auth/session",
+  "/api/auth/signup",
+  "/api/auth/login",
+  "/api/auth/logout",
   "/api/application-settings",
   "/api/characters",
   "/api/characters/management",
