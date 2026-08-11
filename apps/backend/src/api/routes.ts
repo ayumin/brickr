@@ -343,7 +343,10 @@ export async function registerRoutes(
       return sendError(reply, 400, "invalid_body", "user profile is invalid", body.error.issues);
     }
     // Always the session user's own id, so one account cannot edit another.
-    return { profile: await services.userProfile.update(user.id, body.data) };
+    const profile = await services.userProfile.update(user.id, body.data);
+    // A live session whose account has gone is not a server fault.
+    if (!profile) return sendError(reply, 404, "not_found", "user profile not found");
+    return { profile };
   });
 
   // -- simulations ----------------------------------------------------------

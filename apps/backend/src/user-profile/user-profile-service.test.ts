@@ -9,9 +9,9 @@ function makeService(initial: UserProfile[]) {
   const repository = {
     findById: (id: string): Promise<UserProfile | null> =>
       Promise.resolve(profiles.get(id) ?? null),
-    update: (id: string, input: SaveUserProfile): Promise<UserProfile> => {
+    update: (id: string, input: SaveUserProfile): Promise<UserProfile | null> => {
       const existing = profiles.get(id);
-      if (!existing) return Promise.reject(new Error(`no profile ${id}`));
+      if (!existing) return Promise.resolve(null);
       const updated = { ...existing, ...input };
       profiles.set(id, updated);
       return Promise.resolve(updated);
@@ -98,5 +98,13 @@ describe("UserProfileService.update", () => {
     await service.update("user-1", { displayName: "変更後", description: "" });
 
     expect(profiles.get("user-2")).toEqual(taro);
+  });
+
+  it("returns null when the profile row no longer exists", async () => {
+    const { service } = makeService([hanako]);
+
+    await expect(
+      service.update("nobody", { displayName: "変更後", description: "" }),
+    ).resolves.toBeNull();
   });
 });

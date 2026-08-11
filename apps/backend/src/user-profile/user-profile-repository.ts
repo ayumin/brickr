@@ -1,5 +1,5 @@
 import { USER_HANDLE } from "@brickr/shared";
-import type { Db } from "../persistence/prisma.js";
+import { isRecordNotFoundError, type Db } from "../persistence/prisma.js";
 import type { SaveUserProfile, UserProfile } from "./user-profile.js";
 
 type UserProfileRow = {
@@ -65,16 +65,21 @@ export class UserProfileRepository {
     return rows.flatMap((row) => (row.handle ? [row.handle] : []));
   }
 
-  async update(id: string, input: SaveUserProfile): Promise<UserProfile> {
-    const row = await this.db.userProfile.update({
-      where: { id },
-      data: {
-        displayName: input.displayName,
-        description: input.description,
-        avatarUrl: input.avatarUrl ?? null,
-      },
-      select: SELECT,
-    });
-    return toUserProfile(row);
+  async update(id: string, input: SaveUserProfile): Promise<UserProfile | null> {
+    try {
+      const row = await this.db.userProfile.update({
+        where: { id },
+        data: {
+          displayName: input.displayName,
+          description: input.description,
+          avatarUrl: input.avatarUrl ?? null,
+        },
+        select: SELECT,
+      });
+      return toUserProfile(row);
+    } catch (error) {
+      if (isRecordNotFoundError(error)) return null;
+      throw error;
+    }
   }
 }

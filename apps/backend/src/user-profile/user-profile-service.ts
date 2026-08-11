@@ -16,13 +16,13 @@ export class UserProfileService {
     return profile ? toUserProfileDto(profile) : null;
   }
 
-  async update(id: string, input: SaveUserProfileRequest): Promise<UserProfileDto> {
+  async update(id: string, input: SaveUserProfileRequest): Promise<UserProfileDto | null> {
     const profile = await this.profiles.update(id, {
       displayName: input.displayName,
       description: input.description,
       ...(input.avatarUrl ? { avatarUrl: input.avatarUrl } : {}),
     });
-    return toUserProfileDto(profile);
+    return profile ? toUserProfileDto(profile) : null;
   }
 }
 
