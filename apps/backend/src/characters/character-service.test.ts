@@ -511,6 +511,51 @@ describe("CharacterService ownership (CLAUDE.md §66.5)", () => {
     expect(forSignedOut).not.toHaveProperty("createdByUserId");
   });
 
+  it("includes createdByUserId in the management list only for the creator's own row", async () => {
+    const owned = makeCharacter("character-owned", { ...REQUEST, handle: "owned" });
+    const someoneElses = makeCharacter(
+      "character-other",
+      { ...REQUEST, handle: "someone-elses" },
+      OTHER_USER.id,
+    );
+    const { service } = makeService([owned, someoneElses]);
+
+    const listed = await service.listManagementDtos(OWNER);
+    const ownRow = listed.find((character) => character.id === owned.id);
+    const otherRow = listed.find((character) => character.id === someoneElses.id);
+
+    expect(ownRow?.createdByUserId).toBe(OWNER.id);
+    expect(otherRow).not.toHaveProperty("createdByUserId");
+  });
+
+  it("includes createdByUserId for every row in the management list for an admin", async () => {
+    const owned = makeCharacter("character-owned", { ...REQUEST, handle: "owned" });
+    const someoneElses = makeCharacter(
+      "character-other",
+      { ...REQUEST, handle: "someone-elses" },
+      OTHER_USER.id,
+    );
+    const { service } = makeService([owned, someoneElses]);
+
+    const listed = await service.listManagementDtos(ADMIN);
+
+    expect(listed.find((character) => character.id === owned.id)?.createdByUserId).toBe(
+      OWNER.id,
+    );
+    expect(listed.find((character) => character.id === someoneElses.id)?.createdByUserId).toBe(
+      OTHER_USER.id,
+    );
+  });
+
+  it("omits createdByUserId from every row in the management list when signed out", async () => {
+    const owned = makeCharacter("character-owned", { ...REQUEST, handle: "owned" });
+    const { service } = makeService([owned]);
+
+    const [row] = await service.listManagementDtos();
+
+    expect(row).not.toHaveProperty("createdByUserId");
+  });
+
   it("lists only the characters a given user created, including their deleted ones", async () => {
     const ownedActive = makeCharacter("character-owned", { ...REQUEST, handle: "owned" });
     const ownedDeleted = {
@@ -529,5 +574,14 @@ describe("CharacterService ownership (CLAUDE.md §66.5)", () => {
     expect(listed.map((character) => character.id).sort()).toEqual(
       [ownedActive.id, ownedDeleted.id].sort(),
     );
+  });
+
+  it("includes createdByUserId in the admin drilldown list, viewed by the admin doing the drilldown", async () => {
+    const owned = makeCharacter("character-owned", { ...REQUEST, handle: "owned" });
+    const { service } = makeService([owned]);
+
+    const [row] = await service.listManagementDtosByCreator(OWNER.id, ADMIN);
+
+    expect(row?.createdByUserId).toBe(OWNER.id);
   });
 });

@@ -42,6 +42,8 @@ export type CharacterManagementDto = CharacterDto & {
   quoteProbability: number;
   influence: number;
   modelProfileId: string;
+  /** Only present for the creator or an admin (CLAUDE.md §66.5); omitted, not null, otherwise. */
+  createdByUserId?: string;
 };
 
 export type CharacterManagementResponse = {

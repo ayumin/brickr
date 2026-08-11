@@ -1078,6 +1078,11 @@ export const openApiDocument: OpenAPIV3.Document = {
               quoteProbability: { type: "number", minimum: 0, maximum: 1 },
               influence: { type: "number", minimum: 0, maximum: 1 },
               modelProfileId: { type: "string" },
+              createdByUserId: {
+                type: "string",
+                description:
+                  "Present only for the creator or an admin (CLAUDE.md 66.5); omitted for everyone else and for System-owned (seed) characters.",
+              },
             },
           },
         ],
