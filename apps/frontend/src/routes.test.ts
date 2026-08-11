@@ -33,6 +33,19 @@ describe("matchRoute", () => {
     expect(matchRoute("/architect")).toEqual({ kind: "handle", handle: "architect" });
   });
 
+  it("normalizes case and a leading @ the same way the backend's handleParams does", () => {
+    // What a user actually copies out of a timeline: `@Architect`, mixed case,
+    // or both. All of these must resolve identically to the plain handle.
+    expect(matchRoute("/Architect")).toEqual({ kind: "handle", handle: "architect" });
+    expect(matchRoute("/@architect")).toEqual({ kind: "handle", handle: "architect" });
+    expect(matchRoute("/@Architect")).toEqual({ kind: "handle", handle: "architect" });
+  });
+
+  it("still rejects a reserved word after normalization, not just its exact-case form", () => {
+    expect(matchRoute("/LOGIN")).toEqual({ kind: "not-found" });
+    expect(matchRoute("/@Login")).toEqual({ kind: "not-found" });
+  });
+
   it("rejects a handle shorter than the 3-character minimum", () => {
     expect(matchRoute("/ab")).toEqual({ kind: "not-found" });
   });

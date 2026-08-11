@@ -21,7 +21,7 @@ import {
   simulationAnalysisPath,
   simulationListPath,
 } from "../../routes";
-import { api, ApiError } from "../../services/api-client";
+import { api } from "../../services/api-client";
 import type { Theme } from "../../services/theme";
 import type { ConnectionState, TimelineView } from "../../types";
 import { CharacterPicker } from "../characters/CharacterPicker";
@@ -36,6 +36,7 @@ import {
   selectAuthorTimeline,
   selectUserTimeline,
 } from "../timeline/thread-utils";
+import { classifyHandleResolutionError } from "./handle-resolution";
 import { useSimulationEvents } from "./useSimulationEvents";
 import { SimulationList } from "./SimulationList";
 import { SimulationPicker } from "./SimulationPicker";
@@ -140,6 +141,15 @@ export function SimulationView({
   const navigate = useNavigate();
   const route = useMemo(() => matchRoute(location.pathname), [location.pathname]);
 
+  // A direct link or a reload lands on a view (e.g. /posts/:id) with no prior
+  // in-app entry: navigate(-1) would then leave the app entirely rather than
+  // going anywhere sensible. Counting locations seen since mount tells the
+  // "go back" button whether there is actually somewhere in-app to return to.
+  const inAppLocationCountRef = useRef(0);
+  useEffect(() => {
+    inAppLocationCountRef.current += 1;
+  }, [location]);
+
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarTab, setSidebarTab] = useState<"characters" | "simulations">("characters");
@@ -183,10 +193,18 @@ export function SimulationView({
   type HandleResolution =
     | { status: "loading"; handle: string }
     | { status: "resolved"; handle: string; authorId: string }
-    | { status: "not-found"; handle: string };
+    | { status: "not-found"; handle: string }
+    | { status: "error"; handle: string };
 
   const [handleResolution, setHandleResolution] = useState<HandleResolution | null>(null);
   const requestedHandleRef = useRef<string | null>(null);
+  // Bumping this forces the effect below to re-run for the same route, which
+  // is otherwise only keyed on route/roster changes - needed so "retry" after
+  // a transient failure can actually re-fetch instead of doing nothing.
+  const [handleRetryNonce, setHandleRetryNonce] = useState(0);
+  const retryHandleResolution = useCallback(() => {
+    setHandleRetryNonce((nonce) => nonce + 1);
+  }, []);
 
   useEffect(() => {
     if (route.kind !== "handle") {
@@ -219,51 +237,64 @@ export function SimulationView({
       })
       .catch((cause: unknown) => {
         if (cancelled) return;
-        if (!(cause instanceof ApiError && cause.isNotFound)) {
-          // Network/server error: no distinct offline UI exists yet, so this
-          // renders the same as an unknown handle rather than hanging forever.
-          console.error(cause);
+        if (classifyHandleResolutionError(cause) === "not-found") {
+          // A genuine, permanent answer: this handle has no owner. Safe to
+          // leave requestedHandleRef set - there is nothing to retry.
+          setHandleResolution({ status: "not-found", handle: route.handle });
+          return;
         }
-        setHandleResolution({ status: "not-found", handle: route.handle });
+        // Network/server error: NOT cached as a permanent answer. Clearing
+        // the ref lets a later retry (or a roster/route change) try again,
+        // instead of this handle being stuck on an error forever for the
+        // lifetime of this persistently-mounted component.
+        console.error(cause);
+        requestedHandleRef.current = null;
+        setHandleResolution({ status: "error", handle: route.handle });
       });
     return () => {
       cancelled = true;
     };
-  }, [route, authorIdByHandle]);
+  }, [route, authorIdByHandle, handleRetryNonce]);
 
-  /** `TimelineView` plus the two states a URL can be in before it becomes one. */
-  const view: TimelineView | { kind: "resolving" } | { kind: "not-found"; handle?: string } =
-    useMemo(() => {
-      switch (route.kind) {
-        case "home":
-          return { kind: "home" };
-        case "characters":
-          return { kind: "characters" };
-        case "simulations":
-          return { kind: "simulations" };
-        case "simulation-analysis":
-          return { kind: "simulation-analysis", simulationId: route.simulationId };
-        case "post":
-          return { kind: "post", postId: route.postId };
-        case "not-found":
-          return { kind: "not-found" };
-        case "handle":
-          if (!handleResolution || handleResolution.handle !== route.handle) {
-            return { kind: "resolving" };
-          }
-          if (handleResolution.status === "loading") {
-            return { kind: "resolving" };
-          }
-          if (handleResolution.status === "not-found") {
-            return { kind: "not-found", handle: route.handle };
-          }
-          // Mirrors openAuthor below: your own handle is the home view, not a
-          // separate one-person timeline.
-          return handleResolution.authorId === USER_AUTHOR_ID
-            ? { kind: "home" }
-            : { kind: "timeline", authorId: handleResolution.authorId };
-      }
-    }, [route, handleResolution]);
+  /** `TimelineView` plus the states a URL can be in before it becomes one. */
+  const view:
+    | TimelineView
+    | { kind: "resolving" }
+    | { kind: "not-found"; handle?: string }
+    | { kind: "resolve-error"; handle: string } = useMemo(() => {
+    switch (route.kind) {
+      case "home":
+        return { kind: "home" };
+      case "characters":
+        return { kind: "characters" };
+      case "simulations":
+        return { kind: "simulations" };
+      case "simulation-analysis":
+        return { kind: "simulation-analysis", simulationId: route.simulationId };
+      case "post":
+        return { kind: "post", postId: route.postId };
+      case "not-found":
+        return { kind: "not-found" };
+      case "handle":
+        if (!handleResolution || handleResolution.handle !== route.handle) {
+          return { kind: "resolving" };
+        }
+        if (handleResolution.status === "loading") {
+          return { kind: "resolving" };
+        }
+        if (handleResolution.status === "not-found") {
+          return { kind: "not-found", handle: route.handle };
+        }
+        if (handleResolution.status === "error") {
+          return { kind: "resolve-error", handle: route.handle };
+        }
+        // Mirrors openAuthor below: your own handle is the home view, not a
+        // separate one-person timeline.
+        return handleResolution.authorId === USER_AUTHOR_ID
+          ? { kind: "home" }
+          : { kind: "timeline", authorId: handleResolution.authorId };
+    }
+  }, [route, handleResolution]);
 
   const openAuthor = useCallback(
     (authorId: string) => {
@@ -557,8 +588,15 @@ export function SimulationView({
                 type="button"
                 onClick={() => {
                   // The browser's own back entry is the previous screen now
-                  // that the view is tracked by the URL.
-                  navigate(-1);
+                  // that the view is tracked by the URL - but only if this
+                  // view was reached by navigating within the app. A direct
+                  // link or reload has no such entry, so navigate(-1) would
+                  // leave the app rather than go anywhere useful.
+                  if (inAppLocationCountRef.current > 1) {
+                    navigate(-1);
+                  } else {
+                    goHome();
+                  }
                   window.scrollTo({ top: 0 });
                 }}
                 aria-label="前の画面に戻る"
@@ -598,7 +636,7 @@ export function SimulationView({
                 </p>
               </div>
             </div>
-          ) : view.kind === "resolving" || view.kind === "not-found" ? (
+          ) : view.kind === "resolving" || view.kind === "not-found" || view.kind === "resolve-error" ? (
             <div className="flex items-center gap-3 border-b border-line px-4 py-2.5">
               <button
                 type="button"
@@ -609,7 +647,11 @@ export function SimulationView({
                 <Icon name="arrow-left" />
               </button>
               <p className="min-w-0 truncate text-sm font-semibold text-ink">
-                {view.kind === "resolving" ? "読み込み中…" : "ページが見つかりません"}
+                {view.kind === "resolving"
+                  ? "読み込み中…"
+                  : view.kind === "resolve-error"
+                    ? "読み込みに失敗しました"
+                    : "ページが見つかりません"}
               </p>
             </div>
           ) : (
@@ -789,6 +831,16 @@ export function SimulationView({
                 }
                 onRetry={goHome}
                 retryLabel="ホームへ戻る"
+              />
+            </div>
+          ) : view.kind === "resolve-error" ? (
+            <div className="px-4 py-12">
+              <ErrorBanner
+                tone="warning"
+                message="読み込みに失敗しました"
+                detail={`@${view.handle} の情報を取得できませんでした。通信状況を確認して再試行してください。`}
+                onRetry={retryHandleResolution}
+                retryLabel="再試行"
               />
             </div>
           ) : view.kind === "home" ? (

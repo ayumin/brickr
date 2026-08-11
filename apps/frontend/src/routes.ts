@@ -69,7 +69,10 @@ export function matchRoute(pathname: string): RouteMatch {
   }
 
   const handle = matchPath({ path: "/:handle", end: true }, pathname);
-  const candidate = handle?.params.handle;
+  const raw = handle?.params.handle;
+  // Same normalization as the backend's handleParams schema: a leading `@`
+  // and mixed case are both what a user actually copies out of a timeline.
+  const candidate = raw?.replace(/^@/u, "").toLowerCase();
   if (candidate && HANDLE_REGEXP.test(candidate) && !isReservedHandle(candidate)) {
     return { kind: "handle", handle: candidate };
   }
