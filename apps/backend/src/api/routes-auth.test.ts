@@ -71,8 +71,9 @@ const publicRoutes = [
   "/api/auth/session",
 ];
 
-/** Every route that acts on somebody else's account, so it must require an admin (§66.7, §66.15). */
+/** Every route that requires admin access (§66.7, §66.15, §66.16). */
 const adminRoutes = [
+  // User-management routes (§66.7, §66.15)
   { method: "GET" as const, url: "/api/users/management", payload: undefined },
   { method: "GET" as const, url: "/api/users/user-1", payload: undefined },
   { method: "POST" as const, url: "/api/users/user-1/suspend", payload: undefined },
@@ -80,6 +81,13 @@ const adminRoutes = [
   { method: "POST" as const, url: "/api/users/user-1/reset-password", payload: undefined },
   { method: "GET" as const, url: "/api/users/user-1/characters", payload: undefined },
   { method: "GET" as const, url: "/api/users/user-1/token-usage", payload: undefined },
+  // Application-settings routes (§66.16)
+  { method: "GET" as const, url: "/api/application-settings", payload: undefined },
+  {
+    method: "PUT" as const,
+    url: "/api/application-settings",
+    payload: { overrides: { LLM_TIMEOUT_MS: "5000" } },
+  },
 ];
 
 function makeServices(): AppServices {
@@ -119,6 +127,10 @@ function makeServices(): AppServices {
       submitUserPost: () => Promise.resolve({ id: "p1" }),
     },
     posts: { toDto: () => Promise.resolve({ id: "p1" }) },
+    applicationSettings: {
+      get: () => Promise.resolve({ environment: [], llm: {} }),
+      update: () => Promise.resolve({ environment: [], llm: {} }),
+    },
   } as unknown as AppServices;
 }
 
@@ -226,7 +238,7 @@ describe("read endpoints", () => {
   });
 });
 
-describe("admin-only user-management endpoints while signed out", () => {
+describe("admin-only endpoints while signed out", () => {
   const apps: FastifyInstance[] = [];
 
   afterEach(async () => {
@@ -247,7 +259,7 @@ describe("admin-only user-management endpoints while signed out", () => {
   });
 });
 
-describe("admin-only user-management endpoints while signed in as a non-admin", () => {
+describe("admin-only endpoints while signed in as a non-admin", () => {
   const apps: FastifyInstance[] = [];
 
   afterEach(async () => {
@@ -269,7 +281,7 @@ describe("admin-only user-management endpoints while signed in as a non-admin", 
   });
 });
 
-describe("admin-only user-management endpoints while signed in as an admin", () => {
+describe("admin-only endpoints while signed in as an admin", () => {
   const apps: FastifyInstance[] = [];
 
   afterEach(async () => {
