@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import type {
   ApplicationSettingsResponse,
   EditableApplicationSettingName,
@@ -7,6 +8,7 @@ import type {
 } from "@brickr/shared";
 import { AvatarUploader } from "../../components/AvatarUploader";
 import { ErrorBanner } from "../../components/ErrorBanner";
+import { useAuth } from "../auth/AuthContext";
 import { api, isAbortError, toErrorMessage } from "../../services/api-client";
 import { THEME_OPTIONS, type Theme } from "../../services/theme";
 
@@ -32,14 +34,34 @@ export function UserProfileEditor({
   theme: Theme;
   onThemeChange: (theme: Theme) => void;
 }) {
+  const navigate = useNavigate();
+  const { user, setUser } = useAuth();
   const [section, setSection] = useState<SettingsSection>("profile");
   const [displayName, setDisplayName] = useState(profile.displayName);
   const [description, setDescription] = useState(profile.description);
   const [avatarUrl, setAvatarUrl] = useState<string | undefined>(profile.avatarUrl);
   const [saving, setSaving] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [settings, setSettings] = useState<ApplicationSettingsResponse | null>(null);
   const [loadingSettings, setLoadingSettings] = useState(false);
+
+  const logout = async (): Promise<void> => {
+    setLoggingOut(true);
+    setError(null);
+    try {
+      await api.logout();
+    } catch (cause) {
+      // Idempotent on the backend even without a session; a network failure
+      // here still shouldn't trap the user signed in from their own point of
+      // view, so the client-side session is cleared regardless.
+      console.error(cause);
+    }
+    setUser(null);
+    setLoggingOut(false);
+    onClose();
+    navigate("/login");
+  };
 
   useEffect(() => {
     if (section !== "environment" && section !== "models" && section !== "usage") return;
@@ -76,7 +98,7 @@ export function UserProfileEditor({
     <div
       className="fixed inset-0 z-50 overflow-y-auto bg-black/75 p-3 backdrop-blur-sm sm:p-6"
       onClick={(event) => {
-        if (event.target === event.currentTarget && !saving) onClose();
+        if (event.target === event.currentTarget && !saving && !loggingOut) onClose();
       }}
     >
       <div
@@ -104,6 +126,21 @@ export function UserProfileEditor({
               </div>
             </div>
           </nav>
+
+          {user ? (
+            <div className="mt-4 border-t border-line pt-3 sm:mt-6">
+              <button
+                type="button"
+                disabled={loggingOut}
+                onClick={() => {
+                  void logout();
+                }}
+                className="w-full rounded-lg px-3 py-2 text-left text-sm text-danger transition hover:bg-danger/10 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {loggingOut ? "ログアウト中…" : "ログアウト"}
+              </button>
+            </div>
+          ) : null}
         </aside>
 
         <main className="min-w-0 flex-1 p-5 sm:p-7">

@@ -8,6 +8,7 @@ import type {
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { AvatarUploader } from "../../components/AvatarUploader";
 import { Spinner } from "../../components/Spinner";
+import { TextField } from "../../components/TextField";
 import { api, isAbortError, toErrorMessage } from "../../services/api-client";
 
 const EMPTY_CHARACTER: SaveCharacterRequest = {
@@ -395,35 +396,6 @@ function toRequest(character: CharacterConfigDto): SaveCharacterRequest {
     modelProfileId: character.modelProfileId,
     ...(character.avatarUrl ? { avatarUrl: character.avatarUrl } : {}),
   };
-}
-
-type TextFieldProps = {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  hint?: string;
-  prefix?: string;
-  required?: boolean;
-  maxLength?: number;
-  pattern?: string;
-};
-
-function TextField({ label, value, onChange, hint, prefix, ...input }: TextFieldProps) {
-  return (
-    <label className="block text-sm text-ink-muted">
-      {label}
-      <span className="mt-1.5 flex items-center rounded-xl border border-line bg-surface-raised focus-within:border-accent/60">
-        {prefix ? <span className="pl-3 text-ink-faint">{prefix}</span> : null}
-        <input
-          {...input}
-          value={value}
-          onChange={(event) => onChange(event.currentTarget.value)}
-          className="min-w-0 flex-1 bg-transparent px-3 py-2 text-ink focus:outline-none"
-        />
-      </span>
-      {hint ? <span className="mt-1 block text-xs text-ink-faint">{hint}</span> : null}
-    </label>
-  );
 }
 
 type TextAreaProps = {

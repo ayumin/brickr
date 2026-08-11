@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { MAX_IMAGE_BYTES, MAX_POST_LENGTH } from "@brickr/shared";
 import type {
   CharacterDto,
@@ -10,7 +11,7 @@ import type {
 import { Avatar } from "../../components/Avatar";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { Spinner } from "../../components/Spinner";
-import { api, toErrorMessage } from "../../services/api-client";
+import { api, isUnauthorizedError, toErrorMessage } from "../../services/api-client";
 import type { ComposerScope } from "../../types";
 import { QuotePost } from "../timeline/QuotePost";
 import { Icon } from "../../components/Icon";
@@ -58,6 +59,7 @@ export function Composer({
   pendingMention,
   onPendingMentionConsumed,
 }: ComposerProps) {
+  const navigate = useNavigate();
   const [content, setContent] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -115,6 +117,12 @@ export function Composer({
       setImageUrl(null);
       onCancel?.();
     } catch (cause) {
+      // Posting is the one write action CLAUDE.md §66.3 explicitly calls out:
+      // browsing stays open while signed out, but this needs a session.
+      if (isUnauthorizedError(cause)) {
+        navigate("/login");
+        return;
+      }
       setError(toErrorMessage(cause));
     } finally {
       setSubmitting(false);

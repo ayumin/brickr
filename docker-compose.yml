@@ -47,6 +47,14 @@ services:
       CONTEXT_POST_LIMIT: ${CONTEXT_POST_LIMIT:-16}
       MAX_CONCURRENT_CHARACTERS: ${MAX_CONCURRENT_CHARACTERS:-4}
       MAX_CASCADE_DEPTH: ${MAX_CASCADE_DEPTH:-2}
+      # First-admin bootstrap (§66.9). Without these, `docker compose up` can
+      # never produce an admin account, so nobody can issue an invite code or
+      # sign up at all - only .env.example documented them, compose never
+      # passed them through.
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      ADMIN_HANDLE: ${ADMIN_HANDLE:-admin}
+      ADMIN_DISPLAY_NAME: ${ADMIN_DISPLAY_NAME:-管理者}
     ports:
       - "3000:3000"
     volumes:

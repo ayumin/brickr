@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Route, Routes, useNavigate } from "react-router-dom";
 import type { SimulationDto, SimulationSummaryDto } from "@brickr/shared";
 
 import { APP_FULL_NAME, APP_NAME, APP_TAGLINE } from "./brand";
 import { BrandLogo } from "./components/BrandLogo";
 import { ErrorBanner } from "./components/ErrorBanner";
 import { Spinner } from "./components/Spinner";
-import { ApiError, api, isAbortError, toErrorMessage } from "./services/api-client";
+import { AuthProvider } from "./features/auth/AuthContext";
+import { LoginPage } from "./features/auth/LoginPage";
+import { SignupPage } from "./features/auth/SignupPage";
+import { ApiError, api, isAbortError, isUnauthorizedError, toErrorMessage } from "./services/api-client";
 import { applyTheme, readPreferredTheme, type Theme } from "./services/theme";
 import { SimulationView } from "./features/simulation/SimulationView";
 import { useCharacters } from "./hooks/useCharacters";
@@ -41,7 +45,14 @@ function defaultTitle(): string {
   return `${pad(now.getMonth() + 1)}/${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())} のシミュレーション`;
 }
 
-export default function App() {
+/**
+ * Bootstraps (or joins) a Simulation and renders the main app shell.
+ * Split out from `App` so `/login` and `/signup` can be real top-level
+ * routes that don't need a Simulation at all - unlike every view inside
+ * `SimulationView`, which stay one persistent component (see routes.ts).
+ */
+function SimulationBootstrap() {
+  const navigate = useNavigate();
   const userProfile = useUserProfile();
   const {
     characters,
@@ -73,7 +84,15 @@ export default function App() {
 
   /**
    * Resolve the simulation to show: reuse the id kept in localStorage when the
-   * backend still knows it, otherwise create a new one.
+   * backend still knows it; otherwise join the most recently created
+   * Simulation if one exists; otherwise create a new one.
+   *
+   * The "join existing" step matters now that creating a Simulation requires
+   * a session (§66.3): a signed-out visitor has no way to create one, but
+   * reading is public, and CLAUDE.md §66.3 says any Simulation is joinable by
+   * anyone. Only falling back to create() when nothing exists at all avoids
+   * spawning a fresh Simulation on every empty-localStorage load, which was
+   * wasteful even before login existed.
    */
   const bootstrap = useCallback(async (): Promise<void> => {
     setPhase((current) => (current === "ready" ? current : "loading"));
@@ -86,8 +105,11 @@ export default function App() {
         try {
           const existing = await api.getSimulation(storedId);
 
-          // The UI no longer exposes Simulation lifecycle controls. A legacy
-          // stopped simulation is resumed automatically when restored.
+          // A legacy stopped simulation is resumed automatically when
+          // restored, since prior to Simulation ownership (#25) that was the
+          // only way to keep using it. Note: this will 401/403 for anyone who
+          // is not the Simulation's creator or an admin (§66.3) - a
+          // pre-existing gap this MR does not attempt to fix.
           const restored =
             existing.simulation.status === "stopped"
               ? await api.resumeSimulation(existing.simulation.id)
@@ -104,6 +126,21 @@ export default function App() {
         }
       }
 
+      const existingSimulations = await api.getSimulations();
+      const mostRecent = [...existingSimulations].sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      )[0];
+      if (mostRecent) {
+        // Loaded as-is, not auto-resumed: unlike the legacy path above, this
+        // is the common case for every signed-out (or simply second) visitor,
+        // and only the Simulation's creator or an admin may resume it.
+        const joined = await api.getSimulation(mostRecent.id);
+        storeSimulationId(joined.simulation.id);
+        setSimulation(joined.simulation);
+        setPhase("ready");
+        return;
+      }
+
       const created = await api.createSimulation({ title: defaultTitle() });
       storeSimulationId(created.id);
       setSimulation(created);
@@ -112,10 +149,17 @@ export default function App() {
       if (isAbortError(cause)) {
         return;
       }
+      // Only reachable when nothing exists yet and the visitor is signed
+      // out: creating the first Simulation requires a session. Send them to
+      // log in instead of showing a raw "sign in to continue" error screen.
+      if (isUnauthorizedError(cause)) {
+        navigate("/login");
+        return;
+      }
       setError(toErrorMessage(cause));
       setPhase("error");
     }
-  }, []);
+  }, [navigate]);
 
   // Run exactly once, even under StrictMode's double effect invocation —
   // otherwise we would create two simulations on every mount.
@@ -250,5 +294,19 @@ export default function App() {
       bootstrapError={error}
       onDismissBootstrapError={dismissError}
     />
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/signup" element={<SignupPage />} />
+        {/* Everything else is view-switching inside SimulationBootstrap /
+            SimulationView, handled by routes.ts rather than by <Route>. */}
+        <Route path="*" element={<SimulationBootstrap />} />
+      </Routes>
+    </AuthProvider>
   );
 }
