@@ -245,7 +245,7 @@ export const openApiDocument: OpenAPIV3.Document = {
         tags: ["Users"],
         summary: "Issue a temporary password",
         description:
-          "Admin-only (CLAUDE.md 66.10). There is no self-service reset; the admin relays this password to the user out of band. It is returned once and never logged.",
+          "Admin-only (CLAUDE.md 66.10). There is no self-service reset; the admin relays this password to the user out of band. It is returned once and never logged. All existing sessions for the account are revoked immediately.",
         parameters: [idParameter("User id")],
         responses: {
           "200": jsonResponse("Temporary password issued", ref("ResetPasswordResponse")),

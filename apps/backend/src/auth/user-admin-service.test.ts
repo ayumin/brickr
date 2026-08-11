@@ -178,6 +178,14 @@ describe("UserAdminService.resetPassword", () => {
     await expect(verifyPassword(temporaryPassword, storedHash)).resolves.toBe(true);
   });
 
+  it("revokes all existing sessions for the user", async () => {
+    const { service, sessionsDeletedFor } = makeService([hanako]);
+
+    await service.resetPassword("user-1");
+
+    expect(sessionsDeletedFor).toEqual(["user-1"]);
+  });
+
   it("never leaks the password hash in its return value", async () => {
     const { service } = makeService([hanako]);
 

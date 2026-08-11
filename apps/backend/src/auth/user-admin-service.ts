@@ -70,13 +70,15 @@ export class UserAdminService {
   /**
    * Issues a temporary password in lieu of self-service reset (§66.10). Returned
    * once, in clear text, for the admin to relay to the user out of band — never
-   * logged, never stored anywhere but this response.
+   * logged, never stored anywhere but this response. Existing sessions are revoked
+   * immediately so that a compromised account cannot remain active after the reset.
    */
   async resetPassword(userId: string): Promise<{ user: UserAccount; temporaryPassword: string }> {
     const user = await this.requireAccount(userId);
 
     const temporaryPassword = generateTemporaryPassword();
     await this.users.updatePasswordHash(userId, await hashPassword(temporaryPassword));
+    await this.sessions.deleteAllForUser(userId);
 
     return { user, temporaryPassword };
   }
