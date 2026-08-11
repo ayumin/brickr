@@ -8,7 +8,7 @@ import {
   InviteCodeInvalidError,
   UnderageSignupError,
 } from "../auth/auth-errors.js";
-import { requireUser } from "../auth/auth-context.js";
+import { requireAdmin, requireUser } from "../auth/auth-context.js";
 import type { IssuedSession } from "../auth/auth-service.js";
 import {
   readSessionCookie,
@@ -129,11 +129,15 @@ export async function registerRoutes(
     return { owner };
   });
 
-  app.get("/api/application-settings", async () =>
-    services.applicationSettings.get(),
-  );
+  /** Admin-only (§66.16): exposes whether API keys are configured and lets an override be set. */
+  app.get("/api/application-settings", async (request, reply) => {
+    if (!requireAdmin(request, reply)) return reply;
+    return services.applicationSettings.get();
+  });
 
   app.put("/api/application-settings", async (request, reply) => {
+    if (!requireAdmin(request, reply)) return reply;
+
     const body = updateApplicationSettingsSchema.safeParse(request.body);
     if (!body.success) {
       return sendError(reply, 400, "invalid_body", "application settings are invalid", body.error.issues);

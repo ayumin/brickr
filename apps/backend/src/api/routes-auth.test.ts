@@ -23,6 +23,8 @@ const signedInUser: UserAccount = {
   interests: [],
 };
 
+const adminUser: UserAccount = { ...signedInUser, id: "admin-1", handle: "admin", isAdmin: true };
+
 const characterBody = {
   handle: "architect",
   displayName: "アーキテクト",
@@ -69,6 +71,16 @@ const publicRoutes = [
   "/api/auth/session",
 ];
 
+/** Admin-only (§66.16): configures API keys and LLM behaviour thresholds. */
+const adminRoutes = [
+  { method: "GET" as const, url: "/api/application-settings", payload: undefined },
+  {
+    method: "PUT" as const,
+    url: "/api/application-settings",
+    payload: { overrides: { LLM_TIMEOUT_MS: "5000" } },
+  },
+];
+
 function makeServices(): AppServices {
   return {
     providerRegistry: { availableIds: () => ["mock"] },
@@ -97,6 +109,10 @@ function makeServices(): AppServices {
       submitUserPost: () => Promise.resolve({ id: "p1" }),
     },
     posts: { toDto: () => Promise.resolve({ id: "p1" }) },
+    applicationSettings: {
+      get: () => Promise.resolve({ environment: [], llm: {} }),
+      update: () => Promise.resolve({ environment: [], llm: {} }),
+    },
   } as unknown as AppServices;
 }
 
@@ -199,6 +215,70 @@ describe("read endpoints", () => {
     apps.push(app);
 
     const response = await app.inject({ method: "GET", url: "/api/user-profile" });
+
+    expect(response.statusCode).toBe(200);
+  });
+});
+
+describe("admin-only application-settings endpoints while signed out", () => {
+  const apps: FastifyInstance[] = [];
+
+  afterEach(async () => {
+    await Promise.all(apps.splice(0).map((app) => app.close()));
+  });
+
+  it.each(adminRoutes)("refuses $method $url with 401", async ({ method, url, payload }) => {
+    const app = await buildApp(null);
+    apps.push(app);
+
+    const response = await app.inject({
+      method,
+      url,
+      ...(payload === undefined ? {} : { payload }),
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+});
+
+describe("admin-only application-settings endpoints while signed in as a non-admin", () => {
+  const apps: FastifyInstance[] = [];
+
+  afterEach(async () => {
+    await Promise.all(apps.splice(0).map((app) => app.close()));
+  });
+
+  it.each(adminRoutes)("refuses $method $url with 403", async ({ method, url, payload }) => {
+    const app = await buildApp(signedInUser);
+    apps.push(app);
+
+    const response = await app.inject({
+      method,
+      url,
+      ...(payload === undefined ? {} : { payload }),
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toMatchObject({ error: { code: "forbidden" } });
+  });
+});
+
+describe("admin-only application-settings endpoints while signed in as an admin", () => {
+  const apps: FastifyInstance[] = [];
+
+  afterEach(async () => {
+    await Promise.all(apps.splice(0).map((app) => app.close()));
+  });
+
+  it.each(adminRoutes)("allows $method $url", async ({ method, url, payload }) => {
+    const app = await buildApp(adminUser);
+    apps.push(app);
+
+    const response = await app.inject({
+      method,
+      url,
+      ...(payload === undefined ? {} : { payload }),
+    });
 
     expect(response.statusCode).toBe(200);
   });

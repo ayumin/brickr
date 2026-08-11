@@ -185,7 +185,7 @@ export const openApiDocument: OpenAPIV3.Document = {
         tags: ["System", "Models"],
         summary: "Get safe application settings and in-process LLM usage",
         description:
-          "Returns an allowlisted view of environment configuration. API key values and database credentials are never included. Token usage resets when the backend process restarts.",
+          "Admin-only (CLAUDE.md 66.16). Returns an allowlisted view of environment configuration. API key values and database credentials are never included. Token usage resets when the backend process restarts.",
         responses: {
           "200": jsonResponse("Application settings", {
             type: "object",
@@ -225,6 +225,8 @@ export const openApiDocument: OpenAPIV3.Document = {
               },
             },
           }),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "403": { $ref: "#/components/responses/Forbidden" },
           "500": errorResponses["500"],
         },
       },
@@ -232,6 +234,7 @@ export const openApiDocument: OpenAPIV3.Document = {
         operationId: "updateApplicationSettings",
         tags: ["System", "Models"],
         summary: "Save or remove editable application setting overrides",
+        description: "Admin-only (CLAUDE.md 66.16).",
         requestBody: jsonBody({
           type: "object",
           required: ["overrides"],
@@ -248,6 +251,8 @@ export const openApiDocument: OpenAPIV3.Document = {
         responses: {
           "200": jsonResponse("Updated application settings", { type: "object" }),
           "400": errorResponses["400"],
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "403": { $ref: "#/components/responses/Forbidden" },
           "500": errorResponses["500"],
         },
       },
