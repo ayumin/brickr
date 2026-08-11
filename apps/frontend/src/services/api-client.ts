@@ -7,6 +7,8 @@
 import type {
   ApplicationSettingsResponse,
   UpdateApplicationSettingsRequest,
+  AuthUserDto,
+  AuthUserResponse,
   BulkDeleteCharactersResponse,
   CharacterDto,
   CharacterConfigDto,
@@ -26,6 +28,7 @@ import type {
   HandleOwnerDto,
   HandleResponse,
   ImportCharactersCsvResponse,
+  LoginRequest,
   ModelProfileDto,
   ModelProfilesResponse,
   PostDto,
@@ -33,6 +36,8 @@ import type {
   RestoreCharacterResponse,
   SaveCharacterRequest,
   SaveUserProfileRequest,
+  SessionResponse,
+  SignupRequest,
   SimulationAnalysisDto,
   SimulationAnalysisResponse,
   SimulationDto,
@@ -80,6 +85,11 @@ export class ApiError extends Error {
 /** True when a rejection came from an aborted fetch rather than the backend. */
 export function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === "AbortError";
+}
+
+/** True when the backend rejected the request for lacking (or losing) a session. */
+export function isUnauthorizedError(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 401;
 }
 
 /** Human readable message for anything we might catch in the UI. */
@@ -146,6 +156,9 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     response = await fetch(`${API_BASE_URL}${path}`, {
       method,
       headers,
+      // The session cookie (CLAUDE.md §66.11) is otherwise never sent, since
+      // frontend and backend are different origins in dev (:5173 vs :3000).
+      credentials: "include",
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       ...(signal ? { signal } : {}),
     });
@@ -175,6 +188,35 @@ export type HealthResponse = { status: string };
 export const api = {
   health(signal?: AbortSignal): Promise<HealthResponse> {
     return request<HealthResponse>("/api/health", signal ? { signal } : {});
+  },
+
+  /** Never rejects with 401: `user` is just `null` while signed out (CLAUDE.md §66.11). */
+  async getSession(signal?: AbortSignal): Promise<AuthUserDto | null> {
+    const data = await request<SessionResponse>(
+      "/api/auth/session",
+      signal ? { signal } : {},
+    );
+    return data.user;
+  },
+
+  async signup(body: SignupRequest): Promise<AuthUserDto> {
+    const data = await request<AuthUserResponse>("/api/auth/signup", {
+      method: "POST",
+      body,
+    });
+    return data.user;
+  },
+
+  async login(body: LoginRequest): Promise<AuthUserDto> {
+    const data = await request<AuthUserResponse>("/api/auth/login", {
+      method: "POST",
+      body,
+    });
+    return data.user;
+  },
+
+  async logout(): Promise<void> {
+    await request<SessionResponse>("/api/auth/logout", { method: "POST" });
   },
 
   getApplicationSettings(signal?: AbortSignal): Promise<ApplicationSettingsResponse> {

@@ -43,7 +43,12 @@ export function subscribeToSimulationEvents(
   simulationId: string,
   handlers: SseHandlers,
 ): SseSubscription {
-  const source = new EventSource(simulationEventsUrl(simulationId));
+  // The events endpoint authenticates with the same session cookie
+  // (CLAUDE.md §66.11); EventSource does not send cookies cross-origin
+  // (:5173 vs :3000 in dev) unless explicitly told to.
+  const source = new EventSource(simulationEventsUrl(simulationId), {
+    withCredentials: true,
+  });
 
   const onOpen = (): void => {
     handlers.onOpen?.();
