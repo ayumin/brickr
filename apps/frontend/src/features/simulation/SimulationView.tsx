@@ -289,6 +289,12 @@ export function SimulationView({
         }
         // Mirrors openAuthor below: your own handle is the home view, not a
         // separate one-person timeline.
+        // Guard: if userProfile hasn't loaded yet (id is still ""), we can't
+        // reliably compare — stay in "resolving" to avoid a flash of the wrong
+        // view while the profile fetch is in flight.
+        if (userProfile.id === "") {
+          return { kind: "resolving" };
+        }
         return handleResolution.authorId === userProfile.id
           ? { kind: "home" }
           : { kind: "timeline", authorId: handleResolution.authorId };
@@ -300,7 +306,10 @@ export function SimulationView({
       // The user's timeline is the home view: new posts start threads there,
       // and replies remain visible inside those threads rather than in a
       // duplicate author-only screen.
-      if (authorId === userProfile.id) {
+      // Guard: only treat this as "self" when the profile has actually loaded
+      // (id !== ""). An empty id means the fetch is still in flight; comparing
+      // against it would incorrectly match no real author.
+      if (userProfile.id !== "" && authorId === userProfile.id) {
         navigate("/");
       } else {
         const handle = handleForAuthorId(authorId);
