@@ -524,6 +524,8 @@ export const openApiDocument: OpenAPIV3.Document = {
             required: ["profile"],
             properties: { profile: ref("UserProfile") },
           }),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "404": { $ref: "#/components/responses/NotFound" },
           "500": errorResponses["500"],
         },
       },
