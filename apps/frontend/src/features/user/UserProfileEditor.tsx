@@ -425,7 +425,7 @@ function MyUsagePanel({
   loading: boolean;
   error: string | null;
 }) {
-  if (loading) return <Loading />;
+  if (loading) return <p className="py-12 text-center text-sm text-ink-muted">消費トークンを読み込んでいます…</p>;
   if (error) {
     return <ErrorBanner message="消費トークンを取得できませんでした" detail={error} />;
   }
