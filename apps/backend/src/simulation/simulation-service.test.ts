@@ -232,6 +232,7 @@ describe("SimulationService orchestration", () => {
 
     const userPost = await harness.service.submitUserPost({
       simulationId: SIMULATION.id,
+      authorId: USER_AUTHOR_ID,
       content: "hello",
       responderIds: [alpha.id],
     });
@@ -268,6 +269,7 @@ describe("SimulationService orchestration", () => {
 
     await harness.service.submitUserPost({
       simulationId: SIMULATION.id,
+      authorId: USER_AUTHOR_ID,
       content: "hello",
       responderIds: [alpha.id, beta.id],
     });
@@ -307,6 +309,7 @@ describe("SimulationService orchestration", () => {
 
     await harness.service.submitUserPost({
       simulationId: SIMULATION.id,
+      authorId: USER_AUTHOR_ID,
       content: "hello",
       responderIds: [broken.id, healthy.id],
     });
@@ -348,6 +351,7 @@ describe("SimulationService orchestration", () => {
 
     await harness.service.submitUserPost({
       simulationId: SIMULATION.id,
+      authorId: USER_AUTHOR_ID,
       content: "hello",
       responderIds: [alpha.id],
     });
@@ -383,6 +387,7 @@ describe("SimulationService orchestration", () => {
     const stream = collectUntilCompleted(harness.events);
     await harness.service.submitUserPost({
       simulationId: SIMULATION.id,
+      authorId: USER_AUTHOR_ID,
       content: "hello again",
       responderIds: [alpha.id],
     });
