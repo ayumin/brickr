@@ -91,7 +91,7 @@ describe("api-client", () => {
 
     it("should reject paths attempting to access internal IPs", async () => {
       try {
-        await api.health();
+        await request("http://192.168.1.1/admin");
         expect.fail("Should have thrown an error");
       } catch (error) {
         expect(error).toBeInstanceOf(Error);
