@@ -47,3 +47,11 @@ export class EmailTakenError extends Error {
     this.name = "EmailTakenError";
   }
 }
+
+/** Raised by admin-only account actions (suspend, reactivate, reset-password) on an unknown id. */
+export class UserNotFoundError extends Error {
+  constructor() {
+    super("user account not found");
+    this.name = "UserNotFoundError";
+  }
+}

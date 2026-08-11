@@ -63,3 +63,22 @@ export function toAuthUserDto(account: UserAccount): AuthUserDto {
 export function isSuspended(account: Pick<UserAccount, "status">): boolean {
   return account.status === "suspended";
 }
+
+/** Drops the password hash for callers that only need the domain-safe shape. */
+export function toPublicAccount(account: UserAccountWithSecret): UserAccount {
+  return {
+    id: account.id,
+    handle: account.handle,
+    displayName: account.displayName,
+    description: account.description,
+    ...(account.avatarUrl ? { avatarUrl: account.avatarUrl } : {}),
+    email: account.email,
+    isAdmin: account.isAdmin,
+    status: account.status,
+    ...(account.country ? { country: account.country } : {}),
+    ...(account.region ? { region: account.region } : {}),
+    interests: account.interests,
+    ...(account.occupation ? { occupation: account.occupation } : {}),
+    ...(account.xHandle ? { xHandle: account.xHandle } : {}),
+  };
+}

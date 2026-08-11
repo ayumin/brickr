@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isSuspended, toAuthUserDto } from "./user-account.js";
+import { isSuspended, toAuthUserDto, toPublicAccount } from "./user-account.js";
 import type { UserAccountWithSecret } from "./user-account.js";
 
 const account: UserAccountWithSecret = {
@@ -40,6 +40,14 @@ describe("toAuthUserDto", () => {
     const dto = toAuthUserDto({ ...account, country: undefined, interests: [] });
     expect(dto).not.toHaveProperty("country");
     expect(dto.interests).toEqual([]);
+  });
+});
+
+describe("toPublicAccount", () => {
+  it("drops the password hash but keeps email, unlike toAuthUserDto", () => {
+    const publicAccount = toPublicAccount(account);
+    expect(publicAccount).not.toHaveProperty("passwordHash");
+    expect(publicAccount.email).toBe("hanako@example.com");
   });
 });
 

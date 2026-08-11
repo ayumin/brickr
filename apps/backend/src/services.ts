@@ -2,6 +2,7 @@ import { AgentService } from "./agents/agent-service.js";
 import { AuthService } from "./auth/auth-service.js";
 import { SessionRepository } from "./auth/session-repository.js";
 import { UserAccountRepository } from "./auth/user-account-repository.js";
+import { UserAdminService } from "./auth/user-admin-service.js";
 import { env } from "./config/env.js";
 import { CharacterRepository } from "./characters/character-repository.js";
 import { LLMCharacterPersonaGenerator } from "./characters/character-generator.js";
@@ -31,6 +32,7 @@ import { RuntimeSettings } from "./settings/runtime-settings.js";
 
 export type AppServices = {
   auth: AuthService;
+  userAdmin: UserAdminService;
   handles: HandleService;
   characters: CharacterService;
   modelProfiles: ModelProfileService;
@@ -122,6 +124,7 @@ export async function buildServices(db: Db, logger: SimulationLogger): Promise<A
     auth: new AuthService(userAccountRepository, sessionRepository, {
       sessionTtlMs: env.auth.sessionTtlMs,
     }),
+    userAdmin: new UserAdminService(userAccountRepository, sessionRepository),
     handles: new HandleService(
       handleRepository,
       characterRepository,

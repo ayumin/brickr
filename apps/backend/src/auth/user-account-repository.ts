@@ -165,6 +165,11 @@ export class UserAccountRepository {
   async updatePasswordHash(id: string, passwordHash: string): Promise<void> {
     await this.db.userProfile.update({ where: { id }, data: { passwordHash } });
   }
+
+  /** Flips `active` ↔ `suspended` (§66.12). Silently a no-op for an unknown id. */
+  async updateStatus(id: string, status: UserStatus): Promise<void> {
+    await this.db.userProfile.updateMany({ where: { id }, data: { status } });
+  }
 }
 
 export function normalizeEmail(email: string): string {

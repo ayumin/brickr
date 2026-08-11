@@ -14,6 +14,7 @@ import type { SessionRepository, StoredSession } from "./session-repository.js";
 import type { UserAccountRepository } from "./user-account-repository.js";
 import { normalizeEmail } from "./user-account-repository.js";
 import type { NewUserAccount, UserAccountWithSecret } from "./user-account.js";
+import { UserAdminService } from "./user-admin-service.js";
 
 const NOW = new Date(Date.UTC(2026, 7, 10));
 const ADULT_BIRTHDATE = "1990-04-05";
@@ -69,6 +70,11 @@ function makeRepositories(options: { takenHandles?: string[]; inviteCodes?: stri
     updatePasswordHash: (id: string, passwordHash: string) => {
       const account = accounts.get(id);
       if (account) accounts.set(id, { ...account, passwordHash });
+      return Promise.resolve();
+    },
+    updateStatus: (id: string, status: "active" | "suspended") => {
+      const account = accounts.get(id);
+      if (account) accounts.set(id, { ...account, status });
       return Promise.resolve();
     },
   } as unknown as UserAccountRepository;
@@ -349,5 +355,37 @@ describe("AuthService.logout", () => {
   it("is a no-op without a token", async () => {
     const { service } = makeService();
     await expect(service.logout(null)).resolves.toBeUndefined();
+  });
+});
+
+describe("UserAdminService.suspend + AuthService (§66.12 end-to-end)", () => {
+  it("invalidates an already-issued session immediately, and blocks a fresh login", async () => {
+    const { service, users, sessions } = makeService();
+    const admin = new UserAdminService(users, sessions);
+    const issued = await service.signup(signupInput());
+
+    // The session was valid before the suspend, so this proves the sessions
+    // table was actually cleared rather than the account merely being flagged.
+    await expect(service.resolveSession(issued.token)).resolves.not.toBeNull();
+
+    await admin.suspend(issued.user.id);
+
+    await expect(service.resolveSession(issued.token)).resolves.toBeNull();
+    await expect(
+      service.login({ email: "hanako@example.com", password: "a-long-enough-password" }),
+    ).rejects.toBeInstanceOf(AccountSuspendedError);
+  });
+
+  it("lets the user log in again once reactivated", async () => {
+    const { service, users, sessions } = makeService();
+    const admin = new UserAdminService(users, sessions);
+    const issued = await service.signup(signupInput());
+
+    await admin.suspend(issued.user.id);
+    await admin.reactivate(issued.user.id);
+
+    await expect(
+      service.login({ email: "hanako@example.com", password: "a-long-enough-password" }),
+    ).resolves.toMatchObject({ user: { handle: "hanako" } });
   });
 });
