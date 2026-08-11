@@ -71,7 +71,7 @@ describe("api-client", () => {
 
     it("should reject paths attempting to access external domains", async () => {
       try {
-        await api.health();
+        await request("https://external-domain.com/api");
         expect.fail("Should have thrown an error");
       } catch (error) {
         expect(error).toBeInstanceOf(Error);
