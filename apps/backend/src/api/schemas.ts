@@ -1,5 +1,7 @@
 import {
   EDITABLE_APPLICATION_SETTING_NAMES,
+  MAX_PASSWORD_LENGTH,
+  MIN_PASSWORD_LENGTH,
   MAX_AVATAR_DATA_URL_LENGTH,
   MAX_AVATAR_IMAGE_BYTES,
   MAX_IMAGE_DATA_URL_LENGTH,
@@ -129,3 +131,50 @@ export const updateApplicationSettingsSchema = z.object({
 });
 
 export const idParams = z.object({ id });
+
+// -- auth ------------------------------------------------------------------
+
+/** Same shape as a character handle: users and characters share one namespace (§66.13). */
+const handle = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .regex(/^[a-z0-9_]{1,32}$/u);
+
+const email = z.string().trim().toLowerCase().email().max(254);
+
+/**
+ * Only a length floor is enforced. Composition rules push people towards
+ * predictable passwords, and there is no reset flow to fall back on (§66.10).
+ */
+const password = z.string().min(MIN_PASSWORD_LENGTH).max(MAX_PASSWORD_LENGTH);
+
+/** Calendar validity and the 18+ gate are checked in the auth service (§66.1). */
+const birthdate = z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/u);
+
+export const signupSchema = z.object({
+  inviteCode: z.string().trim().min(1).max(64),
+  email,
+  password,
+  handle,
+  displayName: z.string().trim().min(1).max(50),
+  birthdate,
+  description: z.string().trim().max(280).optional(),
+  country: z.string().trim().max(60).optional(),
+  region: z.string().trim().max(60).optional(),
+  interests: z.array(z.string().trim().min(1).max(40)).max(20).optional(),
+  occupation: z.string().trim().max(60).optional(),
+  xHandle: z
+    .string()
+    .trim()
+    .transform((value) => value.replace(/^@/u, ""))
+    .pipe(z.string().regex(/^[A-Za-z0-9_]{1,15}$/u))
+    .optional(),
+});
+
+export const loginSchema = z.object({
+  email,
+  // Not length-checked: an old password shorter than today's floor must still
+  // be able to sign in, and the answer is the same generic error either way.
+  password: z.string().min(1).max(MAX_PASSWORD_LENGTH),
+});

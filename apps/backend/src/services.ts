@@ -1,4 +1,8 @@
 import { AgentService } from "./agents/agent-service.js";
+import { AuthService } from "./auth/auth-service.js";
+import { SessionRepository } from "./auth/session-repository.js";
+import { UserAccountRepository } from "./auth/user-account-repository.js";
+import { env } from "./config/env.js";
 import { CharacterRepository } from "./characters/character-repository.js";
 import { LLMCharacterPersonaGenerator } from "./characters/character-generator.js";
 import { CharacterService } from "./characters/character-service.js";

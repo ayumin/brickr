@@ -3,6 +3,7 @@ import { MAX_IMAGE_DATA_URL_LENGTH } from "@brickr/shared";
 import Fastify, { type FastifyError, type FastifyInstance } from "fastify";
 import { registerOpenApi } from "./api/openapi.js";
 import { registerRoutes } from "./api/routes.js";
+import { registerAuthContext } from "./auth/auth-context.js";
 import { env } from "./config/env.js";
 import type { Db } from "./persistence/prisma.js";
 import { buildServices } from "./services.js";
@@ -13,6 +14,9 @@ export async function registerCors(app: FastifyInstance): Promise<void> {
   await app.register(cors, {
     origin: env.corsOrigins.includes("*") ? true : env.corsOrigins,
     methods: CORS_METHODS,
+    // The session cookie is sent cross-port in development (5173 -> 3000), so
+    // the browser needs this to attach and store it (§66.11).
+    credentials: true,
   });
 }
 
@@ -32,6 +36,7 @@ export async function buildApp(db: Db): Promise<FastifyInstance> {
   await registerOpenApi(app);
 
   const services = await buildServices(db, app.log);
+  registerAuthContext(app, services.auth);
   await registerRoutes(app, services);
 
   app.setNotFoundHandler((_request, reply) => {

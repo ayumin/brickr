@@ -1,4 +1,22 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import {
+  AccountSuspendedError,
+  EmailTakenError,
+  HandleTakenError,
+  InvalidBirthdateError,
+  InvalidCredentialsError,
+  InviteCodeInvalidError,
+  UnderageSignupError,
+} from "../auth/auth-errors.js";
+import type { IssuedSession } from "../auth/auth-service.js";
+import {
+  readSessionCookie,
+  serializeClearedSessionCookie,
+  serializeSessionCookie,
+  type SessionCookieOptions,
+} from "../auth/session-cookie.js";
+import { toAuthUserDto } from "../auth/user-account.js";
+import { env } from "../config/env.js";
 import type { AppServices } from "../services.js";
 import { InvalidApplicationSettingError } from "../settings/runtime-settings.js";
 import { CharacterCsvError } from "../characters/character-csv.js";
