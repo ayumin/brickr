@@ -56,6 +56,27 @@ export const env = {
     useMock: bool("USE_MOCK_LLM", false),
   },
 
+  auth: {
+    /** How long a session cookie stays valid (§66.11). */
+    sessionTtlMs: int("SESSION_TTL_MS", 7 * 24 * 60 * 60 * 1000),
+    /**
+     * `Secure` is dropped for local http development, where the browser would
+     * otherwise refuse the cookie. Any https deployment must set this.
+     */
+    cookieSecure: bool("SESSION_COOKIE_SECURE", false),
+  },
+
+  /**
+   * First administrator, created by the seed (§66.9). Like the API keys above,
+   * the password must never be logged or sent to the frontend.
+   */
+  admin: {
+    email: optional("ADMIN_EMAIL"),
+    password: optional("ADMIN_PASSWORD"),
+    handle: str("ADMIN_HANDLE", "admin"),
+    displayName: str("ADMIN_DISPLAY_NAME", "管理者"),
+  },
+
   simulation: {
     minResponders: int("MIN_RESPONDERS", 2),
     maxResponders: int("MAX_RESPONDERS", 6),

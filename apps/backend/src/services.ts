@@ -1,4 +1,8 @@
 import { AgentService } from "./agents/agent-service.js";
+import { AuthService } from "./auth/auth-service.js";
+import { SessionRepository } from "./auth/session-repository.js";
+import { UserAccountRepository } from "./auth/user-account-repository.js";
+import { env } from "./config/env.js";
 import { CharacterRepository } from "./characters/character-repository.js";
 import { LLMCharacterPersonaGenerator } from "./characters/character-generator.js";
 import { CharacterService } from "./characters/character-service.js";
@@ -24,6 +28,7 @@ import { ApplicationSettingRepository } from "./settings/application-setting-rep
 import { RuntimeSettings } from "./settings/runtime-settings.js";
 
 export type AppServices = {
+  auth: AuthService;
   characters: CharacterService;
   modelProfiles: ModelProfileService;
   userProfile: UserProfileService;
@@ -46,6 +51,8 @@ export async function buildServices(db: Db, logger: SimulationLogger): Promise<A
   const simulationRepository = new SimulationRepository(db);
   const userProfileRepository = new UserProfileRepository(db);
   const applicationSettingRepository = new ApplicationSettingRepository(db);
+  const userAccountRepository = new UserAccountRepository(db);
+  const sessionRepository = new SessionRepository(db);
   const runtime = new RuntimeSettings();
 
   const providerRegistry = createProviderRegistry();
@@ -108,6 +115,9 @@ export async function buildServices(db: Db, logger: SimulationLogger): Promise<A
   await applicationSettings.initialize();
 
   return {
+    auth: new AuthService(userAccountRepository, sessionRepository, {
+      sessionTtlMs: env.auth.sessionTtlMs,
+    }),
     characters: new CharacterService(
       characterRepository,
       modelProfileRepository,

@@ -1,4 +1,22 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import {
+  AccountSuspendedError,
+  EmailTakenError,
+  HandleTakenError,
+  InvalidBirthdateError,
+  InvalidCredentialsError,
+  InviteCodeInvalidError,
+  UnderageSignupError,
+} from "../auth/auth-errors.js";
+import type { IssuedSession } from "../auth/auth-service.js";
+import {
+  readSessionCookie,
+  serializeClearedSessionCookie,
+  serializeSessionCookie,
+  type SessionCookieOptions,
+} from "../auth/session-cookie.js";
+import { toAuthUserDto } from "../auth/user-account.js";
+import { env } from "../config/env.js";
 import type { AppServices } from "../services.js";
 import { InvalidApplicationSettingError } from "../settings/runtime-settings.js";
 import { CharacterCsvError } from "../characters/character-csv.js";
@@ -23,6 +41,8 @@ import {
   deleteCharacterQuerySchema,
   idParams,
   importCharactersCsvSchema,
+  loginSchema,
+  signupSchema,
   saveCharacterSchema,
   saveUserProfileSchema,
   updateApplicationSettingsSchema,
@@ -37,6 +57,57 @@ export async function registerRoutes(
     status: "ok",
     providers: services.providerRegistry.availableIds(),
   }));
+
+  // -- auth -----------------------------------------------------------------
+
+  const cookieOptions: SessionCookieOptions = {
+    secure: env.auth.cookieSecure,
+    maxAgeSeconds: Math.floor(env.auth.sessionTtlMs / 1000),
+  };
+
+  /** Lets the frontend boot without guessing: `null` simply means signed out. */
+  app.get("/api/auth/session", async (request) => ({
+    user: request.currentUser ? toAuthUserDto(request.currentUser) : null,
+  }));
+
+  app.post("/api/auth/signup", async (request, reply) => {
+    const body = signupSchema.safeParse(request.body);
+    if (!body.success) {
+      return sendError(reply, 400, "invalid_body", "signup body is invalid", body.error.issues);
+    }
+    try {
+      const issued = await services.auth.signup(body.data);
+      return replyWithSession(reply, issued, cookieOptions).status(201).send({
+        user: toAuthUserDto(issued.user),
+      });
+    } catch (error) {
+      return handleDomainError(reply, error);
+    }
+  });
+
+  app.post("/api/auth/login", async (request, reply) => {
+    const body = loginSchema.safeParse(request.body);
+    if (!body.success) {
+      // Generic on purpose: a validation error must not reveal which field is wrong.
+      return sendError(reply, 401, "invalid_credentials", "email or password is incorrect");
+    }
+    try {
+      const issued = await services.auth.login(body.data);
+      return replyWithSession(reply, issued, cookieOptions).send({
+        user: toAuthUserDto(issued.user),
+      });
+    } catch (error) {
+      return handleDomainError(reply, error);
+    }
+  });
+
+  /** Idempotent: signing out without a session is a success, not a 401. */
+  app.post("/api/auth/logout", async (request, reply) => {
+    await services.auth.logout(readSessionCookie(request.headers.cookie));
+    return reply
+      .header("set-cookie", serializeClearedSessionCookie(cookieOptions))
+      .send({ user: null });
+  });
 
   app.get("/api/application-settings", async () =>
     services.applicationSettings.get(),
@@ -330,6 +401,14 @@ export async function registerRoutes(
   registerEventsRoute(app, services);
 }
 
+function replyWithSession(
+  reply: FastifyReply,
+  issued: IssuedSession,
+  options: SessionCookieOptions,
+): FastifyReply {
+  return reply.header("set-cookie", serializeSessionCookie(issued.token, options));
+}
+
 /** Shared param parsing + domain-error mapping for simulation-scoped routes. */
 async function withSimulation<T>(
   request: FastifyRequest,
@@ -349,6 +428,27 @@ async function withSimulation<T>(
 }
 
 function handleDomainError(reply: FastifyReply, error: unknown): FastifyReply {
+  if (error instanceof InvalidCredentialsError) {
+    return sendError(reply, 401, "invalid_credentials", error.message);
+  }
+  if (error instanceof AccountSuspendedError) {
+    return sendError(reply, 403, "account_suspended", error.message);
+  }
+  if (error instanceof InviteCodeInvalidError) {
+    return sendError(reply, 400, "invalid_invite_code", error.message);
+  }
+  if (error instanceof UnderageSignupError) {
+    return sendError(reply, 400, "underage", error.message);
+  }
+  if (error instanceof InvalidBirthdateError) {
+    return sendError(reply, 400, "invalid_birthdate", error.message);
+  }
+  if (error instanceof HandleTakenError) {
+    return sendError(reply, 409, "handle_conflict", error.message);
+  }
+  if (error instanceof EmailTakenError) {
+    return sendError(reply, 409, "email_conflict", error.message);
+  }
   if (error instanceof CharacterNotFoundError || error instanceof ModelProfileNotFoundError) {
     return sendError(reply, 404, "not_found", error.message);
   }

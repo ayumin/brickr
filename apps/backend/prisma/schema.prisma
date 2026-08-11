@@ -25,8 +25,11 @@ model ModelProfile {
 }
 
 model Character {
-  id          String @id
-  handle      String @unique
+  id String @id
+
+  /// Uniqueness is enforced by the shared `handles` table, not by this column,
+  /// because users and characters share one handle namespace (CLAUDE.md §66.13).
+  handle      String
   displayName String @map("display_name")
   description String
 
@@ -53,6 +56,7 @@ model Character {
 
   modelProfile ModelProfile @relation(fields: [modelProfileId], references: [id])
 
+  @@index([handle])
   @@map("characters")
 }
 
@@ -101,15 +105,88 @@ model Post {
 }
 
 model UserProfile {
-  /// Singleton row for the human author (`authorId = "you"`).
-  id          String   @id
-  displayName String   @map("display_name")
-  description String   @default("")
-  avatarUrl   String?  @map("avatar_url") @db.Text
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  /// One row per account. The pre-login singleton (`authorId = "you"`) keeps its
+  /// id and is backfilled by the seed, so its credential columns stay nullable.
+  id          String  @id
+  displayName String  @map("display_name")
+  description String  @default("")
+  avatarUrl   String? @map("avatar_url") @db.Text
 
+  /// Set once at signup, never editable (§66.1). Uniqueness lives in `handles`.
+  handle String?
+
+  // Credentials. Private: never part of any DTO (§66.1).
+  email        String? @unique
+  passwordHash String? @map("password_hash")
+  /// Self-declared at signup, gates the 18+ check, never returned (§66.1).
+  birthdate DateTime? @db.Date
+
+  // Optional public profile fields (§66.1). Region stops at prefecture/state.
+  country    String?
+  region     String?
+  interests  String[] @default([])
+  occupation String?
+  xHandle    String?  @map("x_handle")
+
+  /// Plain boolean instead of a role model, by design (§66.7, §60).
+  isAdmin Boolean @default(false) @map("is_admin")
+  /// "active" | "suspended" (§66.12).
+  status String @default("active")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  sessions            Session[]
+  issuedInviteCodes   InviteCode[] @relation("InviteCodeIssuer")
+  redeemedInviteCodes InviteCode[] @relation("InviteCodeRedeemer")
+
+  @@index([handle])
   @@map("user_profiles")
+}
+
+model Session {
+  /// SHA-256 of the opaque cookie token. The raw token only ever exists in the
+  /// cookie, so a database dump cannot be replayed as a login (§66.11).
+  tokenHash String   @id @map("token_hash")
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  expiresAt DateTime @map("expires_at")
+
+  user UserProfile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+/// Shared handle namespace for users and characters. The primary key is what
+/// actually prevents a user from taking a character handle (§66.13).
+model HandleOwner {
+  handle String @id
+
+  /// "user" | "character".
+  ownerType String   @map("owner_type")
+  ownerId   String   @map("owner_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([ownerType, ownerId])
+  @@map("handles")
+}
+
+/// Single-use signup invitation issued by an admin (§66.9).
+model InviteCode {
+  code       String    @id
+  issuedById String    @map("issued_by_id")
+  usedById   String?   @map("used_by_id")
+  usedAt     DateTime? @map("used_at")
+  expiresAt  DateTime? @map("expires_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  issuedBy UserProfile  @relation("InviteCodeIssuer", fields: [issuedById], references: [id], onDelete: Cascade)
+  usedBy   UserProfile? @relation("InviteCodeRedeemer", fields: [usedById], references: [id], onDelete: SetNull)
+
+  @@index([issuedById])
+  @@map("invite_codes")
 }
 
 model ApplicationSetting {

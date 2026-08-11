@@ -1,8 +1,11 @@
 import { CHARACTER_SEEDS } from "../src/characters/character-seeds.js";
 import { MODEL_PROFILE_SEEDS } from "../src/model-profiles/model-profile-seeds.js";
 import { prisma } from "../src/persistence/prisma.js";
-import { USER_AUTHOR_ID, USER_DISPLAY_NAME } from "@brickr/shared";
+import { USER_AUTHOR_ID, USER_DISPLAY_NAME, USER_HANDLE } from "@brickr/shared";
 import { demoAvatarDataUrl } from "../src/characters/demo-avatar.js";
+import { bootstrapAdmin, describeAdminBootstrap } from "../src/auth/admin-bootstrap.js";
+import { UserAccountRepository } from "../src/auth/user-account-repository.js";
+import { env } from "../src/config/env.js";
 
 /**
  * Idempotent seed: model profiles first, then characters.
@@ -16,9 +19,13 @@ async function main(): Promise<void> {
       id: USER_AUTHOR_ID,
       displayName: USER_DISPLAY_NAME,
       description: "",
+      handle: USER_HANDLE,
     },
-    update: {},
+    // Backfills the handle of the pre-login singleton without touching the
+    // profile fields the user may already have edited.
+    update: { handle: USER_HANDLE },
   });
+  await claimHandle(USER_HANDLE, "user", USER_AUTHOR_ID);
 
   for (const profile of MODEL_PROFILE_SEEDS) {
     await prisma.modelProfile.upsert({
@@ -54,6 +61,36 @@ async function main(): Promise<void> {
     });
   }
   console.log(`seeded ${CHARACTER_SEEDS.length} characters`);
+
+  // Characters own their handles in the shared namespace too (§66.13).
+  for (const seed of CHARACTER_SEEDS) {
+    await claimHandle(seed.handle, "character", seed.id);
+  }
+
+  // Root of the invite chain (§66.9). Never logs ADMIN_PASSWORD.
+  const outcome = await bootstrapAdmin(new UserAccountRepository(prisma), {
+    email: env.admin.email,
+    password: env.admin.password,
+    handle: env.admin.handle,
+    displayName: env.admin.displayName,
+  });
+  console.log(describeAdminBootstrap(outcome));
+}
+
+/**
+ * Idempotent claim on the shared handle namespace. Re-pointing an existing row
+ * keeps the seed rerunnable after a character id changes.
+ */
+async function claimHandle(
+  handle: string,
+  ownerType: "user" | "character",
+  ownerId: string,
+): Promise<void> {
+  await prisma.handleOwner.upsert({
+    where: { handle },
+    create: { handle, ownerType, ownerId },
+    update: { ownerType, ownerId },
+  });
 }
 
 main()

@@ -51,6 +51,7 @@ export const openApiDocument: OpenAPIV3.Document = {
   servers: [{ url: "/", description: "Current Backend origin" }],
   tags: [
     { name: "System", description: "Backend status" },
+    { name: "Auth", description: "Invite-only signup, login and session lifecycle" },
     { name: "Characters", description: "AI character profiles and bulk management" },
     { name: "Models", description: "Available LLM provider/model profiles" },
     { name: "User", description: "Editable human user profile" },
@@ -73,6 +74,79 @@ export const openApiDocument: OpenAPIV3.Document = {
               providers: { type: "array", items: { type: "string" } },
             },
           }),
+        },
+      },
+    },
+    "/api/auth/session": {
+      get: {
+        operationId: "getAuthSession",
+        tags: ["Auth"],
+        summary: "Get the signed-in user",
+        description:
+          "Resolves the session cookie. Returns `user: null` when signed out, so the frontend can bootstrap without treating a missing session as an error.",
+        responses: {
+          "200": jsonResponse("Current session", ref("SessionResponse")),
+        },
+      },
+    },
+    "/api/auth/signup": {
+      post: {
+        operationId: "signup",
+        tags: ["Auth"],
+        summary: "Create an account with an invite code",
+        description:
+          "Signup is invite-only. The invite code is consumed on success. Applicants under 18 are refused. On success a httpOnly session cookie is set.",
+        requestBody: jsonBody(ref("SignupRequest")),
+        responses: {
+          "201": {
+            ...jsonResponse("Account created and signed in", ref("AuthUserResponse")),
+            headers: {
+              "Set-Cookie": {
+                description: "httpOnly, SameSite=Lax session cookie",
+                schema: { type: "string" },
+              },
+            },
+          },
+          "400": { $ref: "#/components/responses/BadRequest" },
+          "409": { $ref: "#/components/responses/Conflict" },
+          "500": { $ref: "#/components/responses/InternalError" },
+        },
+      },
+    },
+    "/api/auth/login": {
+      post: {
+        operationId: "login",
+        tags: ["Auth"],
+        summary: "Sign in with email and password",
+        description:
+          "Unknown emails and wrong passwords return the same 401, so the response cannot be used to enumerate accounts.",
+        requestBody: jsonBody(ref("LoginRequest")),
+        responses: {
+          "200": {
+            ...jsonResponse("Signed in", ref("AuthUserResponse")),
+            headers: {
+              "Set-Cookie": {
+                description: "httpOnly, SameSite=Lax session cookie",
+                schema: { type: "string" },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "403": { $ref: "#/components/responses/Forbidden" },
+          "500": { $ref: "#/components/responses/InternalError" },
+        },
+      },
+    },
+    "/api/auth/logout": {
+      post: {
+        operationId: "logout",
+        tags: ["Auth"],
+        summary: "Sign out",
+        description:
+          "Deletes the session row and clears the cookie. Idempotent: signing out without a session still succeeds.",
+        responses: {
+          "200": jsonResponse("Signed out", ref("SessionResponse")),
+          "500": { $ref: "#/components/responses/InternalError" },
         },
       },
     },
@@ -634,6 +708,8 @@ export const openApiDocument: OpenAPIV3.Document = {
   components: {
     responses: {
       BadRequest: jsonResponse("Invalid request parameters or body", ref("ApiError")),
+      Unauthorized: jsonResponse("Authentication is required or has failed", ref("ApiError")),
+      Forbidden: jsonResponse("Signed in but not allowed to perform this action", ref("ApiError")),
       NotFound: jsonResponse("Requested resource was not found", ref("ApiError")),
       Conflict: jsonResponse("Resource state conflict", ref("ApiError")),
       BadGateway: jsonResponse("Upstream LLM request failed", ref("ApiError")),
@@ -795,6 +871,66 @@ export const openApiDocument: OpenAPIV3.Document = {
           id: { type: "string" },
           providerId: { type: "string", enum: ["openai", "anthropic", "gemini", "mock"] },
           model: { type: "string" },
+        },
+      },
+      AuthUser: {
+        type: "object",
+        description:
+          "The signed-in user. Email and birthdate are private and never returned (CLAUDE.md 66.1).",
+        required: ["id", "handle", "displayName", "description", "isAdmin", "status", "interests"],
+        properties: {
+          id: { type: "string" },
+          handle: { type: "string" },
+          displayName: { type: "string" },
+          description: { type: "string" },
+          avatarUrl: ref("AvatarUrl"),
+          isAdmin: { type: "boolean" },
+          status: { type: "string", enum: ["active", "suspended"] },
+          country: { type: "string" },
+          region: { type: "string" },
+          interests: { type: "array", items: { type: "string" } },
+          occupation: { type: "string" },
+          xHandle: { type: "string" },
+        },
+      },
+      AuthUserResponse: {
+        type: "object",
+        required: ["user"],
+        properties: { user: ref("AuthUser") },
+      },
+      SessionResponse: {
+        type: "object",
+        required: ["user"],
+        properties: { user: { allOf: [ref("AuthUser")], nullable: true } },
+      },
+      SignupRequest: {
+        type: "object",
+        required: ["inviteCode", "email", "password", "handle", "displayName", "birthdate"],
+        properties: {
+          inviteCode: { type: "string", minLength: 1, maxLength: 64 },
+          email: { type: "string", format: "email", maxLength: 254 },
+          password: { type: "string", minLength: 12, maxLength: 128 },
+          handle: { type: "string", pattern: "^[a-z0-9_]{1,32}$" },
+          displayName: { type: "string", minLength: 1, maxLength: 50 },
+          birthdate: {
+            type: "string",
+            format: "date",
+            description: "Self-declared. Signup is refused below 18. Never returned.",
+          },
+          description: { type: "string", maxLength: 280 },
+          country: { type: "string", maxLength: 60 },
+          region: { type: "string", maxLength: 60 },
+          interests: { type: "array", items: { type: "string" }, maxItems: 20 },
+          occupation: { type: "string", maxLength: 60 },
+          xHandle: { type: "string", pattern: "^[A-Za-z0-9_]{1,15}$" },
+        },
+      },
+      LoginRequest: {
+        type: "object",
+        required: ["email", "password"],
+        properties: {
+          email: { type: "string", format: "email" },
+          password: { type: "string" },
         },
       },
       UserProfile: {
