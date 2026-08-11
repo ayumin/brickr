@@ -144,28 +144,26 @@ type RequestOptions = {
 };
 
 /**
- * Validates that a path is a relative path starting with / and matching allowed patterns.
+ * Validates that a path is a relative API path starting with /api/ and matching allowed patterns.
  * This prevents SSRF attacks by ensuring paths cannot be absolute URLs or protocol-relative.
- * 
+ *
  * @param path - The path to validate
- * @throws Error if path is not a valid relative path
+ * @throws Error if path is not a valid relative API path
  */
-function validatePath(path: string): void {
-  if (!path.startsWith("/")) {
-    throw new Error("Path must be a relative path starting with /");
+function validateApiPath(path: string): void {
+  if (!path.startsWith("/api/")) {
+    throw new Error("Invalid API path: path must start with /api/");
   }
-
   if (path.includes("://")) {
-    throw new Error("Path must not contain protocol indicators");
+    throw new Error("Invalid API path: path must not contain protocol specifiers");
   }
-
   if (path.includes("//")) {
-    throw new Error("Path must not contain protocol-relative URL patterns");
+    throw new Error("Invalid API path: path must not contain protocol-relative URLs");
   }
 }
 
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  validatePath(path);
+  validateApiPath(path);
 
   const { method = "GET", body, signal } = options;
 

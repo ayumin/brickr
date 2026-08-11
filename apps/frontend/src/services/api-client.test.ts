@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { api, request } from "./api-client";
+import { api, request, simulationEventsUrl, API_BASE_URL } from "./api-client";
 
 describe("api-client", () => {
   let fetchMock: ReturnType<typeof vi.fn>;
@@ -14,15 +14,24 @@ describe("api-client", () => {
   });
 
   describe("request path validation - SSRF prevention", () => {
-    it("should reject paths that do not start with /", async () => {
-      try {
-        await request("relative/path");
-        expect.fail("Should have thrown an error");
-      } catch (error) {
-        expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toContain("relative path");
+    it("should reject paths that do not start with /api/", async () => {
+      const invalidPaths = [
+        "relative/path",
+        "/health",
+        "api/health",
+        "../../../etc/passwd",
+      ];
+
+      for (const path of invalidPaths) {
+        try {
+          await request(path);
+          expect.fail(`Path "${path}" should have been rejected`);
+        } catch (error) {
+          expect(error).toBeInstanceOf(Error);
+          expect((error as Error).message).toContain("Invalid API path");
+        }
+        expect(fetchMock).not.toHaveBeenCalled();
       }
-      expect(fetchMock).not.toHaveBeenCalled();
     });
 
     it("should reject absolute URLs (http://)", async () => {
@@ -31,7 +40,7 @@ describe("api-client", () => {
         expect.fail("Should have thrown an error");
       } catch (error) {
         expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toContain("relative path");
+        expect((error as Error).message).toContain("Invalid API path");
       }
       expect(fetchMock).not.toHaveBeenCalled();
     });
@@ -42,7 +51,7 @@ describe("api-client", () => {
         expect.fail("Should have thrown an error");
       } catch (error) {
         expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toContain("relative path");
+        expect((error as Error).message).toContain("Invalid API path");
       }
       expect(fetchMock).not.toHaveBeenCalled();
     });
@@ -53,7 +62,7 @@ describe("api-client", () => {
         expect.fail("Should have thrown an error");
       } catch (error) {
         expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toContain("protocol");
+        expect((error as Error).message).toContain("Invalid API path");
       }
       expect(fetchMock).not.toHaveBeenCalled();
     });
@@ -75,6 +84,7 @@ describe("api-client", () => {
         expect.fail("Should have thrown an error");
       } catch (error) {
         expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toContain("Invalid API path");
       }
       expect(fetchMock).not.toHaveBeenCalled();
     });
@@ -85,6 +95,7 @@ describe("api-client", () => {
         expect.fail("Should have thrown an error");
       } catch (error) {
         expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toContain("Invalid API path");
       }
       expect(fetchMock).not.toHaveBeenCalled();
     });
@@ -95,6 +106,7 @@ describe("api-client", () => {
         expect.fail("Should have thrown an error");
       } catch (error) {
         expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toContain("Invalid API path");
       }
       expect(fetchMock).not.toHaveBeenCalled();
     });
@@ -190,6 +202,34 @@ describe("api-client", () => {
       const callUrl = (fetchMock.mock.calls[0] as unknown[])[0] as string;
       expect(callUrl).toContain("/api/characters/test-id");
       expect(callUrl).toContain("mode=soft");
+    });
+  });
+
+  describe("simulationEventsUrl function", () => {
+    it("should construct valid SSE URLs with proper encoding", () => {
+      const url = simulationEventsUrl("test-simulation-123");
+      expect(url).toBe(`${API_BASE_URL}/api/simulations/test-simulation-123/events`);
+    });
+
+    it("should properly encode special characters in simulation IDs", () => {
+      const url = simulationEventsUrl("test/simulation?id=123");
+      expect(url).toContain(encodeURIComponent("test/simulation?id=123"));
+      expect(url).not.toContain("test/simulation?id=123");
+    });
+
+    it("should prevent SSRF attacks through simulation ID parameter", () => {
+      const maliciousIds = [
+        "http://evil.com",
+        "//evil.com",
+        "../../../etc/passwd",
+      ];
+
+      for (const id of maliciousIds) {
+        const url = simulationEventsUrl(id);
+        expect(url).toContain(encodeURIComponent(id));
+        expect(url).toContain("/api/simulations/");
+        expect(url).not.toContain(id);
+      }
     });
   });
 });
