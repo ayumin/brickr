@@ -7,6 +7,7 @@ type SimulationRow = {
   title: string | null;
   status: string;
   createdAt: Date;
+  createdByUserId: string | null;
 };
 
 function toSimulation(row: SimulationRow): Simulation {
@@ -15,15 +16,16 @@ function toSimulation(row: SimulationRow): Simulation {
     title: row.title,
     status: row.status as SimulationStatus,
     createdAt: row.createdAt,
+    ...(row.createdByUserId ? { createdByUserId: row.createdByUserId } : {}),
   };
 }
 
 export class SimulationRepository {
   constructor(private readonly db: Db) {}
 
-  async create(title: string | null): Promise<Simulation> {
+  async create(title: string | null, createdByUserId: string): Promise<Simulation> {
     const row = await this.db.simulation.create({
-      data: { title, status: "active" },
+      data: { title, status: "active", createdByUserId },
     });
     return toSimulation(row);
   }

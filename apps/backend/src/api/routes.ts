@@ -24,6 +24,7 @@ import type { AppServices } from "../services.js";
 import { InvalidApplicationSettingError } from "../settings/runtime-settings.js";
 import { CharacterCsvError } from "../characters/character-csv.js";
 import {
+  CharacterForbiddenError,
   CharacterGenerationError,
   CharacterHandleConflictError,
   CharacterNotFoundError,
@@ -31,6 +32,7 @@ import {
 } from "../characters/character-service.js";
 import {
   PostNotFoundError,
+  SimulationForbiddenError,
   SimulationNotFoundError,
   SimulationStoppedError,
 } from "../simulation/simulation-service.js";
@@ -201,10 +203,6 @@ export async function registerRoutes(
     }
   });
 
-  /**
-   * Empty until Character ownership (`createdByUserId`) lands (#25). The shape
-   * is stable ahead of that, so the frontend can build against it now.
-   */
   app.get("/api/users/:id/characters", async (request, reply) => {
     if (!requireAdmin(request, reply)) return reply;
 
@@ -214,7 +212,7 @@ export async function registerRoutes(
     }
     const user = await services.userAdmin.findById(params.data.id);
     if (!user) return sendError(reply, 404, "not_found", "user not found");
-    return { characters: [] };
+    return { characters: await services.characters.listManagementDtosByCreator(params.data.id) };
   });
 
   /** Zeroed until per-user LLM token tracking lands (#27). */
@@ -341,25 +339,34 @@ export async function registerRoutes(
     return { character };
   });
 
+  /**
+   * Public read, but the auth hook still resolves `currentUser` (possibly
+   * null), which is enough to decide whether `createdByUserId` may ride along
+   * (§66.5) without gating the whole endpoint behind a session.
+   */
   app.get("/api/characters/:id/config", async (request, reply) => {
     const params = idParams.safeParse(request.params);
     if (!params.success) {
       return sendError(reply, 400, "invalid_params", "character id is invalid");
     }
-    const character = await services.characters.findConfigDto(params.data.id);
+    const character = await services.characters.findConfigDto(
+      params.data.id,
+      request.currentUser,
+    );
     if (!character) return sendError(reply, 404, "not_found", "character not found");
     return { character };
   });
 
   app.post("/api/characters", async (request, reply) => {
-    if (!requireUser(request, reply)) return reply;
+    const user = requireUser(request, reply);
+    if (!user) return reply;
 
     const body = saveCharacterSchema.safeParse(request.body);
     if (!body.success) {
       return sendError(reply, 400, "invalid_body", "character body is invalid", body.error.issues);
     }
     try {
-      const character = await services.characters.create(body.data);
+      const character = await services.characters.create(body.data, user);
       return reply.status(201).send({ character });
     } catch (error) {
       return handleDomainError(reply, error);
@@ -367,7 +374,8 @@ export async function registerRoutes(
   });
 
   app.post("/api/characters/bulk-create", async (request, reply) => {
-    if (!requireUser(request, reply)) return reply;
+    const user = requireUser(request, reply);
+    if (!user) return reply;
 
     const body = bulkCreateCharactersSchema.safeParse(request.body);
     if (!body.success) {
@@ -379,7 +387,7 @@ export async function registerRoutes(
         body.error.issues,
       );
     }
-    const job = services.characters.startCreateMany(body.data.count);
+    const job = services.characters.startCreateMany(body.data.count, user.id);
     return reply.status(202).send({ job });
   });
 
@@ -394,7 +402,8 @@ export async function registerRoutes(
   });
 
   app.put("/api/characters/:id", async (request, reply) => {
-    if (!requireUser(request, reply)) return reply;
+    const user = requireUser(request, reply);
+    if (!user) return reply;
 
     const params = idParams.safeParse(request.params);
     if (!params.success) {
@@ -405,14 +414,15 @@ export async function registerRoutes(
       return sendError(reply, 400, "invalid_body", "character body is invalid", body.error.issues);
     }
     try {
-      return { character: await services.characters.update(params.data.id, body.data) };
+      return { character: await services.characters.update(params.data.id, body.data, user) };
     } catch (error) {
       return handleDomainError(reply, error);
     }
   });
 
   app.delete("/api/characters/:id", async (request, reply) => {
-    if (!requireUser(request, reply)) return reply;
+    const user = requireUser(request, reply);
+    if (!user) return reply;
 
     const params = idParams.safeParse(request.params);
     if (!params.success) {
@@ -426,6 +436,7 @@ export async function registerRoutes(
       return {
         deletedId: await services.characters.delete(
           params.data.id,
+          user,
           query.data.mode ?? "soft",
         ),
       };
@@ -435,21 +446,23 @@ export async function registerRoutes(
   });
 
   app.post("/api/characters/:id/restore", async (request, reply) => {
-    if (!requireUser(request, reply)) return reply;
+    const user = requireUser(request, reply);
+    if (!user) return reply;
 
     const params = idParams.safeParse(request.params);
     if (!params.success) {
       return sendError(reply, 400, "invalid_params", "character id is invalid");
     }
     try {
-      return { restoredId: await services.characters.restore(params.data.id) };
+      return { restoredId: await services.characters.restore(params.data.id, user) };
     } catch (error) {
       return handleDomainError(reply, error);
     }
   });
 
   app.post("/api/characters/bulk-delete", async (request, reply) => {
-    if (!requireUser(request, reply)) return reply;
+    const user = requireUser(request, reply);
+    if (!user) return reply;
 
     const body = bulkDeleteCharactersSchema.safeParse(request.body);
     if (!body.success) {
@@ -464,6 +477,7 @@ export async function registerRoutes(
     return {
       deletedIds: await services.characters.deleteMany(
         body.data.ids,
+        user,
         body.data.mode ?? "soft",
       ),
     };
@@ -506,14 +520,15 @@ export async function registerRoutes(
   }));
 
   app.post("/api/simulations", async (request, reply) => {
-    if (!requireUser(request, reply)) return reply;
+    const user = requireUser(request, reply);
+    if (!user) return reply;
 
     const body = createSimulationSchema.safeParse(request.body ?? {});
     if (!body.success) {
       return sendError(reply, 400, "invalid_body", "title is invalid", body.error.issues);
     }
 
-    const simulation = await services.simulations.create(body.data.title ?? null);
+    const simulation = await services.simulations.create(body.data.title ?? null, user.id);
     return reply.status(201).send({ simulation });
   });
 
@@ -522,34 +537,41 @@ export async function registerRoutes(
   );
 
   app.put("/api/simulations/:id", async (request, reply) => {
-    if (!requireUser(request, reply)) return reply;
+    const user = requireUser(request, reply);
+    if (!user) return reply;
 
     const body = updateSimulationSchema.safeParse(request.body);
     if (!body.success) {
       return sendError(reply, 400, "invalid_body", "title is invalid", body.error.issues);
     }
     return withSimulation(request, reply, async (id) => ({
-      simulation: await services.simulations.rename(id, body.data.title),
+      simulation: await services.simulations.rename(id, body.data.title, user),
     }));
   });
 
-  app.get("/api/simulations/:id/analysis", async (request, reply) =>
-    withSimulation(request, reply, async (id) => ({
-      analysis: await services.simulationAnalysis.analyze(id),
-    })),
-  );
+  /** Admin-only or creator-only (§66.6): unlike the simulation itself, the analysis is not public. */
+  app.get("/api/simulations/:id/analysis", async (request, reply) => {
+    const user = requireUser(request, reply);
+    if (!user) return reply;
+
+    return withSimulation(request, reply, async (id) => ({
+      analysis: await services.simulationAnalysis.analyze(id, user),
+    }));
+  });
 
   app.post("/api/simulations/:id/stop", async (request, reply) => {
-    if (!requireUser(request, reply)) return reply;
+    const user = requireUser(request, reply);
+    if (!user) return reply;
     return withSimulation(request, reply, async (id) => ({
-      simulation: await services.simulations.stop(id),
+      simulation: await services.simulations.stop(id, user),
     }));
   });
 
   app.post("/api/simulations/:id/resume", async (request, reply) => {
-    if (!requireUser(request, reply)) return reply;
+    const user = requireUser(request, reply);
+    if (!user) return reply;
     return withSimulation(request, reply, async (id) => ({
-      simulation: await services.simulations.resume(id),
+      simulation: await services.simulations.resume(id, user),
     }));
   });
 
@@ -662,6 +684,9 @@ function handleDomainError(reply: FastifyReply, error: unknown): FastifyReply {
   }
   if (error instanceof CharacterNotFoundError || error instanceof ModelProfileNotFoundError) {
     return sendError(reply, 404, "not_found", error.message);
+  }
+  if (error instanceof CharacterForbiddenError || error instanceof SimulationForbiddenError) {
+    return sendError(reply, 403, "forbidden", error.message);
   }
   if (error instanceof CharacterHandleConflictError) {
     return sendError(reply, 409, "handle_conflict", error.message);

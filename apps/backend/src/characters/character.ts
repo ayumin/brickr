@@ -35,6 +35,9 @@ export type Character = {
   avatarUrl?: string;
   /** Present when the character is logically deleted. */
   deletedAt?: Date;
+
+  /** Absent for seed Characters — "System-owned", forever (CLAUDE.md §66.14). */
+  createdByUserId?: string;
 };
 
 /** Seed shape: behaviour values may be omitted and fall back to defaults. */
@@ -58,4 +61,8 @@ export type CharacterSeed = Omit<
     >
   >;
 
-export type SaveCharacter = Omit<Character, "id" | "deletedAt">;
+/**
+ * The writable shape. `createdByUserId` is deliberately excluded: it is set once
+ * at creation and never touched by an update (CLAUDE.md §66.5).
+ */
+export type SaveCharacter = Omit<Character, "id" | "deletedAt" | "createdByUserId">;

@@ -5,6 +5,8 @@ export type Simulation = {
   title: string | null;
   status: SimulationStatus;
   createdAt: Date;
+  /** Public to everyone (CLAUDE.md §66.6). Absent for simulations created before login existed. */
+  createdByUserId?: string;
 };
 
 export type SimulationSummary = Simulation & {

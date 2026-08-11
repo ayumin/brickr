@@ -28,6 +28,8 @@ export type CharacterConfigDto = CharacterDto & {
   quoteProbability: number;
   influence: number;
   modelProfileId: string;
+  /** Only present for the creator or an admin (CLAUDE.md §66.5); omitted, not null, otherwise. */
+  createdByUserId?: string;
 };
 
 /** Settings needed by the character management table, without persona prompts. */

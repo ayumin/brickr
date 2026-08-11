@@ -1,10 +1,17 @@
 import type { PostDto } from "@brickr/shared";
 import { describe, expect, it } from "vitest";
+import type { LLMClient } from "../llm/llm-client.js";
+import type { LLMProviderRegistry } from "../llm/provider-registry.js";
+import type { PostService } from "../posts/post-service.js";
 import {
   parseSimulationSummary,
   rankAuthors,
   rankPosts,
+  SimulationAnalysisService,
 } from "./simulation-analysis-service.js";
+import { SimulationForbiddenError, SimulationNotFoundError } from "./simulation-service.js";
+import type { SimulationRepository } from "./simulation-repository.js";
+import type { Simulation } from "./simulation.js";
 
 function post(
   id: string,
@@ -91,5 +98,66 @@ describe("simulation content summary", () => {
       highEngagementTopics: "反響が大きい話題",
       lowEngagementTopics: "反響が少ない話題",
     });
+  });
+});
+
+describe("SimulationAnalysisService.analyze ownership (§66.6)", () => {
+  const simulation: Simulation = {
+    id: "sim-1",
+    title: null,
+    status: "active",
+    createdAt: new Date("2026-08-10T00:00:00Z"),
+    createdByUserId: "user-1",
+  };
+
+  function makeService(found: Simulation | null) {
+    const simulations = {
+      findById: (id: string) => Promise.resolve(id === found?.id ? found : null),
+    } as unknown as SimulationRepository;
+    const posts = {
+      listBySimulation: () => Promise.resolve([]),
+    } as unknown as PostService;
+    return new SimulationAnalysisService(
+      simulations,
+      posts,
+      {} as unknown as LLMClient,
+      { availableIds: () => [] } as unknown as LLMProviderRegistry,
+    );
+  }
+
+  it("allows the creator", async () => {
+    const service = makeService(simulation);
+    await expect(
+      service.analyze("sim-1", { id: "user-1", isAdmin: false }),
+    ).resolves.toMatchObject({ postCount: 0 });
+  });
+
+  it("allows an admin who is not the creator", async () => {
+    const service = makeService(simulation);
+    await expect(
+      service.analyze("sim-1", { id: "someone-else", isAdmin: true }),
+    ).resolves.toMatchObject({ postCount: 0 });
+  });
+
+  it("rejects a signed-in caller who is neither the creator nor an admin", async () => {
+    const service = makeService(simulation);
+    await expect(
+      service.analyze("sim-1", { id: "someone-else", isAdmin: false }),
+    ).rejects.toBeInstanceOf(SimulationForbiddenError);
+  });
+
+  it("rejects a non-admin when the simulation predates login and has no owner", async () => {
+    const noOwner: Simulation = { ...simulation, createdByUserId: undefined };
+    const service = makeService(noOwner);
+    await expect(
+      service.analyze("sim-1", { id: "user-1", isAdmin: false }),
+    ).rejects.toBeInstanceOf(SimulationForbiddenError);
+  });
+
+  it("still 404s for an unknown simulation before checking ownership", async () => {
+    const service = makeService(null);
+    await expect(
+      service.analyze("missing", { id: "user-1", isAdmin: true }),
+    ).rejects.toBeInstanceOf(SimulationNotFoundError);
   });
 });

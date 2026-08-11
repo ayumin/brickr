@@ -4,6 +4,7 @@ import type {
   SimulationSummaryDto,
 } from "@brickr/shared";
 import type { AgentService } from "../agents/agent-service.js";
+import type { UserAccount } from "../auth/user-account.js";
 import type { CharacterRepository } from "../characters/character-repository.js";
 import type { Character } from "../characters/character.js";
 import type { Post } from "../posts/post.js";
@@ -60,6 +61,14 @@ export class SimulationStoppedError extends Error {
   }
 }
 
+/** Rename/stop/resume/analysis are limited to the creator or an admin (CLAUDE.md §66.6). */
+export class SimulationForbiddenError extends Error {
+  constructor(id: string) {
+    super(`not allowed to manage simulation "${id}"`);
+    this.name = "SimulationForbiddenError";
+  }
+}
+
 export class PostNotFoundError extends Error {
   constructor(id: string) {
     super(`post "${id}" not found`);
@@ -89,8 +98,8 @@ export class SimulationService {
     private readonly logger: SimulationLogger,
   ) {}
 
-  async create(title: string | null): Promise<SimulationDto> {
-    const simulation = await this.simulations.create(title);
+  async create(title: string | null, createdByUserId: string): Promise<SimulationDto> {
+    const simulation = await this.simulations.create(title, createdByUserId);
     this.stopped.delete(simulation.id);
     return toSimulationDto(simulation);
   }
@@ -109,23 +118,26 @@ export class SimulationService {
     return { simulation: toSimulationDto(simulation), posts };
   }
 
-  async rename(id: string, title: string): Promise<SimulationDto> {
-    await this.requireSimulation(id);
+  async rename(id: string, title: string, actor: SimulationActor): Promise<SimulationDto> {
+    const simulation = await this.requireSimulation(id);
+    assertSimulationOwnerOrAdmin(simulation, actor);
     return toSimulationDto(await this.simulations.updateTitle(id, title));
   }
 
-  async stop(id: string): Promise<SimulationDto> {
-    await this.requireSimulation(id);
+  async stop(id: string, actor: SimulationActor): Promise<SimulationDto> {
+    const simulation = await this.requireSimulation(id);
+    assertSimulationOwnerOrAdmin(simulation, actor);
     this.stopped.add(id);
-    const simulation = await this.simulations.updateStatus(id, "stopped");
-    return toSimulationDto(simulation);
+    const stoppedSimulation = await this.simulations.updateStatus(id, "stopped");
+    return toSimulationDto(stoppedSimulation);
   }
 
-  async resume(id: string): Promise<SimulationDto> {
-    await this.requireSimulation(id);
+  async resume(id: string, actor: SimulationActor): Promise<SimulationDto> {
+    const simulation = await this.requireSimulation(id);
+    assertSimulationOwnerOrAdmin(simulation, actor);
     this.stopped.delete(id);
-    const simulation = await this.simulations.updateStatus(id, "active");
-    return toSimulationDto(simulation);
+    const resumedSimulation = await this.simulations.updateStatus(id, "active");
+    return toSimulationDto(resumedSimulation);
   }
 
   /**
@@ -435,7 +447,32 @@ export function toSimulationDto(simulation: Simulation): SimulationDto {
     title: simulation.title,
     status: simulation.status,
     createdAt: simulation.createdAt.toISOString(),
+    ...(simulation.createdByUserId ? { createdByUserId: simulation.createdByUserId } : {}),
   };
+}
+
+/** The signed-in caller, reduced to what an ownership check needs (CLAUDE.md §66.6). */
+export type SimulationActor = Pick<UserAccount, "id" | "isAdmin">;
+
+/**
+ * A simulation with no owner (created before login existed) matches no actor
+ * id, so only an admin may manage it — mirrors the Character rule (§66.14),
+ * even though Simulation ownership itself is public rather than private.
+ */
+export function isSimulationOwnerOrAdmin(
+  simulation: Pick<Simulation, "createdByUserId">,
+  actor: SimulationActor,
+): boolean {
+  return actor.isAdmin || actor.id === simulation.createdByUserId;
+}
+
+export function assertSimulationOwnerOrAdmin(
+  simulation: Simulation,
+  actor: SimulationActor,
+): void {
+  if (!isSimulationOwnerOrAdmin(simulation, actor)) {
+    throw new SimulationForbiddenError(simulation.id);
+  }
 }
 
 /**

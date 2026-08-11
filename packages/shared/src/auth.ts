@@ -100,7 +100,7 @@ export type ResetPasswordResponse = {
   temporaryPassword: string;
 };
 
-/** Empty until Character ownership (createdByUserId) lands; shape is stable ahead of that. */
+/** Characters this account created, including its deleted ones (§66.5). */
 export type UserCharactersResponse = {
   characters: CharacterManagementDto[];
 };

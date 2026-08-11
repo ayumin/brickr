@@ -10,7 +10,12 @@ import type { LLMClient } from "../llm/llm-client.js";
 import type { LLMProviderRegistry } from "../llm/provider-registry.js";
 import type { PostService } from "../posts/post-service.js";
 import type { SimulationRepository } from "./simulation-repository.js";
-import { SimulationNotFoundError, toSimulationDto } from "./simulation-service.js";
+import {
+  assertSimulationOwnerOrAdmin,
+  SimulationNotFoundError,
+  toSimulationDto,
+  type SimulationActor,
+} from "./simulation-service.js";
 
 const SUMMARY_POST_LIMIT = 100;
 const SUMMARY_CONTENT_LIMIT = 500;
@@ -32,9 +37,10 @@ export class SimulationAnalysisService {
     private readonly providers: LLMProviderRegistry,
   ) {}
 
-  async analyze(id: string): Promise<SimulationAnalysisDto> {
+  async analyze(id: string, actor: SimulationActor): Promise<SimulationAnalysisDto> {
     const simulation = await this.simulations.findById(id);
     if (!simulation) throw new SimulationNotFoundError(id);
+    assertSimulationOwnerOrAdmin(simulation, actor);
 
     const posts = await this.posts.listBySimulation(id);
     const replyCount = posts.filter((post) => post.replyTo !== null).length;

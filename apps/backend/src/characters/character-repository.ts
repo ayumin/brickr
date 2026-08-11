@@ -25,6 +25,7 @@ type CharacterRow = {
   modelProfileId: string;
   avatarUrl: string | null;
   deletedAt: Date | null;
+  createdByUserId: string | null;
 };
 
 function toCharacter(row: CharacterRow): Character {
@@ -45,6 +46,7 @@ function toCharacter(row: CharacterRow): Character {
     modelProfileId: row.modelProfileId,
     ...(row.avatarUrl ? { avatarUrl: row.avatarUrl } : {}),
     ...(row.deletedAt ? { deletedAt: row.deletedAt } : {}),
+    ...(row.createdByUserId ? { createdByUserId: row.createdByUserId } : {}),
   };
 }
 
@@ -119,28 +121,47 @@ export class CharacterRepository {
     return new Map(rows.map((row) => [row.authorId, row._count._all]));
   }
 
+  /** Admin drilldown onto one user's Characters (§66.5, §66.15), including their deleted ones. */
+  async findAllIncludingDeletedByCreatedByUserId(userId: string): Promise<Character[]> {
+    const rows = await this.db.character.findMany({
+      where: { createdByUserId: userId },
+      orderBy: { id: "asc" },
+    });
+    return rows.map(toCharacter);
+  }
 
   /**
    * Creating a character also takes its handle, in one transaction, so the
    * namespace can never drift from the rows it describes (CLAUDE.md §66.13).
+   *
+   * `createdByUserId` is null only for the seed characters (§66.14); every
+   * character created through the API has a signed-in owner.
    */
-  async create(id: string, input: SaveCharacter): Promise<Character> {
+  async create(
+    id: string,
+    input: SaveCharacter,
+    createdByUserId: string | null,
+  ): Promise<Character> {
     return this.db.$transaction(async (tx) => {
-      const row = await tx.character.create({ data: { id, ...toWriteData(input) } });
+      const row = await tx.character.create({
+        data: { id, createdByUserId, ...toWriteData(input) },
+      });
       await claimHandle(tx, { handle: input.handle, ownerType: "character", ownerId: id });
       return toCharacter(row);
     });
   }
 
   async createMany(
-    entries: Array<{ id: string; input: SaveCharacter }>,
+    entries: Array<{ id: string; input: SaveCharacter; createdByUserId: string | null }>,
   ): Promise<Character[]> {
     if (entries.length === 0) return [];
     return this.db.$transaction(
       async (tx) => {
         const created: Character[] = [];
-        for (const { id, input } of entries) {
-          const row = await tx.character.create({ data: { id, ...toWriteData(input) } });
+        for (const { id, input, createdByUserId } of entries) {
+          const row = await tx.character.create({
+            data: { id, createdByUserId, ...toWriteData(input) },
+          });
           await claimHandle(tx, { handle: input.handle, ownerType: "character", ownerId: id });
           created.push(toCharacter(row));
         }
