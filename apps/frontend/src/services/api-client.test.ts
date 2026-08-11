@@ -27,7 +27,7 @@ describe("api-client", () => {
 
     it("should reject absolute URLs (http://)", async () => {
       try {
-        await api.health();
+        await request("http://evil.com/steal");
         expect.fail("Should have thrown an error");
       } catch (error) {
         expect(error).toBeInstanceOf(Error);
