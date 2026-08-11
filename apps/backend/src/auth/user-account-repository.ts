@@ -96,6 +96,21 @@ export class UserAccountRepository {
     const id = randomUUID();
 
     return this.db.$transaction(async (tx) => {
+      if (inviteCode !== null) {
+        // Checked before anything touches the email or the handle. Otherwise a
+        // caller without a valid code could submit a guessed address and learn
+        // from the 409 whether it is registered, and email is private (§66.1).
+        const usable = await tx.inviteCode.findFirst({
+          where: {
+            code: inviteCode,
+            usedById: null,
+            OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+          },
+          select: { code: true },
+        });
+        if (!usable) throw new InviteCodeInvalidError();
+      }
+
       let row: UserRow;
       try {
         row = await tx.userProfile.create({
@@ -134,8 +149,10 @@ export class UserAccountRepository {
       }
 
       if (inviteCode !== null) {
-        // Compare-and-set: `usedById: null` in the filter means two concurrent
-        // signups with one code cannot both succeed.
+        // The check above cannot enforce single use on its own: two concurrent
+        // signups can both pass it. This compare-and-set is the authority, and
+        // `usedById: null` in the filter means only one of them may win. It
+        // needs the user row to exist first, because `usedById` is a foreign key.
         const claimed = await tx.inviteCode.updateMany({
           where: {
             code: inviteCode,

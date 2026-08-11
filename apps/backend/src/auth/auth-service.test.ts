@@ -36,6 +36,12 @@ function makeRepositories(options: { takenHandles?: string[]; inviteCodes?: stri
         [...accounts.values()].find((a) => a.email === normalizeEmail(email)) ?? null,
       ),
     createInvited: (input: NewUserAccount, inviteCode: string | null) => {
+      // Same order as the real repository: the invite code is validated before
+      // anything can surface an email or handle conflict.
+      if (inviteCode !== null && !unusedCodes.has(inviteCode)) {
+        return Promise.reject(new InviteCodeInvalidError());
+      }
+
       const email = normalizeEmail(input.email);
       if ([...accounts.values()].some((a) => a.email === email)) {
         return Promise.reject(new EmailTakenError());
@@ -43,9 +49,7 @@ function makeRepositories(options: { takenHandles?: string[]; inviteCodes?: stri
       if (handles.has(input.handle)) {
         return Promise.reject(new HandleTakenError(input.handle));
       }
-      if (inviteCode !== null && !unusedCodes.delete(inviteCode)) {
-        return Promise.reject(new InviteCodeInvalidError());
-      }
+      if (inviteCode !== null) unusedCodes.delete(inviteCode);
 
       const account: UserAccountWithSecret = {
         id: `user-${accounts.size + 1}`,
@@ -187,6 +191,41 @@ describe("AuthService.signup", () => {
     ).rejects.toBeInstanceOf(UnderageSignupError);
 
     await expect(service.signup(signupInput())).resolves.toBeTruthy();
+  });
+
+  it("hides whether an email is registered when the invite code is invalid", async () => {
+    // Without this ordering, a caller with no code could submit a guessed
+    // address and read the 409 as "this account exists" (§66.1).
+    const { service } = makeService();
+    await service.signup(signupInput());
+
+    await expect(
+      service.signup(signupInput({ inviteCode: "UNKNOWN", handle: "taro" })),
+    ).rejects.toBeInstanceOf(InviteCodeInvalidError);
+  });
+
+  it("hides whether a handle is taken when the invite code is invalid", async () => {
+    const { service } = makeService({ takenHandles: ["architect"] });
+
+    await expect(
+      service.signup(signupInput({ inviteCode: "UNKNOWN", handle: "architect" })),
+    ).rejects.toBeInstanceOf(InviteCodeInvalidError);
+  });
+
+  it("does not consume the invite code when the email is already taken", async () => {
+    const { service } = makeService({ inviteCodes: ["INVITE-1", "INVITE-2"] });
+    await service.signup(signupInput());
+
+    await expect(
+      service.signup(signupInput({ inviteCode: "INVITE-2", handle: "taro" })),
+    ).rejects.toBeInstanceOf(EmailTakenError);
+
+    // INVITE-2 must still work for a signup that does not collide.
+    await expect(
+      service.signup(
+        signupInput({ inviteCode: "INVITE-2", email: "taro@example.com", handle: "taro" }),
+      ),
+    ).resolves.toBeTruthy();
   });
 
   it("refuses a handle already held by a character (§66.13)", async () => {

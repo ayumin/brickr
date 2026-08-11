@@ -65,4 +65,18 @@ describe("readSessionCookie", () => {
       expect(readSessionCookie(header)).toBeNull();
     },
   );
+
+  it("decodes a percent-encoded value", () => {
+    expect(readSessionCookie(`${SESSION_COOKIE_NAME}=a%2Bb`)).toBe("a+b");
+  });
+
+  // This runs in the global onRequest hook, so throwing here would turn every
+  // request into a 500 for anyone sending one bad cookie.
+  it.each(["%", "%zz", "abc%", "%E0%A4%A"])(
+    "treats the malformed percent-encoding %p as signed out instead of throwing",
+    (value) => {
+      expect(() => readSessionCookie(`${SESSION_COOKIE_NAME}=${value}`)).not.toThrow();
+      expect(readSessionCookie(`${SESSION_COOKIE_NAME}=${value}`)).toBeNull();
+    },
+  );
 });
