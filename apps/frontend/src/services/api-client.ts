@@ -19,6 +19,8 @@ import type {
   CharacterManagementResponse,
   CharacterDeletionMode,
   CharactersResponse,
+  CreateInviteCodeRequest,
+  CreateInviteCodeResponse,
   CreatePostRequest,
   CreatePostResponse,
   CreateSimulationRequest,
@@ -28,11 +30,14 @@ import type {
   HandleOwnerDto,
   HandleResponse,
   ImportCharactersCsvResponse,
+  InviteCodeDto,
+  InviteCodesResponse,
   LoginRequest,
   ModelProfileDto,
   ModelProfilesResponse,
   PostDto,
   PostsResponse,
+  ResetPasswordResponse,
   RestoreCharacterResponse,
   SaveCharacterRequest,
   SaveUserProfileRequest,
@@ -45,6 +50,10 @@ import type {
   SimulationsResponse,
   SimulationSummaryDto,
   UpdateSimulationRequest,
+  UserCharactersResponse,
+  UserDetailResponse,
+  UserManagementDto,
+  UserManagementResponse,
   UserProfileDto,
   UserProfileResponse,
   UserTokenUsageResponse,
@@ -518,6 +527,89 @@ export const api = {
       signal ? { signal } : {},
     );
     return data.post;
+  },
+
+  async getUserManagement(
+    query: { page?: number; search?: string } = {},
+    signal?: AbortSignal,
+  ): Promise<UserManagementResponse> {
+    const params = new URLSearchParams();
+    if (query.page !== undefined) params.set("page", String(query.page));
+    if (query.search) params.set("search", query.search);
+    const queryString = params.toString();
+    return request<UserManagementResponse>(
+      `/api/users/management${queryString ? `?${queryString}` : ""}`,
+      signal ? { signal } : {},
+    );
+  },
+
+  async getUser(id: string, signal?: AbortSignal): Promise<UserManagementDto> {
+    const data = await request<UserDetailResponse>(
+      `/api/users/${encodeURIComponent(id)}`,
+      signal ? { signal } : {},
+    );
+    return data.user;
+  },
+
+  async suspendUser(id: string): Promise<UserManagementDto> {
+    const data = await request<UserDetailResponse>(
+      `/api/users/${encodeURIComponent(id)}/suspend`,
+      { method: "POST" },
+    );
+    return data.user;
+  },
+
+  async reactivateUser(id: string): Promise<UserManagementDto> {
+    const data = await request<UserDetailResponse>(
+      `/api/users/${encodeURIComponent(id)}/reactivate`,
+      { method: "POST" },
+    );
+    return data.user;
+  },
+
+  async resetUserPassword(id: string): Promise<string> {
+    const data = await request<ResetPasswordResponse>(
+      `/api/users/${encodeURIComponent(id)}/reset-password`,
+      { method: "POST" },
+    );
+    return data.temporaryPassword;
+  },
+
+  async getUserCharacters(
+    id: string,
+    signal?: AbortSignal,
+  ): Promise<CharacterManagementDto[]> {
+    const data = await request<UserCharactersResponse>(
+      `/api/users/${encodeURIComponent(id)}/characters`,
+      signal ? { signal } : {},
+    );
+    return data.characters;
+  },
+
+  async getUserTokenUsage(
+    id: string,
+    signal?: AbortSignal,
+  ): Promise<UserTokenUsageResponse> {
+    return request<UserTokenUsageResponse>(
+      `/api/users/${encodeURIComponent(id)}/token-usage`,
+      signal ? { signal } : {},
+    );
+  },
+
+  async createInviteCode(body: CreateInviteCodeRequest = {}): Promise<InviteCodeDto> {
+    const data = await request<CreateInviteCodeResponse>("/api/invite-codes", {
+      method: "POST",
+      body,
+    });
+    return data.inviteCode;
+  },
+
+  async getInviteCodes(signal?: AbortSignal): Promise<InviteCodeDto[]> {
+    const data = await request<InviteCodesResponse>(
+      "/api/invite-codes",
+      signal ? { signal } : {},
+    );
+    return data.inviteCodes;
   },
 };
 

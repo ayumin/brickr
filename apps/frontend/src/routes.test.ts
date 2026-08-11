@@ -6,6 +6,7 @@ import {
   postPath,
   simulationAnalysisPath,
   simulationListPath,
+  usersManagementPath,
 } from "./routes";
 
 describe("matchRoute", () => {
@@ -27,6 +28,12 @@ describe("matchRoute", () => {
 
   it("matches a post route", () => {
     expect(matchRoute("/posts/post-1")).toEqual({ kind: "post", postId: "post-1" });
+  });
+
+  it("matches the admin users-management route, nested under the reserved 'admin' segment", () => {
+    expect(matchRoute("/admin/users")).toEqual({ kind: "users-management" });
+    // The bare reserved segment itself is still not a route.
+    expect(matchRoute("/admin")).toEqual({ kind: "not-found" });
   });
 
   it("matches a well-formed handle", () => {
@@ -76,6 +83,7 @@ describe("path builders", () => {
     expect(simulationAnalysisPath("sim-1")).toBe("/simulations/sim-1/analysis");
     expect(postPath("post-1")).toBe("/posts/post-1");
     expect(handlePath("architect")).toBe("/architect");
+    expect(usersManagementPath()).toBe("/admin/users");
   });
 
   it("percent-encode ids and handles that need it", () => {
