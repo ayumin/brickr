@@ -173,7 +173,7 @@ describe("api-client", () => {
 
       expect(result).toEqual({ id: "test id", name: "Test" });
       expect(fetchMock).toHaveBeenCalledOnce();
-      const callUrl = fetchMock.mock.calls[0][0] as string;
+      const callUrl = (fetchMock.mock.calls[0] as unknown[])[0] as string;
       expect(callUrl).toContain("/api/characters/test%20id");
     });
 
