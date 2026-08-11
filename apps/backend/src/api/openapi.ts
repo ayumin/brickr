@@ -901,7 +901,7 @@ export const openApiDocument: OpenAPIV3.Document = {
       SessionResponse: {
         type: "object",
         required: ["user"],
-        properties: { user: { ...ref("AuthUser"), nullable: true } },
+        properties: { user: { allOf: [ref("AuthUser")], nullable: true } },
       },
       SignupRequest: {
         type: "object",
