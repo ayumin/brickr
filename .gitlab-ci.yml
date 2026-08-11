@@ -18,6 +18,15 @@ workflow:
     - if: $CI_COMMIT_BRANCH
     - if: $CI_COMMIT_TAG
 
+# Workspace install shared by every Node job. Referenced rather than inherited
+# by the backend jobs, which need one extra step on top of it.
+.node-setup:
+  before_script:
+    - corepack enable
+    - corepack prepare pnpm@11.21.0 --activate
+    - pnpm config set store-dir .pnpm-store
+    - pnpm install --frozen-lockfile
+
 default:
   image: node:22-bookworm-slim
   interruptible: true
@@ -28,43 +37,71 @@ default:
     paths:
       - .pnpm-store/
   before_script:
-    - corepack enable
-    - corepack prepare pnpm@11.21.0 --activate
-    - pnpm config set store-dir .pnpm-store
-    - pnpm install --frozen-lockfile
+    - !reference [.node-setup, before_script]
+
+# Only the backend imports the generated Prisma client. Running this everywhere
+# cost every frontend and shared job several seconds for nothing.
+.backend-job:
+  before_script:
+    - !reference [.node-setup, before_script]
     - pnpm --filter @brickr/backend db:generate
 
+# `needs: []` makes each job start as soon as the pipeline does. Lint, typecheck
+# and test are independent, so waiting for a whole stage to finish only added
+# idle time. The stages above are kept for how the pipeline reads, not to order
+# anything.
+.independent:
+  needs: []
+
+# Artifacts from a merge request are never consumed. Building on the default
+# branch and on tags keeps them where they are actually used.
+.release-only:
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+
 "frontend:lint":
+  extends: .independent
   stage: lint
   script:
     - pnpm --filter @brickr/frontend lint
 
 "backend:lint":
+  extends:
+    - .independent
+    - .backend-job
   stage: lint
   script:
     - pnpm --filter @brickr/backend lint
 
 "shared:lint":
+  extends: .independent
   stage: lint
   script:
     - pnpm --filter @brickr/shared lint
 
 "frontend:typecheck":
+  extends: .independent
   stage: typecheck
   script:
     - pnpm --filter @brickr/frontend typecheck
 
 "backend:typecheck":
+  extends:
+    - .independent
+    - .backend-job
   stage: typecheck
   script:
     - pnpm --filter @brickr/backend typecheck
 
 "shared:typecheck":
+  extends: .independent
   stage: typecheck
   script:
     - pnpm --filter @brickr/shared typecheck
 
 "frontend:test":
+  extends: .independent
   stage: test
   script:
     - pnpm --filter @brickr/frontend test --coverage
@@ -76,6 +113,9 @@ default:
         path: apps/frontend/coverage/cobertura-coverage.xml
 
 "backend:test":
+  extends:
+    - .independent
+    - .backend-job
   stage: test
   script:
     - pnpm --filter @brickr/backend test --coverage
@@ -87,6 +127,7 @@ default:
         path: apps/backend/coverage/cobertura-coverage.xml
 
 "shared:test":
+  extends: .independent
   stage: test
   script:
     - pnpm --filter @brickr/shared test --coverage
@@ -98,6 +139,9 @@ default:
         path: packages/shared/coverage/cobertura-coverage.xml
 
 "frontend:build":
+  extends:
+    - .independent
+    - .release-only
   stage: build
   script:
     - pnpm --filter @brickr/frontend build
@@ -108,6 +152,10 @@ default:
     expire_in: 1 week
 
 "backend:build":
+  extends:
+    - .independent
+    - .backend-job
+    - .release-only
   stage: build
   script:
     - pnpm --filter @brickr/backend build
@@ -118,6 +166,9 @@ default:
     expire_in: 1 week
 
 "shared:build":
+  extends:
+    - .independent
+    - .release-only
   stage: build
   script:
     - pnpm --filter @brickr/shared build
@@ -132,9 +183,12 @@ default:
 # from running inside those images (which would fail with "corepack: not found").
 secret_detection:
   before_script: []
+  needs: []
 
 semgrep-sast:
   before_script: []
+  needs: []
 
 gemnasium-dependency_scanning:
   before_script: []
+  needs: []
