@@ -47,6 +47,7 @@ import type {
   UpdateSimulationRequest,
   UserProfileDto,
   UserProfileResponse,
+  UserTokenUsageResponse,
 } from "@brickr/shared";
 
 const DEFAULT_BASE_URL = "http://localhost:3000";
@@ -403,6 +404,13 @@ export const api = {
       body,
     });
     return data.profile;
+  },
+
+  async getMyTokenUsage(signal?: AbortSignal): Promise<UserTokenUsageResponse> {
+    return request<UserTokenUsageResponse>(
+      "/api/user-profile/token-usage",
+      signal ? { signal } : {},
+    );
   },
 
   async createSimulation(
