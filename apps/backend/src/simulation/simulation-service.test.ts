@@ -133,6 +133,11 @@ function makeHarness(options: HarnessOptions): Harness {
         posts.filter((post) => post.simulationId === simulationId).map(toDto),
       );
     },
+    // These tests have no user accounts: characters supply every handle in the
+    // transcript, so an empty result is the honest answer.
+    findUsersByIds(): Promise<[]> {
+      return Promise.resolve([]);
+    },
   } as unknown as PostService;
 
   const threadService = {
@@ -227,6 +232,7 @@ describe("SimulationService orchestration", () => {
 
     const userPost = await harness.service.submitUserPost({
       simulationId: SIMULATION.id,
+      authorId: USER_AUTHOR_ID,
       content: "hello",
       responderIds: [alpha.id],
     });
@@ -263,6 +269,7 @@ describe("SimulationService orchestration", () => {
 
     await harness.service.submitUserPost({
       simulationId: SIMULATION.id,
+      authorId: USER_AUTHOR_ID,
       content: "hello",
       responderIds: [alpha.id, beta.id],
     });
@@ -302,6 +309,7 @@ describe("SimulationService orchestration", () => {
 
     await harness.service.submitUserPost({
       simulationId: SIMULATION.id,
+      authorId: USER_AUTHOR_ID,
       content: "hello",
       responderIds: [broken.id, healthy.id],
     });
@@ -343,6 +351,7 @@ describe("SimulationService orchestration", () => {
 
     await harness.service.submitUserPost({
       simulationId: SIMULATION.id,
+      authorId: USER_AUTHOR_ID,
       content: "hello",
       responderIds: [alpha.id],
     });
@@ -378,6 +387,7 @@ describe("SimulationService orchestration", () => {
     const stream = collectUntilCompleted(harness.events);
     await harness.service.submitUserPost({
       simulationId: SIMULATION.id,
+      authorId: USER_AUTHOR_ID,
       content: "hello again",
       responderIds: [alpha.id],
     });

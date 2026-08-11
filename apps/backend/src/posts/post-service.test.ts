@@ -41,7 +41,9 @@ describe("PostService.publish mentions", () => {
           },
         ]),
     } as unknown as CharacterRepository;
-    const profiles = {} as UserProfileRepository;
+    const profiles = {
+      listHandles: () => Promise.resolve([USER_HANDLE]),
+    } as unknown as UserProfileRepository;
 
     await new PostService(posts, characters, profiles).publish({
       simulationId: "sim-1",

@@ -3,7 +3,6 @@ import type {
   SimulationResponse,
   SimulationSummaryDto,
 } from "@brickr/shared";
-import { USER_AUTHOR_ID, USER_HANDLE } from "@brickr/shared";
 import type { AgentService } from "../agents/agent-service.js";
 import type { CharacterRepository } from "../characters/character-repository.js";
 import type { Character } from "../characters/character.js";
@@ -14,6 +13,7 @@ import { resolveActionTargets, selectAction } from "./action-selector.js";
 import { runWithConcurrency } from "./concurrency.js";
 import type { EventHub } from "./event-hub.js";
 import { selectResponders, shouldRespond } from "./responder-selector.js";
+import type { UserProfile } from "../user-profile/user-profile.js";
 import type { SimulationRepository } from "./simulation-repository.js";
 import type { Simulation } from "./simulation.js";
 
@@ -24,6 +24,8 @@ const MAX_CASCADE_RESPONDERS = 2;
 
 export type SubmitUserPostInput = {
   simulationId: string;
+  /** Account id of the signed-in author. Required: posting needs a session (#34). */
+  authorId: string;
   content: string;
   imageUrl?: string;
   responderIds: string[];
@@ -141,7 +143,7 @@ export class SimulationService {
 
     const post = await this.posts.publish({
       simulationId: input.simulationId,
-      authorId: USER_AUTHOR_ID,
+      authorId: input.authorId,
       content: input.content,
       ...(input.imageUrl ? { imageUrl: input.imageUrl } : {}),
       replyTo: input.replyTo ?? null,
@@ -339,7 +341,12 @@ export class SimulationService {
         threadPosts: thread.posts,
       });
 
-      const handleOf = buildHandleResolver(allCharacters);
+      // The transcript names users by handle too, so a character can react to
+      // the person who wrote the post rather than to an opaque id.
+      const users = await this.posts.findUsersByIds(
+        [thread.target, ...thread.posts].map((post) => post.authorId),
+      );
+      const handleOf = buildHandleResolver(allCharacters, users);
 
       const generated = await this.agents.generate({
         character,
@@ -431,10 +438,19 @@ export function toSimulationDto(simulation: Simulation): SimulationDto {
   };
 }
 
-function buildHandleResolver(characters: Character[]): (authorId: string) => string {
-  const byId = new Map(characters.map((character) => [character.id, character.handle]));
-  return (authorId: string) =>
-    authorId === USER_AUTHOR_ID ? USER_HANDLE : (byId.get(authorId) ?? authorId);
+/**
+ * Handles for the transcript. Users and characters resolve the same way, since
+ * they share one namespace (§66.13); an id with no owner falls back to itself.
+ */
+function buildHandleResolver(
+  characters: Character[],
+  users: UserProfile[],
+): (authorId: string) => string {
+  const byId = new Map<string, string>([
+    ...characters.map((character) => [character.id, character.handle] as const),
+    ...users.map((user) => [user.id, user.handle] as const),
+  ]);
+  return (authorId: string) => byId.get(authorId) ?? authorId;
 }
 
 function describe(error: unknown): string {

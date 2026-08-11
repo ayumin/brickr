@@ -49,7 +49,8 @@ export const openApiDocument: OpenAPIV3.Document = {
       "Brickr — Post something. Watch the AIs bicker. Backend REST and Server-Sent Events API.\n\n" +
       "Write operations (creating, updating and deleting posts, simulations and characters, and " +
       "editing the user profile) require the session cookie issued by `/api/auth/login` or " +
-      "`/api/auth/signup`, and answer 401 without it. Reads and the event stream are public.",
+      "`/api/auth/signup`, and answer 401 without it. `/api/user-profile` also requires it, because " +
+      "it means the signed-in user's own profile. Other reads and the event stream are public.",
   },
   servers: [{ url: "/", description: "Current Backend origin" }],
   tags: [
@@ -523,6 +524,8 @@ export const openApiDocument: OpenAPIV3.Document = {
             required: ["profile"],
             properties: { profile: ref("UserProfile") },
           }),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "404": { $ref: "#/components/responses/NotFound" },
           "500": errorResponses["500"],
         },
       },

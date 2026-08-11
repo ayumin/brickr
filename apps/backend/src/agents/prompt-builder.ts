@@ -1,4 +1,3 @@
-import { USER_HANDLE } from "@brickr/shared";
 import type { Character } from "../characters/character.js";
 import type { LLMMessage } from "../llm/provider.js";
 import { parseImageDataUrl } from "../llm/image-data-url.js";
@@ -78,8 +77,9 @@ export function buildMessages(input: {
 
   const transcript = posts
     .map((post) => {
-      const handle = resolveHandle(post.authorId);
-      const label = handle === USER_HANDLE ? `@${USER_HANDLE} (投稿者)` : `@${handle}`;
+      // No marker for the human: with several people in one simulation there is
+      // no single poster, and §66.3 does not surface human versus AI.
+      const label = `@${resolveHandle(post.authorId)}`;
       const marks: string[] = [];
       if (post.replyTo) marks.push(`@${resolveHandle(authorOf(posts, post.replyTo))} への返信`);
       if (post.quoteOf) marks.push(`@${resolveHandle(authorOf(posts, post.quoteOf))} の引用`);

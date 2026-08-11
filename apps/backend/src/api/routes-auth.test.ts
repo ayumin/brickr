@@ -66,7 +66,6 @@ const publicRoutes = [
   "/api/characters/management",
   "/api/model-profiles",
   "/api/simulations",
-  "/api/user-profile",
   "/api/auth/session",
 ];
 
@@ -183,5 +182,24 @@ describe("read endpoints", () => {
     const response = await app.inject({ method: "GET", url });
 
     expect(response.statusCode).not.toBe(401);
+  });
+
+  // The exception among reads: "my profile" has no meaning without a session.
+  it("refuses GET /api/user-profile while signed out", async () => {
+    const app = await buildApp(null);
+    apps.push(app);
+
+    const response = await app.inject({ method: "GET", url: "/api/user-profile" });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it("returns the signed-in user's own profile", async () => {
+    const app = await buildApp(signedInUser);
+    apps.push(app);
+
+    const response = await app.inject({ method: "GET", url: "/api/user-profile" });
+
+    expect(response.statusCode).toBe(200);
   });
 });
