@@ -4,6 +4,7 @@ import type { SimulationSummaryDto } from "@brickr/shared";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { Icon } from "../../components/Icon";
 import { Spinner } from "../../components/Spinner";
+import { canManageSimulation, simulationCreatorLabel } from "./simulation-ownership";
 
 const PAGE_SIZE = 100;
 
@@ -17,6 +18,8 @@ function formatDate(value: string): string {
 export type SimulationListProps = {
   simulations: SimulationSummaryDto[];
   currentId: string;
+  currentUserId: string;
+  isAdmin: boolean;
   loading: boolean;
   error: string | null;
   onRetry: () => void;
@@ -80,12 +83,14 @@ export function SimulationList(props: SimulationListProps) {
                 <th className="w-24 px-2 py-2 font-semibold">状態</th>
                 <th className="w-20 px-2 py-2 text-right font-semibold">投稿数</th>
                 <th className="w-40 px-2 py-2 font-semibold">作成日時</th>
+                <th className="w-24 px-2 py-2 font-semibold">作成者</th>
                 <th className="w-16 px-2 py-2"><span className="sr-only">操作</span></th>
               </tr>
             </thead>
             <tbody>
               {rows.map((item) => {
                 const current = item.id === props.currentId;
+                const canManage = canManageSimulation(item, props.currentUserId, props.isAdmin);
                 return (
                   <tr key={item.id} className="border-t border-line hover:bg-surface-hover">
                     <td className="px-3 py-2">
@@ -101,16 +106,21 @@ export function SimulationList(props: SimulationListProps) {
                       {item.postCount.toLocaleString("ja-JP")}
                     </td>
                     <td className="px-2 py-2 text-[11px] text-ink-muted">{formatDate(item.createdAt)}</td>
+                    <td className="px-2 py-2 text-[11px] text-ink-muted">
+                      {simulationCreatorLabel(item, props.currentUserId)}
+                    </td>
                     <td className="px-2 py-2 text-center">
-                      <button
-                        type="button"
-                        title="名前を変更"
-                        aria-label={`${item.title ?? "無題のシミュレーション"}の名前を変更`}
-                        onClick={() => props.onRename(item)}
-                        className="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted hover:bg-surface-hover hover:text-ink"
-                      >
-                        <Icon name="pencil" />
-                      </button>
+                      {canManage ? (
+                        <button
+                          type="button"
+                          title="名前を変更"
+                          aria-label={`${item.title ?? "無題のシミュレーション"}の名前を変更`}
+                          onClick={() => props.onRename(item)}
+                          className="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted hover:bg-surface-hover hover:text-ink"
+                        >
+                          <Icon name="pencil" />
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         title={current ? "表示中" : "このシミュレーションを開く"}

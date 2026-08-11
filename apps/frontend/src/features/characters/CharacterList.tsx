@@ -28,6 +28,8 @@ const TABLE_PAGE_SIZE = 100;
 
 export type CharacterListProps = {
   characters: CharacterDto[];
+  currentUserId: string;
+  isAdmin: boolean;
   loading: boolean;
   onCreate: () => void;
   onEdit: (character: CharacterDto) => void;
@@ -35,6 +37,21 @@ export type CharacterListProps = {
   onDeleted: (ids: string[]) => void;
   onCreated: () => void;
 };
+
+/**
+ * Mirrors the backend's Character ownership check (CLAUDE.md §66.5): only the
+ * creator or an admin may edit/delete. `createdByUserId` itself is already
+ * omitted by the backend for anyone else's characters, so a row with none is
+ * either someone else's or a System-owned seed - either way, not manageable
+ * unless the viewer is an admin.
+ */
+function canManageCharacter(
+  character: Pick<CharacterManagementDto, "createdByUserId">,
+  currentUserId: string,
+  isAdmin: boolean,
+): boolean {
+  return isAdmin || character.createdByUserId === currentUserId;
+}
 
 type PendingDelete = {
   ids: string[];
@@ -65,6 +82,8 @@ const BEHAVIOR_COLUMNS: Array<{ key: BehaviorSortKey; label: string }> = [
 
 export function CharacterList({
   characters,
+  currentUserId,
+  isAdmin,
   loading,
   onCreate,
   onEdit,
@@ -160,9 +179,13 @@ export function CharacterList({
     () => tableCharacters.filter((character) => selected.has(character.id)).map(({ id }) => id),
     [selected, tableCharacters],
   );
+  const manageablePageCharacters = useMemo(
+    () => pageCharacters.filter((character) => canManageCharacter(character, currentUserId, isAdmin)),
+    [pageCharacters, currentUserId, isAdmin],
+  );
   const allPageSelected =
-    pageCharacters.length > 0 &&
-    pageCharacters.every((character) => selected.has(character.id));
+    manageablePageCharacters.length > 0 &&
+    manageablePageCharacters.every((character) => selected.has(character.id));
 
   function toggleSelected(id: string): void {
     setSelected((current) => {
@@ -176,7 +199,7 @@ export function CharacterList({
   function toggleAllOnPage(): void {
     setSelected((current) => {
       const next = new Set(current);
-      for (const character of pageCharacters) {
+      for (const character of manageablePageCharacters) {
         if (allPageSelected) next.delete(character.id);
         else next.add(character.id);
       }
@@ -402,7 +425,7 @@ export function CharacterList({
               type="checkbox"
               checked={allPageSelected}
               onChange={toggleAllOnPage}
-              disabled={pageCharacters.length === 0}
+              disabled={manageablePageCharacters.length === 0}
               className="h-4 w-4 rounded border-line accent-accent-strong"
             />
             このページをすべて選択
@@ -503,15 +526,19 @@ export function CharacterList({
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
-              {pageCharacters.map((character) => (
+              {pageCharacters.map((character) => {
+                const canManage = canManageCharacter(character, currentUserId, isAdmin);
+                return (
                 <tr key={character.id} className="align-top transition hover:bg-surface-hover">
                   <td className="px-3 py-4">
                     <input
                       type="checkbox"
                       checked={selected.has(character.id)}
                       onChange={() => toggleSelected(character.id)}
+                      disabled={!canManage}
                       aria-label={`${character.displayName}を選択`}
-                      className="h-4 w-4 rounded border-line accent-accent-strong"
+                      title={canManage ? undefined : "他のUserが作成したキャラクターです"}
+                      className="h-4 w-4 rounded border-line accent-accent-strong disabled:opacity-40"
                     />
                   </td>
                   <td className="px-3 py-4">
@@ -573,27 +600,29 @@ export function CharacterList({
                     <div className="flex items-center justify-center gap-1">
                       <button
                         type="button"
+                        disabled={!canManage}
                         onClick={() => onEdit(character)}
                         aria-label={`${character.displayName}の設定を編集`}
-                        title="設定を編集"
-                        className="flex h-9 w-9 items-center justify-center rounded-full text-ink-muted transition hover:bg-surface-raised hover:text-ink"
+                        title={canManage ? "設定を編集" : "他のUserが作成したキャラクターです"}
+                        className="flex h-9 w-9 items-center justify-center rounded-full text-ink-muted transition hover:bg-surface-raised hover:text-ink disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
                       >
                         <Icon name="gear" />
                       </button>
                       {character.isDeleted ? (
                         <button
                           type="button"
-                          disabled={restoringIds.has(character.id)}
+                          disabled={!canManage || restoringIds.has(character.id)}
                           onClick={() => void restoreCharacter(character)}
                           aria-label={`${character.displayName}を復活`}
-                          title="復活"
-                          className="flex h-9 w-9 items-center justify-center rounded-full text-ink-muted transition hover:bg-accent/10 hover:text-accent disabled:opacity-50"
+                          title={canManage ? "復活" : "他のUserが作成したキャラクターです"}
+                          className="flex h-9 w-9 items-center justify-center rounded-full text-ink-muted transition hover:bg-accent/10 hover:text-accent disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
                         >
                           <Icon name="recycle" />
                         </button>
                       ) : (
                         <button
                           type="button"
+                          disabled={!canManage}
                           onClick={() => {
                             setDeleteMode("soft");
                             setPendingDelete({
@@ -602,8 +631,8 @@ export function CharacterList({
                             });
                           }}
                           aria-label={`${character.displayName}を削除`}
-                          title="削除"
-                          className="flex h-9 w-9 items-center justify-center rounded-full text-ink-muted transition hover:bg-danger/10 hover:text-danger"
+                          title={canManage ? "削除" : "他のUserが作成したキャラクターです"}
+                          className="flex h-9 w-9 items-center justify-center rounded-full text-ink-muted transition hover:bg-danger/10 hover:text-danger disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
                         >
                           <Icon name="trash" />
                         </button>
@@ -611,7 +640,8 @@ export function CharacterList({
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
             </table>
           </div>

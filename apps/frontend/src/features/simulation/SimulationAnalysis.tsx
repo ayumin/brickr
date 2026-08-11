@@ -5,25 +5,45 @@ import { Avatar } from "../../components/Avatar";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { Icon } from "../../components/Icon";
 import { Spinner } from "../../components/Spinner";
-import { api, isAbortError, toErrorMessage } from "../../services/api-client";
+import { api, isAbortError, isForbiddenError, toErrorMessage } from "../../services/api-client";
 
 export function SimulationAnalysis({ simulationId }: { simulationId: string }) {
   const [analysis, setAnalysis] = useState<SimulationAnalysisDto | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [forbidden, setForbidden] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
     setError(null);
+    setForbidden(false);
     void api
       .getSimulationAnalysis(simulationId, controller.signal)
       .then(setAnalysis)
       .catch((cause: unknown) => {
-        if (!isAbortError(cause)) setError(toErrorMessage(cause));
+        if (isAbortError(cause)) return;
+        // Not a failure to retry: the analysis is creator/admin-only by
+        // design (CLAUDE.md §66.6), unlike the simulation itself.
+        if (isForbiddenError(cause)) {
+          setForbidden(true);
+          return;
+        }
+        setError(toErrorMessage(cause));
       });
     return () => controller.abort();
   }, [reloadToken, simulationId]);
 
+  if (forbidden) {
+    return (
+      <div className="p-4">
+        <ErrorBanner
+          tone="warning"
+          message="この分析結果を見る権限がありません"
+          detail="分析画面は、このシミュレーションの作成者本人と管理者のみが閲覧できます。"
+        />
+      </div>
+    );
+  }
   if (error) {
     return <div className="p-4"><ErrorBanner message="分析結果を取得できませんでした" detail={error} onRetry={() => setReloadToken((value) => value + 1)} /></div>;
   }
