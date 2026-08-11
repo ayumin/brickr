@@ -215,7 +215,6 @@ export async function registerRoutes(
     return { characters: await services.characters.listManagementDtosByCreator(params.data.id) };
   });
 
-  /** Zeroed until per-user LLM token tracking lands (#27). */
   app.get("/api/users/:id/token-usage", async (request, reply) => {
     if (!requireAdmin(request, reply)) return reply;
 
@@ -225,7 +224,7 @@ export async function registerRoutes(
     }
     const user = await services.userAdmin.findById(params.data.id);
     if (!user) return sendError(reply, 404, "not_found", "user not found");
-    return { totalInputTokens: 0, totalOutputTokens: 0, totalTokens: 0 };
+    return services.tokenUsage.getDto(params.data.id);
   });
 
   // -- invite codes -----------------------------------------------------------
@@ -511,6 +510,14 @@ export async function registerRoutes(
     // A live session whose account has gone is not a server fault.
     if (!profile) return sendError(reply, 404, "not_found", "user profile not found");
     return { profile };
+  });
+
+  /** The signed-in user's own token usage (CLAUDE.md §66.4), for the profile settings screen. */
+  app.get("/api/user-profile/token-usage", async (request, reply) => {
+    const user = requireUser(request, reply);
+    if (!user) return reply;
+
+    return services.tokenUsage.getDto(user.id);
   });
 
   // -- simulations ----------------------------------------------------------

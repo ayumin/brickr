@@ -7,6 +7,7 @@ import type { AgentService } from "../agents/agent-service.js";
 import type { UserAccount } from "../auth/user-account.js";
 import type { CharacterRepository } from "../characters/character-repository.js";
 import type { Character } from "../characters/character.js";
+import type { TokenUsageService } from "../llm/token-usage-service.js";
 import type { Post } from "../posts/post.js";
 import type { PostService } from "../posts/post-service.js";
 import type { ThreadService } from "../posts/thread-service.js";
@@ -96,6 +97,7 @@ export class SimulationService {
     private readonly events: EventHub,
     private readonly options: SimulationServiceOptions,
     private readonly logger: SimulationLogger,
+    private readonly tokenUsage: TokenUsageService,
   ) {}
 
   async create(title: string | null, createdByUserId: string): Promise<SimulationDto> {
@@ -205,6 +207,9 @@ export class SimulationService {
         depth: 0,
         generatedIds,
         budget,
+        // Every generation this submission causes — including cascades several
+        // characters deep — is billed to the human who started it (§66.4).
+        billingUserId: triggerPost.authorId,
       });
     } finally {
       this.events.publish({
@@ -224,8 +229,10 @@ export class SimulationService {
     depth: number;
     generatedIds: string[];
     budget: { remaining: number };
+    billingUserId: string;
   }): Promise<void> {
-    const { target, responders, allCharacters, depth, generatedIds, budget } = input;
+    const { target, responders, allCharacters, depth, generatedIds, budget, billingUserId } =
+      input;
     if (responders.length === 0 || budget.remaining <= 0) return;
 
     const slice = responders.slice(0, budget.remaining);
@@ -234,7 +241,7 @@ export class SimulationService {
     const results = await runWithConcurrency(
       slice,
       this.options.maxConcurrentCharacters,
-      (character) => this.processCharacter(character, target, allCharacters),
+      (character) => this.processCharacter(character, target, allCharacters, billingUserId),
     );
 
     for (const result of results) {
@@ -272,6 +279,7 @@ export class SimulationService {
           depth: depth + 1,
           generatedIds,
           budget,
+          billingUserId,
         }),
       );
     }
@@ -326,6 +334,7 @@ export class SimulationService {
     character: Character,
     target: Post,
     allCharacters: Character[],
+    billingUserId: string,
   ): Promise<Post | null> {
     const simulationId = target.simulationId;
     if (this.stopped.has(simulationId)) return null;
@@ -369,6 +378,20 @@ export class SimulationService {
       });
 
       if (this.stopped.has(simulationId)) return null;
+
+      // Recorded even if publishing fails below: the tokens were already
+      // spent. A tracking hiccup is logged, not surfaced as a failed response —
+      // it must never turn a successful generation into a `character.failed` event.
+      if (generated.usage) {
+        try {
+          await this.tokenUsage.record(billingUserId, generated.usage);
+        } catch (error) {
+          this.logger.warn(
+            { simulationId, characterId: character.id, billingUserId, err: describe(error) },
+            "failed to record token usage",
+          );
+        }
+      }
 
       const { replyTo, quoteOf } = resolveActionTargets(action, thread.target);
 

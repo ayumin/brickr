@@ -105,7 +105,7 @@ export type UserCharactersResponse = {
   characters: CharacterManagementDto[];
 };
 
-/** Zeroed until per-user LLM token tracking lands; shape is stable ahead of that. */
+/** Zeroed, not omitted, for a user who has never triggered a generation (§66.4). */
 export type UserTokenUsageResponse = {
   totalInputTokens: number;
   totalOutputTokens: number;

@@ -43,6 +43,12 @@ export type GeneratedPost = {
   action: ResponseAction;
   providerId: string;
   model: string;
+  /** Absent when the provider does not report usage (CLAUDE.md §66.4). */
+  usage?: {
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+  };
 };
 
 /**
@@ -86,6 +92,7 @@ export class AgentService {
       action: request.action,
       providerId: result.providerId,
       model: result.model,
+      ...(result.usage ? { usage: result.usage } : {}),
     };
   }
 }

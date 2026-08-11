@@ -152,6 +152,7 @@ model UserProfile {
   redeemedInviteCodes InviteCode[] @relation("InviteCodeRedeemer")
   createdCharacters   Character[]
   createdSimulations  Simulation[]
+  tokenUsage          TokenUsage?
 
   @@index([handle])
   @@map("user_profiles")
@@ -208,4 +209,21 @@ model ApplicationSetting {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("application_settings")
+}
+
+/// Running per-user LLM token totals (CLAUDE.md §66.4). One row per user,
+/// incremented on every successful character generation their post triggered —
+/// a log of every generation would grow without bound for no benefit, since
+/// nothing here needs a history, only a running count.
+model TokenUsage {
+  userId       String @id @map("user_id")
+  inputTokens  Int    @default(0) @map("input_tokens")
+  outputTokens Int    @default(0) @map("output_tokens")
+  totalTokens  Int    @default(0) @map("total_tokens")
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user UserProfile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("token_usages")
 }

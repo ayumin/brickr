@@ -15,6 +15,8 @@ import { LLMClient } from "./llm/llm-client.js";
 import { LLMUsageTracker } from "./llm/usage-tracker.js";
 import type { LLMProviderRegistry } from "./llm/provider-registry.js";
 import { createProviderRegistry } from "./llm/provider-registry.js";
+import { TokenUsageRepository } from "./llm/token-usage-repository.js";
+import { TokenUsageService } from "./llm/token-usage-service.js";
 import { ModelProfileRepository } from "./model-profiles/model-profile-repository.js";
 import { ModelProfileService } from "./model-profiles/model-profile-service.js";
 import type { Db } from "./persistence/prisma.js";
@@ -46,6 +48,7 @@ export type AppServices = {
   events: EventHub;
   providerRegistry: LLMProviderRegistry;
   applicationSettings: ApplicationSettingsService;
+  tokenUsage: TokenUsageService;
 };
 
 /**
@@ -63,6 +66,7 @@ export async function buildServices(db: Db, logger: SimulationLogger): Promise<A
   const sessionRepository = new SessionRepository(db);
   const inviteCodeRepository = new InviteCodeRepository(db);
   const handleRepository = new HandleRepository(db);
+  const tokenUsageRepository = new TokenUsageRepository(db);
   const runtime = new RuntimeSettings();
 
   const providerRegistry = createProviderRegistry();
@@ -89,6 +93,7 @@ export async function buildServices(db: Db, logger: SimulationLogger): Promise<A
   );
   const agentService = new AgentService(llmClient, modelProfileRepository);
   const events = new EventHub();
+  const tokenUsage = new TokenUsageService(tokenUsageRepository);
 
   const simulations = new SimulationService(
     simulationRepository,
@@ -99,6 +104,7 @@ export async function buildServices(db: Db, logger: SimulationLogger): Promise<A
     events,
     runtime.values.simulation,
     logger,
+    tokenUsage,
   );
   const simulationAnalysis = new SimulationAnalysisService(
     simulationRepository,
@@ -148,5 +154,6 @@ export async function buildServices(db: Db, logger: SimulationLogger): Promise<A
     events,
     providerRegistry,
     applicationSettings,
+    tokenUsage,
   };
 }
