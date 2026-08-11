@@ -147,7 +147,7 @@ export function SignupPage() {
               label="パスワード"
               type="password"
               autoComplete="new-password"
-              hint="12文字以上"
+              hint={`${String(MIN_PASSWORD_LENGTH)}文字以上`}
               value={form.password}
               required
               onChange={setField("password")}
