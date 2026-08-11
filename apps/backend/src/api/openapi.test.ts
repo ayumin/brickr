@@ -10,6 +10,7 @@ const expectedPaths = [
   "/api/auth/signup",
   "/api/auth/login",
   "/api/auth/logout",
+  "/api/handles/{handle}",
   "/api/application-settings",
   "/api/characters",
   "/api/characters/management",
