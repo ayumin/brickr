@@ -187,7 +187,7 @@ describe("api-client", () => {
 
       expect(result).toBe("test-id");
       expect(fetchMock).toHaveBeenCalledOnce();
-      const callUrl = fetchMock.mock.calls[0][0] as string;
+      const callUrl = (fetchMock.mock.calls[0] as unknown[])[0] as string;
       expect(callUrl).toContain("/api/characters/test-id");
       expect(callUrl).toContain("mode=soft");
     });
