@@ -70,12 +70,13 @@ export function readSessionCookie(header: string | undefined): string | null {
     if (name !== SESSION_COOKIE_NAME) continue;
 
     const value = pair.slice(separator + 1).trim();
-    const value = pair.slice(separator + 1).trim();
     if (value.length === 0) return null;
     try {
       return decodeURIComponent(value);
     } catch {
       return null;
     }
+  }
+
   return null;
 }
