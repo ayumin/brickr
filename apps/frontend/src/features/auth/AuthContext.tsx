@@ -37,7 +37,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .getSession(controller.signal)
       .then(setUser)
       .catch((cause: unknown) => {
-        if (!isAbortError(cause)) setError(toErrorMessage(cause));
+        if (!isAbortError(cause)) {
+          console.error(cause);
+          setError(toErrorMessage(cause));
+        }
       })
       .finally(() => setLoading(false));
     return () => controller.abort();
