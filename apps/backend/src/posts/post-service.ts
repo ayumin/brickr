@@ -70,13 +70,13 @@ export class PostService {
 
   /** Maps one post, loading its quoted post if it has one. */
   async toDto(post: Post): Promise<PostDto> {
-    const quoted = post.quoteOf ? await this.posts.findById(post.quoteOf) : null;
-    const [characters, users] = await Promise.all([
+    const [characters, quoted] = await Promise.all([
       this.characters.findAllIncludingDeleted(),
-      this.userProfiles.findByIds([
-        post.authorId,
-        ...(quoted ? [quoted.authorId] : []),
-      ]),
+      post.quoteOf ? this.posts.findById(post.quoteOf) : Promise.resolve(null),
+    ]);
+    const users = await this.userProfiles.findByIds([
+      post.authorId,
+      ...(quoted ? [quoted.authorId] : []),
     ]);
     return toPostDto(post, indexById(characters), quoted, indexUsersById(users));
   }
