@@ -143,7 +143,30 @@ type RequestOptions = {
   signal?: AbortSignal;
 };
 
-async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+/**
+ * Validates that a path is a relative path starting with / and matching allowed patterns.
+ * This prevents SSRF attacks by ensuring paths cannot be absolute URLs or protocol-relative.
+ * 
+ * @param path - The path to validate
+ * @throws Error if path is not a valid relative path
+ */
+function validatePath(path: string): void {
+  if (!path.startsWith("/")) {
+    throw new Error("Path must be a relative path starting with /");
+  }
+
+  if (path.includes("://")) {
+    throw new Error("Path must not contain protocol indicators");
+  }
+
+  if (path.includes("//")) {
+    throw new Error("Path must not contain protocol-relative URL patterns");
+  }
+}
+
+export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  validatePath(path);
+
   const { method = "GET", body, signal } = options;
 
   const headers: Record<string, string> = { Accept: "application/json" };
