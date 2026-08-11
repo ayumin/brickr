@@ -16,6 +16,7 @@ import {
   isAbortError,
   toErrorMessage,
 } from "../../services/api-client";
+import { canManageCharacter } from "./character-ownership";
 import {
   compareOptionalNumbers,
   parseBulkCharacterCount,
@@ -37,21 +38,6 @@ export type CharacterListProps = {
   onDeleted: (ids: string[]) => void;
   onCreated: () => void;
 };
-
-/**
- * Mirrors the backend's Character ownership check (CLAUDE.md §66.5): only the
- * creator or an admin may edit/delete. `createdByUserId` itself is already
- * omitted by the backend for anyone else's characters, so a row with none is
- * either someone else's or a System-owned seed - either way, not manageable
- * unless the viewer is an admin.
- */
-function canManageCharacter(
-  character: Pick<CharacterManagementDto, "createdByUserId">,
-  currentUserId: string,
-  isAdmin: boolean,
-): boolean {
-  return isAdmin || character.createdByUserId === currentUserId;
-}
 
 type PendingDelete = {
   ids: string[];
@@ -537,7 +523,7 @@ export function CharacterList({
                       onChange={() => toggleSelected(character.id)}
                       disabled={!canManage}
                       aria-label={`${character.displayName}を選択`}
-                      title={canManage ? undefined : "他のUserが作成したキャラクターです"}
+                      title={canManage ? undefined : "他のユーザーが作成したキャラクターです"}
                       className="h-4 w-4 rounded border-line accent-accent-strong disabled:opacity-40"
                     />
                   </td>
@@ -603,7 +589,7 @@ export function CharacterList({
                         disabled={!canManage}
                         onClick={() => onEdit(character)}
                         aria-label={`${character.displayName}の設定を編集`}
-                        title={canManage ? "設定を編集" : "他のUserが作成したキャラクターです"}
+                        title={canManage ? "設定を編集" : "他のユーザーが作成したキャラクターです"}
                         className="flex h-9 w-9 items-center justify-center rounded-full text-ink-muted transition hover:bg-surface-raised hover:text-ink disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
                       >
                         <Icon name="gear" />
@@ -614,7 +600,7 @@ export function CharacterList({
                           disabled={!canManage || restoringIds.has(character.id)}
                           onClick={() => void restoreCharacter(character)}
                           aria-label={`${character.displayName}を復活`}
-                          title={canManage ? "復活" : "他のUserが作成したキャラクターです"}
+                          title={canManage ? "復活" : "他のユーザーが作成したキャラクターです"}
                           className="flex h-9 w-9 items-center justify-center rounded-full text-ink-muted transition hover:bg-accent/10 hover:text-accent disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
                         >
                           <Icon name="recycle" />
@@ -631,7 +617,7 @@ export function CharacterList({
                             });
                           }}
                           aria-label={`${character.displayName}を削除`}
-                          title={canManage ? "削除" : "他のUserが作成したキャラクターです"}
+                          title={canManage ? "削除" : "他のユーザーが作成したキャラクターです"}
                           className="flex h-9 w-9 items-center justify-center rounded-full text-ink-muted transition hover:bg-danger/10 hover:text-danger disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
                         >
                           <Icon name="trash" />

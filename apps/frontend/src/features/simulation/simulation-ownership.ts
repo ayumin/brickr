@@ -19,6 +19,6 @@ export function simulationCreatorLabel(
   simulation: Pick<SimulationSummaryDto, "createdByUserId">,
   currentUserId: string,
 ): string {
-  if (simulation.createdByUserId === undefined) return "—";
+  if (simulation.createdByUserId === undefined || simulation.createdByUserId === null) return "—";
   return simulation.createdByUserId === currentUserId ? "あなた" : "他のユーザー";
 }

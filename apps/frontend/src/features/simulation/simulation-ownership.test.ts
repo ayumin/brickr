@@ -49,4 +49,13 @@ describe("simulationCreatorLabel", () => {
   it("labels a pre-login simulation with no creator as unknown", () => {
     expect(simulationCreatorLabel({ createdByUserId: undefined }, CURRENT_USER_ID)).toBe("—");
   });
+
+  it("treats a null creator the same as an absent one, in case the backend ever serializes it that way", () => {
+    expect(
+      simulationCreatorLabel(
+        { createdByUserId: null as unknown as undefined },
+        CURRENT_USER_ID,
+      ),
+    ).toBe("—");
+  });
 });
