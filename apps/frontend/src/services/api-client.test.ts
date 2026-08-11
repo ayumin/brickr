@@ -16,7 +16,7 @@ describe("api-client", () => {
   describe("request path validation - SSRF prevention", () => {
     it("should reject paths that do not start with /", async () => {
       try {
-        await api.health();
+        await request("relative/path");
         expect.fail("Should have thrown an error");
       } catch (error) {
         expect(error).toBeInstanceOf(Error);
