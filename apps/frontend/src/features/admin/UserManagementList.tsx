@@ -268,7 +268,7 @@ export function UserManagementList() {
                           <button
                             type="button"
                             onClick={() => setDrilldownUser(user)}
-                            aria-label={`${user.displayName}の詳細を開く`}
+                            aria-label={`${user.displayName}の作成Character・消費トークンを表示`}
                             title="詳細（作成Character・消費トークン）"
                             className="flex h-9 w-9 items-center justify-center rounded-full text-ink-muted transition hover:bg-surface-raised hover:text-ink"
                           >
@@ -353,7 +353,9 @@ export function UserManagementList() {
           <button
             type="button"
             aria-label="確認を閉じる"
-            onClick={() => setPendingAction(null)}
+            onClick={() => {
+              if (!busyIds.has(pendingAction.user.id)) setPendingAction(null);
+            }}
             className="absolute inset-0 bg-black/70 backdrop-blur-sm"
           />
           <div
@@ -477,6 +479,7 @@ function SecretResultDialog({
   onClose: () => void;
 }) {
   const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState(false);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -498,9 +501,16 @@ function SecretResultDialog({
           <button
             type="button"
             onClick={() => {
-              void navigator.clipboard.writeText(result.value).then(() => {
-                setCopied(true);
-              });
+              navigator.clipboard
+                .writeText(result.value)
+                .then(() => {
+                  setCopyError(false);
+                  setCopied(true);
+                })
+                .catch(() => {
+                  setCopied(false);
+                  setCopyError(true);
+                });
             }}
             aria-label="コピー"
             title="コピー"
@@ -510,6 +520,11 @@ function SecretResultDialog({
           </button>
         </div>
         {copied ? <p className="mt-1.5 text-xs text-accent">コピーしました。</p> : null}
+        {copyError ? (
+          <p className="mt-1.5 text-xs text-danger">
+            コピーできませんでした。値を選択して手動でコピーしてください。
+          </p>
+        ) : null}
         <div className="mt-5 flex justify-end">
           <button
             type="button"
