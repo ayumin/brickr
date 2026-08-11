@@ -5,6 +5,7 @@ import type {
   EditableApplicationSettingName,
   SaveUserProfileRequest,
   UserProfileDto,
+  UserTokenUsageResponse,
 } from "@brickr/shared";
 import { AvatarUploader } from "../../components/AvatarUploader";
 import { ErrorBanner } from "../../components/ErrorBanner";
@@ -12,7 +13,7 @@ import { useAuth } from "../auth/AuthContext";
 import { api, isAbortError, toErrorMessage } from "../../services/api-client";
 import { THEME_OPTIONS, type Theme } from "../../services/theme";
 
-type SettingsSection = "profile" | "appearance" | "environment" | "models" | "usage";
+type SettingsSection = "profile" | "appearance" | "my-usage" | "environment" | "models" | "usage";
 
 const PROVIDER_LABELS = {
   openai: "OpenAI",
@@ -45,6 +46,9 @@ export function UserProfileEditor({
   const [error, setError] = useState<string | null>(null);
   const [settings, setSettings] = useState<ApplicationSettingsResponse | null>(null);
   const [loadingSettings, setLoadingSettings] = useState(false);
+  const [myUsage, setMyUsage] = useState<UserTokenUsageResponse | null>(null);
+  const [loadingMyUsage, setLoadingMyUsage] = useState(false);
+  const [myUsageError, setMyUsageError] = useState<string | null>(null);
 
   const logout = async (): Promise<void> => {
     setLoggingOut(true);
@@ -63,7 +67,13 @@ export function UserProfileEditor({
     navigate("/login");
   };
 
+  const isAdmin = user?.isAdmin ?? false;
+
   useEffect(() => {
+    // These panels come from the admin-only /api/application-settings
+    // (CLAUDE.md §66.16); a non-admin has no nav entry to reach them, but
+    // guard the fetch itself too rather than relying only on hidden UI.
+    if (!isAdmin) return;
     if (section !== "environment" && section !== "models" && section !== "usage") return;
     if (settings) return;
     const controller = new AbortController();
@@ -75,7 +85,22 @@ export function UserProfileEditor({
       })
       .finally(() => setLoadingSettings(false));
     return () => controller.abort();
-  }, [section, settings]);
+  }, [section, settings, isAdmin]);
+
+  useEffect(() => {
+    if (section !== "my-usage") return;
+    if (myUsage) return;
+    const controller = new AbortController();
+    setLoadingMyUsage(true);
+    setMyUsageError(null);
+    api.getMyTokenUsage(controller.signal)
+      .then(setMyUsage)
+      .catch((cause: unknown) => {
+        if (!isAbortError(cause)) setMyUsageError(toErrorMessage(cause));
+      })
+      .finally(() => setLoadingMyUsage(false));
+    return () => controller.abort();
+  }, [section, myUsage]);
 
   const submit = async (): Promise<void> => {
     setSaving(true);
@@ -114,17 +139,22 @@ export function UserProfileEditor({
           <nav aria-label="設定区分" className="flex gap-1 overflow-x-auto sm:block sm:space-y-1">
             <NavButton active={section === "profile"} onClick={() => setSection("profile")}>プロフィール</NavButton>
             <NavButton active={section === "appearance"} onClick={() => setSection("appearance")}>外観</NavButton>
-            <div className="min-w-max sm:pt-3">
-              <p className="px-3 py-1 text-xs font-semibold uppercase tracking-wide text-ink-faint">環境</p>
-              <div className="flex gap-1 sm:block sm:space-y-1">
-                <NavButton nested active={section === "environment"} onClick={() => setSection("environment")}>環境変数</NavButton>
-                <div>
-                  <p className="hidden px-5 py-1 text-xs text-ink-faint sm:block">LLM</p>
-                  <NavButton nested active={section === "models"} onClick={() => setSection("models")}>プロバイダー / モデル</NavButton>
-                  <NavButton nested active={section === "usage"} onClick={() => setSection("usage")}>消費トークン</NavButton>
+            {user ? (
+              <NavButton active={section === "my-usage"} onClick={() => setSection("my-usage")}>自分の消費トークン</NavButton>
+            ) : null}
+            {isAdmin ? (
+              <div className="min-w-max sm:pt-3">
+                <p className="px-3 py-1 text-xs font-semibold uppercase tracking-wide text-ink-faint">環境</p>
+                <div className="flex gap-1 sm:block sm:space-y-1">
+                  <NavButton nested active={section === "environment"} onClick={() => setSection("environment")}>環境変数</NavButton>
+                  <div>
+                    <p className="hidden px-5 py-1 text-xs text-ink-faint sm:block">LLM</p>
+                    <NavButton nested active={section === "models"} onClick={() => setSection("models")}>プロバイダー / モデル</NavButton>
+                    <NavButton nested active={section === "usage"} onClick={() => setSection("usage")}>消費トークン（全体）</NavButton>
+                  </div>
                 </div>
               </div>
-            </div>
+            ) : null}
           </nav>
 
           {user ? (
@@ -182,9 +212,14 @@ export function UserProfileEditor({
             </div>
           ) : null}
 
-          {section === "environment" ? <EnvironmentPanel settings={settings} loading={loadingSettings} onUpdated={setSettings} /> : null}
-          {section === "models" ? <ModelsPanel settings={settings} loading={loadingSettings} /> : null}
-          {section === "usage" ? <UsagePanel settings={settings} loading={loadingSettings} /> : null}
+          {section === "my-usage" ? (
+            <MyUsagePanel usage={myUsage} loading={loadingMyUsage} error={myUsageError} />
+          ) : null}
+          {isAdmin && section === "environment" ? (
+            <EnvironmentPanel settings={settings} loading={loadingSettings} onUpdated={setSettings} />
+          ) : null}
+          {isAdmin && section === "models" ? <ModelsPanel settings={settings} loading={loadingSettings} /> : null}
+          {isAdmin && section === "usage" ? <UsagePanel settings={settings} loading={loadingSettings} /> : null}
         </main>
       </div>
     </div>
@@ -383,6 +418,31 @@ function ModelsPanel({ settings, loading }: SettingsPanelProps) {
   );
 }
 
+function MyUsagePanel({
+  usage,
+  loading,
+  error,
+}: {
+  usage: UserTokenUsageResponse | null;
+  loading: boolean;
+  error: string | null;
+}) {
+  if (loading) {
+    return <p className="py-12 text-center text-sm text-ink-muted">消費トークンを読み込んでいます…</p>;
+  }
+  if (error) {
+    return <ErrorBanner message="消費トークンを取得できませんでした" detail={error} />;
+  }
+  if (!usage) return null;
+  return (
+    <div className="grid grid-cols-3 gap-3">
+      <Metric label="入力" value={usage.totalInputTokens} />
+      <Metric label="出力" value={usage.totalOutputTokens} />
+      <Metric label="合計" value={usage.totalTokens} />
+    </div>
+  );
+}
+
 function UsagePanel({ settings, loading }: SettingsPanelProps) {
   if (loading || !settings) return <Loading />;
   const totals = settings.llm.usage.entries.reduce((sum, entry) => ({ requests: sum.requests + entry.requestCount, input: sum.input + entry.inputTokens, output: sum.output + entry.outputTokens, total: sum.total + entry.totalTokens }), { requests: 0, input: 0, output: 0, total: 0 });
@@ -427,5 +487,5 @@ function validateEnvironmentDraft(draft: Record<string, string>): string | null 
   return null;
 }
 type SettingsPanelProps = { settings: ApplicationSettingsResponse | null; loading: boolean };
-function sectionTitle(section: SettingsSection): string { return ({ profile: "プロフィール", appearance: "外観", environment: "環境変数", models: "プロバイダー / モデル", usage: "消費トークン" })[section]; }
-function sectionDescription(section: SettingsSection): string { return ({ profile: "表示名、プロフィール、アバターを編集します。", appearance: "Brickrの表示テーマを選択します。", environment: "編集可能な値は画面設定で上書きできます。その他は環境変数の現在値を表示します。", models: "利用可能なLLMプロバイダーとモデルを確認します。", usage: "このプロセスで記録されたLLMのトークン利用量です。" })[section]; }
+function sectionTitle(section: SettingsSection): string { return ({ profile: "プロフィール", appearance: "外観", "my-usage": "自分の消費トークン", environment: "環境変数", models: "プロバイダー / モデル", usage: "消費トークン（全体）" })[section]; }
+function sectionDescription(section: SettingsSection): string { return ({ profile: "表示名、プロフィール、アバターを編集します。", appearance: "Brickrの表示テーマを選択します。", "my-usage": "あなたの投稿がきっかけで生成されたLLMのトークン利用量です。", environment: "編集可能な値は画面設定で上書きできます。その他は環境変数の現在値を表示します。", models: "利用可能なLLMプロバイダーとモデルを確認します。", usage: "このプロセスで記録された、全User分のLLMトークン利用量です。" })[section]; }
