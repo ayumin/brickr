@@ -1,4 +1,4 @@
-import type { AuthUserDto, UserStatus } from "@brickr/shared";
+import type { AuthUserDto, UserManagementDto, UserStatus } from "@brickr/shared";
 
 /**
  * Backend domain model for an account (CLAUDE.md §4: distinct from the DTO).
@@ -57,6 +57,19 @@ export function toAuthUserDto(account: UserAccount): AuthUserDto {
     interests: account.interests,
     ...(account.occupation ? { occupation: account.occupation } : {}),
     ...(account.xHandle ? { xHandle: account.xHandle } : {}),
+  };
+}
+
+/** The admin user-management row (§66.15): unlike `toAuthUserDto`, the email is visible. */
+export function toUserManagementDto(account: UserAccount): UserManagementDto {
+  return {
+    id: account.id,
+    handle: account.handle,
+    displayName: account.displayName,
+    ...(account.avatarUrl ? { avatarUrl: account.avatarUrl } : {}),
+    email: account.email,
+    isAdmin: account.isAdmin,
+    status: account.status,
   };
 }
 
