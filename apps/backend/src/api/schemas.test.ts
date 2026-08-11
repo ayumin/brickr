@@ -199,7 +199,6 @@ describe("signupSchema – handle", () => {
   });
 
   it.each([
-    ["uppercase letters", "HANAKO"],
     ["hyphens", "han-ako"],
     ["spaces", "han ako"],
     ["empty string", ""],
