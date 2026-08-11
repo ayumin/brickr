@@ -3,7 +3,6 @@ import type {
   SimulationResponse,
   SimulationSummaryDto,
 } from "@brickr/shared";
-import { USER_AUTHOR_ID, USER_HANDLE } from "@brickr/shared";
 import type { AgentService } from "../agents/agent-service.js";
 import type { CharacterRepository } from "../characters/character-repository.js";
 import type { Character } from "../characters/character.js";
@@ -14,6 +13,7 @@ import { resolveActionTargets, selectAction } from "./action-selector.js";
 import { runWithConcurrency } from "./concurrency.js";
 import type { EventHub } from "./event-hub.js";
 import { selectResponders, shouldRespond } from "./responder-selector.js";
+import type { UserProfile } from "../user-profile/user-profile.js";
 import type { SimulationRepository } from "./simulation-repository.js";
 import type { Simulation } from "./simulation.js";
 

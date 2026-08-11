@@ -1,10 +1,16 @@
-/** Author id used for posts written by the human user. */
+/**
+ * The account that existed before login (CLAUDE.md §66).
+ *
+ * Posts now carry the id of whichever account wrote them, so these describe one
+ * particular account rather than "the user": the row the seed keeps so that
+ * posts written before login still resolve to an author.
+ */
 export const USER_AUTHOR_ID = "you";
 
-/** Handle rendered for the human user in the timeline and in LLM context. */
+/** Handle of that same pre-login account. */
 export const USER_HANDLE = "you";
 
-/** Display name rendered for the human user. */
+/** Display name seeded for that account. */
 export const USER_DISPLAY_NAME = "あなた";
 
 /** Max length accepted for a single post body. */

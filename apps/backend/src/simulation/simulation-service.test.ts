@@ -133,6 +133,11 @@ function makeHarness(options: HarnessOptions): Harness {
         posts.filter((post) => post.simulationId === simulationId).map(toDto),
       );
     },
+    // These tests have no user accounts: characters supply every handle in the
+    // transcript, so an empty result is the honest answer.
+    findUsersByIds(): Promise<[]> {
+      return Promise.resolve([]);
+    },
   } as unknown as PostService;
 
   const threadService = {
