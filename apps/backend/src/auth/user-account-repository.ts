@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { UserStatus } from "@brickr/shared";
-import type { Db } from "../persistence/prisma.js";
-import { EmailTakenError, HandleTakenError, InviteCodeInvalidError } from "./auth-errors.js";
+import { claimHandle } from "../handles/handle-claim.js";
+import { isUniqueConstraintError, type Db } from "../persistence/prisma.js";
+import { EmailTakenError, InviteCodeInvalidError } from "./auth-errors.js";
 import type { NewUserAccount, UserAccountWithSecret } from "./user-account.js";
 
 type UserRow = {
@@ -137,16 +138,9 @@ export class UserAccountRepository {
         throw error;
       }
 
-      try {
-        await tx.handleOwner.create({
-          data: { handle: input.handle, ownerType: "user", ownerId: id },
-        });
-      } catch (error) {
-        // The shared primary key is what rejects a handle already held by a
-        // character, which is the whole point of the table (§66.13).
-        if (isUniqueConstraintError(error)) throw new HandleTakenError(input.handle);
-        throw error;
-      }
+      // The shared primary key is what rejects a handle already held by a
+      // character, which is the whole point of the table (§66.13).
+      await claimHandle(tx, { handle: input.handle, ownerType: "user", ownerId: id });
 
       if (inviteCode !== null) {
         // The check above cannot enforce single use on its own: two concurrent
@@ -177,12 +171,6 @@ export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
-/** Duck-typed so the repository does not depend on Prisma's error classes. */
-export function isUniqueConstraintError(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    (error as { code?: unknown }).code === "P2002"
-  );
-}
+// Moved to the persistence layer once the handles module needed it too. Kept
+// exported here so existing import sites do not have to change.
+export { isUniqueConstraintError };

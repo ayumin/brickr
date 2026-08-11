@@ -172,6 +172,18 @@ export const signupSchema = z.object({
     .optional(),
 });
 
+/**
+ * Path parameter for handle resolution. A display form such as `@Architect` is
+ * accepted and normalized, since that is what a user copies out of a timeline.
+ */
+export const handleParams = z.object({
+  handle: z
+    .string()
+    .trim()
+    .transform((value) => value.replace(/^@/u, "").toLowerCase())
+    .pipe(z.string().regex(/^[a-z0-9_]{1,32}$/u)),
+});
+
 export const loginSchema = z.object({
   email,
   // Not length-checked: an old password shorter than today's floor must still

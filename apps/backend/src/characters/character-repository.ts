@@ -1,5 +1,12 @@
+import { claimHandle, releaseHandles } from "../handles/handle-claim.js";
 import type { Db } from "../persistence/prisma.js";
 import type { Character, SaveCharacter } from "./character.js";
+
+/**
+ * Interactive transactions default to a 5s budget. Bulk create and CSV import
+ * write up to 100 rows plus a handle claim each, which can exceed it.
+ */
+const BULK_TRANSACTION_TIMEOUT_MS = 60_000;
 
 type CharacterRow = {
   id: string;
@@ -113,33 +120,43 @@ export class CharacterRepository {
   }
 
 
+  /**
+   * Creating a character also takes its handle, in one transaction, so the
+   * namespace can never drift from the rows it describes (CLAUDE.md §66.13).
+   */
   async create(id: string, input: SaveCharacter): Promise<Character> {
-    const row = await this.db.character.create({
-      data: { id, ...toWriteData(input) },
+    return this.db.$transaction(async (tx) => {
+      const row = await tx.character.create({ data: { id, ...toWriteData(input) } });
+      await claimHandle(tx, { handle: input.handle, ownerType: "character", ownerId: id });
+      return toCharacter(row);
     });
-    return toCharacter(row);
   }
 
   async createMany(
     entries: Array<{ id: string; input: SaveCharacter }>,
   ): Promise<Character[]> {
     if (entries.length === 0) return [];
-    const rows = await this.db.$transaction(
-      entries.map(({ id, input }) =>
-        this.db.character.create({
-          data: { id, ...toWriteData(input) },
-        }),
-      ),
+    return this.db.$transaction(
+      async (tx) => {
+        const created: Character[] = [];
+        for (const { id, input } of entries) {
+          const row = await tx.character.create({ data: { id, ...toWriteData(input) } });
+          await claimHandle(tx, { handle: input.handle, ownerType: "character", ownerId: id });
+          created.push(toCharacter(row));
+        }
+        return created;
+      },
+      { timeout: BULK_TRANSACTION_TIMEOUT_MS },
     );
-    return rows.map(toCharacter);
   }
 
+  /** A rename is the same claim: it releases the old handle and takes the new one. */
   async update(id: string, input: SaveCharacter): Promise<Character> {
-    const row = await this.db.character.update({
-      where: { id },
-      data: toWriteData(input),
+    return this.db.$transaction(async (tx) => {
+      const row = await tx.character.update({ where: { id }, data: toWriteData(input) });
+      await claimHandle(tx, { handle: input.handle, ownerType: "character", ownerId: id });
+      return toCharacter(row);
     });
-    return toCharacter(row);
   }
 
   async delete(id: string): Promise<void> {
@@ -164,12 +181,20 @@ export class CharacterRepository {
     });
   }
 
+  /**
+   * The only path that frees a handle. Soft deletion keeps it reserved, because
+   * the character still appears as the author of past posts (§48).
+   */
   async hardDeleteMany(ids: string[]): Promise<void> {
     if (ids.length === 0) return;
-    await this.db.$transaction([
-      this.db.post.deleteMany({ where: { authorId: { in: ids } } }),
-      this.db.character.deleteMany({ where: { id: { in: ids } } }),
-    ]);
+    await this.db.$transaction(
+      async (tx) => {
+        await tx.post.deleteMany({ where: { authorId: { in: ids } } });
+        await tx.character.deleteMany({ where: { id: { in: ids } } });
+        await releaseHandles(tx, "character", ids);
+      },
+      { timeout: BULK_TRANSACTION_TIMEOUT_MS },
+    );
   }
 
   async importMany(
@@ -177,20 +202,16 @@ export class CharacterRepository {
   ): Promise<void> {
     if (entries.length === 0) return;
     await this.db.$transaction(
-      entries.map(({ id, input, isDeleted }) =>
-        this.db.character.upsert({
-          where: { id },
-          create: {
-            id,
-            ...toWriteData(input),
-            deletedAt: isDeleted ? new Date() : null,
-          },
-          update: {
-            ...toWriteData(input),
-            deletedAt: isDeleted ? new Date() : null,
-          },
-        }),
-      ),
+      async (tx) => {
+        for (const { id, input, isDeleted } of entries) {
+          const data = { ...toWriteData(input), deletedAt: isDeleted ? new Date() : null };
+          await tx.character.upsert({ where: { id }, create: { id, ...data }, update: data });
+          // An import may rename an existing character, so this has to claim
+          // rather than assume the handle is still free.
+          await claimHandle(tx, { handle: input.handle, ownerType: "character", ownerId: id });
+        }
+      },
+      { timeout: BULK_TRANSACTION_TIMEOUT_MS },
     );
   }
 }

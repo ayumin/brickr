@@ -37,12 +37,9 @@ export class InviteCodeInvalidError extends Error {
   }
 }
 
-export class HandleTakenError extends Error {
-  constructor(handle: string) {
-    super(`handle @${handle} is already taken`);
-    this.name = "HandleTakenError";
-  }
-}
+// Owned by the handles module, which is where the namespace lives (§66.13).
+// Re-exported so the auth layer and the routes keep one import site for it.
+export { HandleTakenError } from "../handles/handle.js";
 
 export class EmailTakenError extends Error {
   constructor() {

@@ -39,6 +39,7 @@ import {
   createPostSchema,
   createSimulationSchema,
   deleteCharacterQuerySchema,
+  handleParams,
   idParams,
   importCharactersCsvSchema,
   loginSchema,
@@ -107,6 +108,24 @@ export async function registerRoutes(
     return reply
       .header("set-cookie", serializeClearedSessionCookie(cookieOptions))
       .send({ user: null });
+  });
+
+  // -- handles --------------------------------------------------------------
+
+  /**
+   * Resolves a handle with no simulation loaded, which is what a direct visit to
+   * `/handle` or a reload has to work from (§66.2).
+   */
+  app.get("/api/handles/:handle", async (request, reply) => {
+    const params = handleParams.safeParse(request.params);
+    if (!params.success) {
+      return sendError(reply, 400, "invalid_params", "handle is invalid");
+    }
+
+    const owner = await services.handles.resolve(params.data.handle);
+    if (!owner) return sendError(reply, 404, "not_found", "handle not found");
+
+    return { owner };
   });
 
   app.get("/api/application-settings", async () =>

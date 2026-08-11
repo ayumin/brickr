@@ -58,6 +58,7 @@ export const openApiDocument: OpenAPIV3.Document = {
     { name: "Simulations", description: "Simulation lifecycle" },
     { name: "Posts", description: "Timeline posts, replies and quotes" },
     { name: "Events", description: "Realtime simulation events" },
+    { name: "Handles", description: "Handle namespace shared by users and characters" },
   ],
   paths: {
     "/api/health": {
@@ -146,6 +147,30 @@ export const openApiDocument: OpenAPIV3.Document = {
           "Deletes the session row and clears the cookie. Idempotent: signing out without a session still succeeds.",
         responses: {
           "200": jsonResponse("Signed out", ref("SessionResponse")),
+          "500": { $ref: "#/components/responses/InternalError" },
+        },
+      },
+    },
+    "/api/handles/{handle}": {
+      get: {
+        operationId: "resolveHandle",
+        tags: ["Handles"],
+        summary: "Resolve a handle to its owner",
+        description:
+          "Users and characters share one handle namespace. Resolves without a simulation loaded, so a direct visit to `/handle` or a reload can render the timeline. A leading `@` is accepted. Soft-deleted characters still resolve, because their past posts keep naming them as the author.",
+        parameters: [
+          {
+            name: "handle",
+            in: "path",
+            required: true,
+            description: "Handle without the `@`, lower-cased",
+            schema: { type: "string", pattern: "^@?[A-Za-z0-9_]{1,32}$" },
+          },
+        ],
+        responses: {
+          "200": jsonResponse("Resolved handle owner", ref("HandleResponse")),
+          "400": { $ref: "#/components/responses/BadRequest" },
+          "404": { $ref: "#/components/responses/NotFound" },
           "500": { $ref: "#/components/responses/InternalError" },
         },
       },
@@ -738,6 +763,22 @@ export const openApiDocument: OpenAPIV3.Document = {
       PostImageUrl: {
         type: "string",
         description: "Base64 PNG/JPEG/GIF/WebP data URL (maximum 5 MiB)",
+      },
+      HandleResponse: {
+        type: "object",
+        required: ["owner"],
+        properties: { owner: ref("HandleOwner") },
+      },
+      HandleOwner: {
+        type: "object",
+        description:
+          "Owner of a handle. `user` is present when ownerType is user, `character` when it is character. The user arm is the public profile: email, admin flag and status are never included (CLAUDE.md 66.1).",
+        required: ["ownerType"],
+        properties: {
+          ownerType: { type: "string", enum: ["user", "character"] },
+          user: ref("UserProfile"),
+          character: ref("Character"),
+        },
       },
       Character: {
         type: "object",

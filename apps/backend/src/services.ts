@@ -6,6 +6,8 @@ import { env } from "./config/env.js";
 import { CharacterRepository } from "./characters/character-repository.js";
 import { LLMCharacterPersonaGenerator } from "./characters/character-generator.js";
 import { CharacterService } from "./characters/character-service.js";
+import { HandleRepository } from "./handles/handle-repository.js";
+import { HandleService } from "./handles/handle-service.js";
 import { LLMClient } from "./llm/llm-client.js";
 import { LLMUsageTracker } from "./llm/usage-tracker.js";
 import type { LLMProviderRegistry } from "./llm/provider-registry.js";
@@ -29,6 +31,7 @@ import { RuntimeSettings } from "./settings/runtime-settings.js";
 
 export type AppServices = {
   auth: AuthService;
+  handles: HandleService;
   characters: CharacterService;
   modelProfiles: ModelProfileService;
   userProfile: UserProfileService;
@@ -53,6 +56,7 @@ export async function buildServices(db: Db, logger: SimulationLogger): Promise<A
   const applicationSettingRepository = new ApplicationSettingRepository(db);
   const userAccountRepository = new UserAccountRepository(db);
   const sessionRepository = new SessionRepository(db);
+  const handleRepository = new HandleRepository(db);
   const runtime = new RuntimeSettings();
 
   const providerRegistry = createProviderRegistry();
@@ -118,6 +122,11 @@ export async function buildServices(db: Db, logger: SimulationLogger): Promise<A
     auth: new AuthService(userAccountRepository, sessionRepository, {
       sessionTtlMs: env.auth.sessionTtlMs,
     }),
+    handles: new HandleService(
+      handleRepository,
+      characterRepository,
+      userAccountRepository,
+    ),
     characters: new CharacterService(
       characterRepository,
       modelProfileRepository,
