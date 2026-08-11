@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { USER_AUTHOR_ID, USER_HANDLE } from "@brickr/shared";
 import type { PostAuthorDto, PostDto } from "@brickr/shared";
 
 import {
@@ -14,10 +13,18 @@ import {
   selectUserTimeline,
 } from "./thread-utils";
 
+// A distinct fixture identity, not the seeded pre-login singleton
+// (`USER_AUTHOR_ID`/`USER_HANDLE`, CLAUDE.md §66.14) - `selectUserTimeline`/
+// `selectAuthorTimeline` take the signed-in user's id/handle as parameters
+// now, so these tests must not accidentally pass by matching a shared
+// constant instead of the argument actually under test.
+const TEST_USER_ID = "test-user-id";
+const TEST_USER_HANDLE = "testuser";
+
 const userAuthor: PostAuthorDto = {
-  id: USER_AUTHOR_ID,
+  id: TEST_USER_ID,
   kind: "user",
-  handle: "you",
+  handle: TEST_USER_HANDLE,
   displayName: "あなた",
 };
 
@@ -299,7 +306,7 @@ describe("selectUserTimeline", () => {
       makePost("user-2", 5, { author: userAuthor }),
     ];
 
-    expect(ids(selectUserTimeline(posts))).toEqual(["user-2", "user-1"]);
+    expect(ids(selectUserTimeline(posts, TEST_USER_ID, TEST_USER_HANDLE))).toEqual(["user-2", "user-1"]);
   });
 
   it("keeps a user repost, because it still starts a thread", () => {
@@ -308,26 +315,26 @@ describe("selectUserTimeline", () => {
       makePost("character-post", 1),
     ];
 
-    expect(ids(selectUserTimeline(posts))).toEqual(["user-repost"]);
+    expect(ids(selectUserTimeline(posts, TEST_USER_ID, TEST_USER_HANDLE))).toEqual(["user-repost"]);
   });
 
   it("includes posts that mention the user, including replies", () => {
     const posts = [
       makePost("root", 1),
-      makePost("mentioned-reply", 2, { replyTo: "root", mentions: ["you"] }),
+      makePost("mentioned-reply", 2, { replyTo: "root", mentions: [TEST_USER_HANDLE] }),
       makePost("not-mentioned", 3, { author: characterAuthor("kansai") }),
     ];
 
-    expect(ids(selectUserTimeline(posts))).toEqual(["mentioned-reply"]);
+    expect(ids(selectUserTimeline(posts, TEST_USER_ID, TEST_USER_HANDLE))).toEqual(["mentioned-reply"]);
   });
 
   it("does not duplicate a user thread that also mentions the user", () => {
-    const posts = [makePost("self-mention", 1, { author: userAuthor, mentions: ["you"] })];
-    expect(ids(selectUserTimeline(posts))).toEqual(["self-mention"]);
+    const posts = [makePost("self-mention", 1, { author: userAuthor, mentions: [TEST_USER_HANDLE] })];
+    expect(ids(selectUserTimeline(posts, TEST_USER_ID, TEST_USER_HANDLE))).toEqual(["self-mention"]);
   });
 
   it("returns an empty array when the user has neither posted nor been mentioned", () => {
-    expect(selectUserTimeline([makePost("only-character", 1)])).toEqual([]);
+    expect(selectUserTimeline([makePost("only-character", 1)], TEST_USER_ID, TEST_USER_HANDLE)).toEqual([]);
   });
 });
 
@@ -378,7 +385,7 @@ describe("selectAuthorTimeline", () => {
       makePost("character-post", 1),
     ];
 
-    expect(ids(selectAuthorTimeline(posts, USER_AUTHOR_ID, USER_HANDLE))).toEqual([
+    expect(ids(selectAuthorTimeline(posts, TEST_USER_ID, TEST_USER_HANDLE))).toEqual([
       "user-reply",
       "user-root",
     ]);
