@@ -16,7 +16,7 @@
  * into a thread, and the flat expansion has to show it for the reply count to
  * stay consistent with what expanding reveals.
  */
-import { USER_AUTHOR_ID, USER_HANDLE, type PostDto } from "@brickr/shared";
+import type { PostDto } from "@brickr/shared";
 
 /** postId → its direct replies, oldest first. */
 export type ReplyIndex = ReadonlyMap<string, readonly PostDto[]>;
@@ -197,16 +197,20 @@ export function countReplies(index: ReplyIndex, postId: string): number {
 }
 
 /**
- * The user's home timeline: their thread starters plus every post that
- * mentions @you. User replies still live inside their thread unless somebody
- * explicitly mentions the user in that reply.
+ * The signed-in user's home timeline: their thread starters plus every post
+ * that mentions their handle. Replies still live inside their thread unless
+ * somebody explicitly mentions them in that reply.
  */
-export function selectUserTimeline(posts: readonly PostDto[]): PostDto[] {
+export function selectUserTimeline(
+  posts: readonly PostDto[],
+  userAuthorId: string,
+  userHandle: string,
+): PostDto[] {
   return posts
     .filter(
       (post) =>
-        (isAuthoredBy(post, USER_AUTHOR_ID) && isThreadStarter(post)) ||
-        isMentioned(post, USER_HANDLE),
+        (isAuthoredBy(post, userAuthorId) && isThreadStarter(post)) ||
+        isMentioned(post, userHandle),
     )
     .sort(comparePostsNewestFirst);
 }

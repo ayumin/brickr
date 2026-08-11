@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { USER_AUTHOR_ID, USER_HANDLE } from "@brickr/shared";
 import type { CharacterDto, PostDto, UserProfileDto } from "@brickr/shared";
 
 import { Avatar } from "../../components/Avatar";
@@ -266,20 +265,20 @@ export function Timeline({
   }, [thinking, postsById, visibleRootPosts]);
 
   const knownHandles = useMemo(() => {
-    const handles = new Set<string>([USER_HANDLE]);
+    const handles = new Set<string>([userProfile.handle]);
     for (const character of characters) {
       handles.add(character.handle);
     }
     return handles;
-  }, [characters]);
+  }, [characters, userProfile.handle]);
 
   const authorIdByHandle = useMemo(() => {
-    const map = new Map<string, string>([[USER_HANDLE, USER_AUTHOR_ID]]);
+    const map = new Map<string, string>([[userProfile.handle, userProfile.id]]);
     for (const character of characters) {
       map.set(character.handle, character.id);
     }
     return map;
-  }, [characters]);
+  }, [characters, userProfile.handle, userProfile.id]);
 
   const openHandle = (handle: string): void => {
     const authorId = authorIdByHandle.get(handle);
@@ -343,7 +342,7 @@ export function Timeline({
         compact
         autoFocus
         scope={{ mode: inlineComposer.mode, post }}
-        onOpenUser={() => onOpenAuthor(USER_AUTHOR_ID)}
+        onOpenUser={() => onOpenAuthor(userProfile.id)}
         onCancel={closeInlineComposer}
         onPosted={handleInlinePosted}
       />

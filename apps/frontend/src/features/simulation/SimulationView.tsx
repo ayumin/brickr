@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { USER_AUTHOR_ID, USER_HANDLE } from "@brickr/shared";
 import type {
   CharacterDto,
   SimulationDto,
@@ -168,16 +167,16 @@ export function SimulationView({
   // loaded) so that clicking around the app never has to wait on a network
   // round trip. Only a cold `/:handle` load falls back to the API below.
   const authorIdByHandle = useMemo(() => {
-    const map = new Map<string, string>([[USER_HANDLE, USER_AUTHOR_ID]]);
+    const map = new Map<string, string>([[userProfile.handle, userProfile.id]]);
     for (const character of characters) {
       map.set(character.handle, character.id);
     }
     return map;
-  }, [characters]);
+  }, [characters, userProfile.handle, userProfile.id]);
 
   const handleForAuthorId = useCallback(
     (targetAuthorId: string): string | null => {
-      if (targetAuthorId === USER_AUTHOR_ID) return USER_HANDLE;
+      if (targetAuthorId === userProfile.id) return userProfile.handle;
       const character = characters.find((item) => item.id === targetAuthorId);
       if (character) return character.handle;
       // Not a character we know about: fall back to any post we've already
@@ -187,7 +186,7 @@ export function SimulationView({
       );
       return post?.author.handle ?? null;
     },
-    [characters, events.posts],
+    [characters, events.posts, userProfile.id, userProfile.handle],
   );
 
   type HandleResolution =
@@ -290,18 +289,18 @@ export function SimulationView({
         }
         // Mirrors openAuthor below: your own handle is the home view, not a
         // separate one-person timeline.
-        return handleResolution.authorId === USER_AUTHOR_ID
+        return handleResolution.authorId === userProfile.id
           ? { kind: "home" }
           : { kind: "timeline", authorId: handleResolution.authorId };
     }
-  }, [route, handleResolution]);
+  }, [route, handleResolution, userProfile.id]);
 
   const openAuthor = useCallback(
     (authorId: string) => {
       // The user's timeline is the home view: new posts start threads there,
       // and replies remain visible inside those threads rather than in a
       // duplicate author-only screen.
-      if (authorId === USER_AUTHOR_ID) {
+      if (authorId === userProfile.id) {
         navigate("/");
       } else {
         const handle = handleForAuthorId(authorId);
@@ -311,7 +310,7 @@ export function SimulationView({
       setComposerOpen(false);
       window.scrollTo({ top: 0 });
     },
-    [navigate, handleForAuthorId],
+    [navigate, handleForAuthorId, userProfile.id],
   );
 
   const goHome = useCallback(() => {
@@ -364,15 +363,15 @@ export function SimulationView({
     [navigate],
   );
 
-  // Home shows the user's thread starters and posts that mention @you.
+  // Home shows the user's thread starters and posts that mention them.
   const homePosts = useMemo(
-    () => selectUserTimeline(events.posts),
-    [events.posts],
+    () => selectUserTimeline(events.posts, userProfile.id, userProfile.handle),
+    [events.posts, userProfile.id, userProfile.handle],
   );
 
   const userPostCount = useMemo(
-    () => events.posts.filter((post) => post.authorId === USER_AUTHOR_ID).length,
-    [events.posts],
+    () => events.posts.filter((post) => post.authorId === userProfile.id).length,
+    [events.posts, userProfile.id],
   );
 
   const authorId = view.kind === "timeline" ? view.authorId : null;

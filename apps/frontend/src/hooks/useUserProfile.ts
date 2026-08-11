@@ -1,15 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
-import {
-  USER_AUTHOR_ID,
-  USER_DISPLAY_NAME,
-  USER_HANDLE,
-  type UserProfileDto,
-} from "@brickr/shared";
+import { USER_DISPLAY_NAME, type UserProfileDto } from "@brickr/shared";
 import { api, isAbortError, isUnauthorizedError, toErrorMessage } from "../services/api-client";
 
+// `id`/`handle` are deliberately empty, not the seeded pre-login singleton
+// (CLAUDE.md §66.14) - that account is real and owns real posts, so reusing
+// its id as a "nobody" placeholder would make a signed-out visitor (or one
+// whose profile hasn't loaded yet) appear to own its posts and mentions.
 const DEFAULT_PROFILE: UserProfileDto = {
-  id: USER_AUTHOR_ID,
-  handle: USER_HANDLE,
+  id: "",
+  handle: "",
   displayName: USER_DISPLAY_NAME,
   description: "",
 };
