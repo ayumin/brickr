@@ -95,13 +95,6 @@ export type UserDetailResponse = {
   user: UserManagementDto;
 };
 
-export type SuspendUserResponse = {
-  user: UserManagementDto;
-};
-
-export type ReactivateUserResponse = {
-  user: UserManagementDto;
-};
 
 /** The temporary password is returned once, for the admin to relay out of band (§66.10). */
 export type ResetPasswordResponse = {
