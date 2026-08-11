@@ -42,6 +42,8 @@ const characterBody = {
 const writeRoutes = [
   { method: "POST" as const, url: "/api/simulations", payload: {} },
   { method: "PUT" as const, url: "/api/simulations/s1", payload: { title: "t" } },
+  { method: "POST" as const, url: "/api/simulations/s1/stop", payload: undefined },
+  { method: "POST" as const, url: "/api/simulations/s1/resume", payload: undefined },
   { method: "POST" as const, url: "/api/simulations/s1/posts", payload: { content: "hi" } },
   { method: "POST" as const, url: "/api/characters", payload: characterBody },
   { method: "PUT" as const, url: "/api/characters/c1", payload: characterBody },
@@ -91,6 +93,8 @@ function makeServices(): AppServices {
       list: () => Promise.resolve([]),
       create: () => Promise.resolve({ id: "s1" }),
       rename: () => Promise.resolve({ id: "s1" }),
+      stop: () => Promise.resolve({ id: "s1" }),
+      resume: () => Promise.resolve({ id: "s1" }),
       submitUserPost: () => Promise.resolve({ id: "p1" }),
     },
     posts: { toDto: () => Promise.resolve({ id: "p1" }) },

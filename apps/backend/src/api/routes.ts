@@ -380,17 +380,19 @@ export async function registerRoutes(
     })),
   );
 
-  app.post("/api/simulations/:id/stop", async (request, reply) =>
-    withSimulation(request, reply, async (id) => ({
+  app.post("/api/simulations/:id/stop", async (request, reply) => {
+    if (!requireUser(request, reply)) return reply;
+    return withSimulation(request, reply, async (id) => ({
       simulation: await services.simulations.stop(id),
-    })),
-  );
+    }));
+  });
 
-  app.post("/api/simulations/:id/resume", async (request, reply) =>
-    withSimulation(request, reply, async (id) => ({
+  app.post("/api/simulations/:id/resume", async (request, reply) => {
+    if (!requireUser(request, reply)) return reply;
+    return withSimulation(request, reply, async (id) => ({
       simulation: await services.simulations.resume(id),
-    })),
-  );
+    }));
+  });
 
   // -- posts ----------------------------------------------------------------
 
