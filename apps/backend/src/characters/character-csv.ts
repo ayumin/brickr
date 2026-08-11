@@ -1,3 +1,4 @@
+import { isReservedHandle } from "@brickr/shared";
 import { z } from "zod";
 import type { Character } from "./character.js";
 import type { ModelProfile } from "../model-profiles/model-profile.js";
@@ -28,7 +29,12 @@ export const CHARACTER_CSV_HEADERS = CHARACTER_CSV_COLUMNS.map(({ label }) => la
 
 const importedRowSchema = z.object({
   id: z.string().trim().max(64),
-  handle: z.string().trim().toLowerCase().regex(/^[a-z0-9_]{1,32}$/u),
+  handle: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .regex(/^[a-z0-9_]{3,32}$/u)
+    .refine((value) => !isReservedHandle(value), "handle is reserved"),
   displayName: z.string().trim().min(1).max(80),
   description: z.string().trim().min(1).max(500),
   avatarUrl: z.string().max(1_500_000).refine(

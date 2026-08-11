@@ -23,6 +23,8 @@ import type {
   CreateSimulationResponse,
   DeleteCharacterResponse,
   ExportCharactersCsvResponse,
+  HandleOwnerDto,
+  HandleResponse,
   ImportCharactersCsvResponse,
   ModelProfileDto,
   ModelProfilesResponse,
@@ -305,6 +307,15 @@ export const api = {
       method: "POST",
       body: { csv },
     });
+  },
+
+  /** Resolves without any simulation loaded — what a direct `/handle` visit or reload needs (CLAUDE.md §66.2). */
+  async resolveHandle(handle: string, signal?: AbortSignal): Promise<HandleOwnerDto> {
+    const data = await request<HandleResponse>(
+      `/api/handles/${encodeURIComponent(handle)}`,
+      signal ? { signal } : {},
+    );
+    return data.owner;
   },
 
   async getModelProfiles(signal?: AbortSignal): Promise<ModelProfileDto[]> {

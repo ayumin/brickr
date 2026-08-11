@@ -1,5 +1,6 @@
-import { useCallback, useMemo, useState } from "react";
-import { USER_AUTHOR_ID } from "@brickr/shared";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { USER_AUTHOR_ID, USER_HANDLE } from "@brickr/shared";
 import type {
   CharacterDto,
   SimulationDto,
@@ -12,6 +13,15 @@ import { BrandLogo } from "../../components/BrandLogo";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { Icon } from "../../components/Icon";
 import { Spinner } from "../../components/Spinner";
+import {
+  characterListPath,
+  handlePath,
+  matchRoute,
+  postPath,
+  simulationAnalysisPath,
+  simulationListPath,
+} from "../../routes";
+import { api } from "../../services/api-client";
 import type { Theme } from "../../services/theme";
 import type { ConnectionState, TimelineView } from "../../types";
 import { CharacterPicker } from "../characters/CharacterPicker";
@@ -26,6 +36,7 @@ import {
   selectAuthorTimeline,
   selectUserTimeline,
 } from "../timeline/thread-utils";
+import { classifyHandleResolutionError } from "./handle-resolution";
 import { useSimulationEvents } from "./useSimulationEvents";
 import { SimulationList } from "./SimulationList";
 import { SimulationPicker } from "./SimulationPicker";
@@ -126,8 +137,19 @@ export function SimulationView({
   const [streamEnabled, setStreamEnabled] = useState(true);
   const events = useSimulationEvents(simulation.id, streamEnabled);
 
-  const [view, setView] = useState<TimelineView>({ kind: "home" });
-  const [postReturnView, setPostReturnView] = useState<TimelineView>({ kind: "home" });
+  const location = useLocation();
+  const navigate = useNavigate();
+  const route = useMemo(() => matchRoute(location.pathname), [location.pathname]);
+
+  // A direct link or a reload lands on a view (e.g. /posts/:id) with no prior
+  // in-app entry: navigate(-1) would then leave the app entirely rather than
+  // going anywhere sensible. Counting locations seen since mount tells the
+  // "go back" button whether there is actually somewhere in-app to return to.
+  const inAppLocationCountRef = useRef(0);
+  useEffect(() => {
+    inAppLocationCountRef.current += 1;
+  }, [location]);
+
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarTab, setSidebarTab] = useState<"characters" | "simulations">("characters");
@@ -142,64 +164,205 @@ export function SimulationView({
   const isStopped = simulation.status === "stopped";
   const canPost = !isStopped;
 
-  const openAuthor = useCallback((authorId: string) => {
-    // The user's timeline is the home view: new posts start threads there, and
-    // replies remain visible inside those threads rather than in a duplicate
-    // author-only screen.
-    setView(
-      authorId === USER_AUTHOR_ID
-        ? { kind: "home" }
-        : { kind: "timeline", authorId },
-    );
-    setSidebarOpen(false);
-    setComposerOpen(false);
-    window.scrollTo({ top: 0 });
+  // Handle -> authorId, resolved locally first (the roster is usually already
+  // loaded) so that clicking around the app never has to wait on a network
+  // round trip. Only a cold `/:handle` load falls back to the API below.
+  const authorIdByHandle = useMemo(() => {
+    const map = new Map<string, string>([[USER_HANDLE, USER_AUTHOR_ID]]);
+    for (const character of characters) {
+      map.set(character.handle, character.id);
+    }
+    return map;
+  }, [characters]);
+
+  const handleForAuthorId = useCallback(
+    (targetAuthorId: string): string | null => {
+      if (targetAuthorId === USER_AUTHOR_ID) return USER_HANDLE;
+      const character = characters.find((item) => item.id === targetAuthorId);
+      if (character) return character.handle;
+      // Not a character we know about: fall back to any post we've already
+      // loaded that names this author, the same way `authorHandle` does below.
+      const post = events.posts.find(
+        (item) => item.authorId === targetAuthorId || item.author.id === targetAuthorId,
+      );
+      return post?.author.handle ?? null;
+    },
+    [characters, events.posts],
+  );
+
+  type HandleResolution =
+    | { status: "loading"; handle: string }
+    | { status: "resolved"; handle: string; authorId: string }
+    | { status: "not-found"; handle: string }
+    | { status: "error"; handle: string };
+
+  const [handleResolution, setHandleResolution] = useState<HandleResolution | null>(null);
+  const requestedHandleRef = useRef<string | null>(null);
+  // Bumping this forces the effect below to re-run for the same route, which
+  // is otherwise only keyed on route/roster changes - needed so "retry" after
+  // a transient failure can actually re-fetch instead of doing nothing.
+  const [handleRetryNonce, setHandleRetryNonce] = useState(0);
+  const retryHandleResolution = useCallback(() => {
+    setHandleRetryNonce((nonce) => nonce + 1);
   }, []);
+
+  useEffect(() => {
+    if (route.kind !== "handle") {
+      return;
+    }
+
+    const known = authorIdByHandle.get(route.handle);
+    if (known) {
+      requestedHandleRef.current = null;
+      setHandleResolution({ status: "resolved", handle: route.handle, authorId: known });
+      return;
+    }
+
+    if (requestedHandleRef.current === route.handle) {
+      return;
+    }
+    requestedHandleRef.current = route.handle;
+
+    let cancelled = false;
+    setHandleResolution({ status: "loading", handle: route.handle });
+    api
+      .resolveHandle(route.handle)
+      .then((owner) => {
+        if (cancelled) return;
+        setHandleResolution({
+          status: "resolved",
+          handle: route.handle,
+          authorId: owner.ownerType === "user" ? owner.user.id : owner.character.id,
+        });
+      })
+      .catch((cause: unknown) => {
+        if (cancelled) return;
+        if (classifyHandleResolutionError(cause) === "not-found") {
+          // A genuine, permanent answer: this handle has no owner. Safe to
+          // leave requestedHandleRef set - there is nothing to retry.
+          setHandleResolution({ status: "not-found", handle: route.handle });
+          return;
+        }
+        // Network/server error: NOT cached as a permanent answer. Clearing
+        // the ref lets a later retry (or a roster/route change) try again,
+        // instead of this handle being stuck on an error forever for the
+        // lifetime of this persistently-mounted component.
+        console.error(cause);
+        requestedHandleRef.current = null;
+        setHandleResolution({ status: "error", handle: route.handle });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [route, authorIdByHandle, handleRetryNonce]);
+
+  /** `TimelineView` plus the states a URL can be in before it becomes one. */
+  const view:
+    | TimelineView
+    | { kind: "resolving" }
+    | { kind: "not-found"; handle?: string }
+    | { kind: "resolve-error"; handle: string } = useMemo(() => {
+    switch (route.kind) {
+      case "home":
+        return { kind: "home" };
+      case "characters":
+        return { kind: "characters" };
+      case "simulations":
+        return { kind: "simulations" };
+      case "simulation-analysis":
+        return { kind: "simulation-analysis", simulationId: route.simulationId };
+      case "post":
+        return { kind: "post", postId: route.postId };
+      case "not-found":
+        return { kind: "not-found" };
+      case "handle":
+        if (!handleResolution || handleResolution.handle !== route.handle) {
+          return { kind: "resolving" };
+        }
+        if (handleResolution.status === "loading") {
+          return { kind: "resolving" };
+        }
+        if (handleResolution.status === "not-found") {
+          return { kind: "not-found", handle: route.handle };
+        }
+        if (handleResolution.status === "error") {
+          return { kind: "resolve-error", handle: route.handle };
+        }
+        // Mirrors openAuthor below: your own handle is the home view, not a
+        // separate one-person timeline.
+        return handleResolution.authorId === USER_AUTHOR_ID
+          ? { kind: "home" }
+          : { kind: "timeline", authorId: handleResolution.authorId };
+    }
+  }, [route, handleResolution]);
+
+  const openAuthor = useCallback(
+    (authorId: string) => {
+      // The user's timeline is the home view: new posts start threads there,
+      // and replies remain visible inside those threads rather than in a
+      // duplicate author-only screen.
+      if (authorId === USER_AUTHOR_ID) {
+        navigate("/");
+      } else {
+        const handle = handleForAuthorId(authorId);
+        navigate(handle ? handlePath(handle) : "/");
+      }
+      setSidebarOpen(false);
+      setComposerOpen(false);
+      window.scrollTo({ top: 0 });
+    },
+    [navigate, handleForAuthorId],
+  );
 
   const goHome = useCallback(() => {
-    setView({ kind: "home" });
+    navigate("/");
     setComposerOpen(false);
     window.scrollTo({ top: 0 });
-  }, []);
+  }, [navigate]);
 
   const openCharacterList = useCallback(() => {
-    setView({ kind: "characters" });
+    navigate(characterListPath());
     setSidebarOpen(false);
     window.scrollTo({ top: 0 });
-  }, []);
+  }, [navigate]);
 
   const openSimulationList = useCallback(() => {
-    setView({ kind: "simulations" });
+    navigate(simulationListPath());
     setSidebarOpen(false);
     window.scrollTo({ top: 0 });
-  }, []);
+  }, [navigate]);
 
-  const openSimulationAnalysis = useCallback((simulationId: string) => {
-    setView({ kind: "simulation-analysis", simulationId });
-    setSidebarOpen(false);
-    window.scrollTo({ top: 0 });
-  }, []);
-
-  const openPost = useCallback(
-    (postId: string) => {
-      if (view.kind !== "post") setPostReturnView(view);
-      setView({ kind: "post", postId });
+  const openSimulationAnalysis = useCallback(
+    (simulationId: string) => {
+      navigate(simulationAnalysisPath(simulationId));
       setSidebarOpen(false);
       window.scrollTo({ top: 0 });
     },
-    [view],
+    [navigate],
+  );
+
+  const openPost = useCallback(
+    (postId: string) => {
+      navigate(postPath(postId));
+      setSidebarOpen(false);
+      window.scrollTo({ top: 0 });
+    },
+    [navigate],
   );
 
   const consumePendingMention = useCallback(() => {
     setPendingMention(null);
   }, []);
 
-  const handleMention = useCallback((handle: string) => {
-    setPendingMention(handle);
-    setComposerOpen(true);
-    setView({ kind: "home" });
-    window.scrollTo({ top: 0 });
-  }, []);
+  const handleMention = useCallback(
+    (handle: string) => {
+      setPendingMention(handle);
+      setComposerOpen(true);
+      navigate("/");
+      window.scrollTo({ top: 0 });
+    },
+    [navigate],
+  );
 
   // Home shows the user's thread starters and posts that mention @you.
   const homePosts = useMemo(
@@ -424,7 +587,16 @@ export function SimulationView({
               <button
                 type="button"
                 onClick={() => {
-                  setView(postReturnView.kind === "post" ? { kind: "home" } : postReturnView);
+                  // The browser's own back entry is the previous screen now
+                  // that the view is tracked by the URL - but only if this
+                  // view was reached by navigating within the app. A direct
+                  // link or reload has no such entry, so navigate(-1) would
+                  // leave the app rather than go anywhere useful.
+                  if (inAppLocationCountRef.current > 1) {
+                    navigate(-1);
+                  } else {
+                    goHome();
+                  }
                   window.scrollTo({ top: 0 });
                 }}
                 aria-label="前の画面に戻る"
@@ -463,6 +635,24 @@ export function SimulationView({
                       : "シミュレーション全体の分析"}
                 </p>
               </div>
+            </div>
+          ) : view.kind === "resolving" || view.kind === "not-found" || view.kind === "resolve-error" ? (
+            <div className="flex items-center gap-3 border-b border-line px-4 py-2.5">
+              <button
+                type="button"
+                onClick={goHome}
+                aria-label="ホームに戻る"
+                className="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted transition hover:bg-surface-hover hover:text-ink"
+              >
+                <Icon name="arrow-left" />
+              </button>
+              <p className="min-w-0 truncate text-sm font-semibold text-ink">
+                {view.kind === "resolving"
+                  ? "読み込み中…"
+                  : view.kind === "resolve-error"
+                    ? "読み込みに失敗しました"
+                    : "ページが見つかりません"}
+              </p>
             </div>
           ) : (
             <>
@@ -626,6 +816,33 @@ export function SimulationView({
                 />
               </div>
             )
+          ) : view.kind === "resolving" ? (
+            <div className="flex items-center justify-center px-4 py-16">
+              <Spinner size="lg" />
+            </div>
+          ) : view.kind === "not-found" ? (
+            <div className="px-4 py-12">
+              <ErrorBanner
+                message="ページが見つかりませんでした"
+                detail={
+                  view.handle
+                    ? `@${view.handle} に一致するユーザーまたはキャラクターは見つかりませんでした。`
+                    : "このURLに対応する画面はありません。"
+                }
+                onRetry={goHome}
+                retryLabel="ホームへ戻る"
+              />
+            </div>
+          ) : view.kind === "resolve-error" ? (
+            <div className="px-4 py-12">
+              <ErrorBanner
+                tone="warning"
+                message="読み込みに失敗しました"
+                detail={`@${view.handle} の情報を取得できませんでした。通信状況を確認して再試行してください。`}
+                onRetry={retryHandleResolution}
+                retryLabel="再試行"
+              />
+            </div>
           ) : view.kind === "home" ? (
             <Timeline
               key="home"

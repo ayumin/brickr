@@ -7,6 +7,7 @@ import {
   MAX_IMAGE_DATA_URL_LENGTH,
   MAX_IMAGE_BYTES,
   MAX_POST_LENGTH,
+  isReservedHandle,
 } from "@brickr/shared";
 import { z } from "zod";
 
@@ -82,7 +83,12 @@ export const createPostSchema = z
 const probability = z.number().min(0).max(1);
 
 export const saveCharacterSchema = z.object({
-  handle: z.string().trim().toLowerCase().regex(/^[a-z0-9_]{1,32}$/u),
+  handle: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .regex(/^[a-z0-9_]{3,32}$/u)
+    .refine((value) => !isReservedHandle(value), "handle is reserved"),
   displayName: z.string().trim().min(1).max(80),
   description: z.string().trim().min(1).max(500),
   rolePrompt: z.string().trim().min(1).max(4_000),
@@ -139,7 +145,8 @@ const handle = z
   .string()
   .trim()
   .toLowerCase()
-  .regex(/^[a-z0-9_]{1,32}$/u);
+  .regex(/^[a-z0-9_]{3,32}$/u)
+  .refine((value) => !isReservedHandle(value), "handle is reserved");
 
 const email = z.string().trim().toLowerCase().email().max(254);
 
@@ -181,7 +188,7 @@ export const handleParams = z.object({
     .string()
     .trim()
     .transform((value) => value.replace(/^@/u, "").toLowerCase())
-    .pipe(z.string().regex(/^[a-z0-9_]{1,32}$/u)),
+    .pipe(z.string().regex(/^[a-z0-9_]{3,32}$/u)),
 });
 
 export const loginSchema = z.object({
