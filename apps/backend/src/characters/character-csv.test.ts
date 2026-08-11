@@ -76,4 +76,29 @@ describe("character CSV", () => {
     );
     expect(() => parseCharactersCsv(csv)).toThrow(/重複/u);
   });
+
+  // CSV import is a second path into character creation, independent of
+  // saveCharacterSchema — the 3-character minimum and reserved-word list
+  // (CLAUDE.md §66.2) must hold here too, or they are not real limits.
+  it("rejects a handle shorter than the 3-character minimum", () => {
+    const csv = exportCharactersCsv(
+      [CHARACTER],
+      new Map([
+        ["openai-default", { id: "openai-default", providerId: "openai", model: "gpt-test" }],
+      ]),
+      new Map(),
+    ).replace(/csv_test/u, "ab");
+    expect(() => parseCharactersCsv(csv)).toThrow(CharacterCsvError);
+  });
+
+  it("rejects a reserved handle", () => {
+    const csv = exportCharactersCsv(
+      [CHARACTER],
+      new Map([
+        ["openai-default", { id: "openai-default", providerId: "openai", model: "gpt-test" }],
+      ]),
+      new Map(),
+    ).replace(/csv_test/u, "login");
+    expect(() => parseCharactersCsv(csv)).toThrow(CharacterCsvError);
+  });
 });
