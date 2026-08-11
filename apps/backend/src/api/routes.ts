@@ -8,6 +8,7 @@ import {
   InviteCodeInvalidError,
   UnderageSignupError,
 } from "../auth/auth-errors.js";
+import { requireUser } from "../auth/auth-context.js";
 import type { IssuedSession } from "../auth/auth-service.js";
 import {
   readSessionCookie,
@@ -163,6 +164,8 @@ export async function registerRoutes(
     "/api/characters/import",
     { bodyLimit: 50 * 1024 * 1024 },
     async (request, reply) => {
+      if (!requireUser(request, reply)) return reply;
+
       const body = importCharactersCsvSchema.safeParse(request.body);
       if (!body.success) {
         return sendError(reply, 400, "invalid_body", "CSV data is invalid", body.error.issues);
@@ -199,6 +202,8 @@ export async function registerRoutes(
   });
 
   app.post("/api/characters", async (request, reply) => {
+    if (!requireUser(request, reply)) return reply;
+
     const body = saveCharacterSchema.safeParse(request.body);
     if (!body.success) {
       return sendError(reply, 400, "invalid_body", "character body is invalid", body.error.issues);
@@ -212,6 +217,8 @@ export async function registerRoutes(
   });
 
   app.post("/api/characters/bulk-create", async (request, reply) => {
+    if (!requireUser(request, reply)) return reply;
+
     const body = bulkCreateCharactersSchema.safeParse(request.body);
     if (!body.success) {
       return sendError(
@@ -237,6 +244,8 @@ export async function registerRoutes(
   });
 
   app.put("/api/characters/:id", async (request, reply) => {
+    if (!requireUser(request, reply)) return reply;
+
     const params = idParams.safeParse(request.params);
     if (!params.success) {
       return sendError(reply, 400, "invalid_params", "character id is invalid");
@@ -253,6 +262,8 @@ export async function registerRoutes(
   });
 
   app.delete("/api/characters/:id", async (request, reply) => {
+    if (!requireUser(request, reply)) return reply;
+
     const params = idParams.safeParse(request.params);
     if (!params.success) {
       return sendError(reply, 400, "invalid_params", "character id is invalid");
@@ -274,6 +285,8 @@ export async function registerRoutes(
   });
 
   app.post("/api/characters/:id/restore", async (request, reply) => {
+    if (!requireUser(request, reply)) return reply;
+
     const params = idParams.safeParse(request.params);
     if (!params.success) {
       return sendError(reply, 400, "invalid_params", "character id is invalid");
@@ -286,6 +299,8 @@ export async function registerRoutes(
   });
 
   app.post("/api/characters/bulk-delete", async (request, reply) => {
+    if (!requireUser(request, reply)) return reply;
+
     const body = bulkDeleteCharactersSchema.safeParse(request.body);
     if (!body.success) {
       return sendError(
@@ -313,6 +328,8 @@ export async function registerRoutes(
   }));
 
   app.put("/api/user-profile", async (request, reply) => {
+    if (!requireUser(request, reply)) return reply;
+
     const body = saveUserProfileSchema.safeParse(request.body);
     if (!body.success) {
       return sendError(reply, 400, "invalid_body", "user profile is invalid", body.error.issues);
@@ -327,6 +344,8 @@ export async function registerRoutes(
   }));
 
   app.post("/api/simulations", async (request, reply) => {
+    if (!requireUser(request, reply)) return reply;
+
     const body = createSimulationSchema.safeParse(request.body ?? {});
     if (!body.success) {
       return sendError(reply, 400, "invalid_body", "title is invalid", body.error.issues);
@@ -341,6 +360,8 @@ export async function registerRoutes(
   );
 
   app.put("/api/simulations/:id", async (request, reply) => {
+    if (!requireUser(request, reply)) return reply;
+
     const body = updateSimulationSchema.safeParse(request.body);
     if (!body.success) {
       return sendError(reply, 400, "invalid_body", "title is invalid", body.error.issues);
@@ -377,6 +398,8 @@ export async function registerRoutes(
   );
 
   app.post("/api/simulations/:id/posts", async (request, reply) => {
+    if (!requireUser(request, reply)) return reply;
+
     const params = idParams.safeParse(request.params);
     if (!params.success) {
       return sendError(reply, 400, "invalid_params", "simulation id is invalid");
