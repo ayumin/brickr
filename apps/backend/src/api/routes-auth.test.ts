@@ -71,8 +71,17 @@ const publicRoutes = [
   "/api/auth/session",
 ];
 
-/** Admin-only (§66.16): configures API keys and LLM behaviour thresholds. */
+/** Every route that requires admin access (§66.7, §66.15, §66.16). */
 const adminRoutes = [
+  // User-management routes (§66.7, §66.15)
+  { method: "GET" as const, url: "/api/users/management", payload: undefined },
+  { method: "GET" as const, url: "/api/users/user-1", payload: undefined },
+  { method: "POST" as const, url: "/api/users/user-1/suspend", payload: undefined },
+  { method: "POST" as const, url: "/api/users/user-1/reactivate", payload: undefined },
+  { method: "POST" as const, url: "/api/users/user-1/reset-password", payload: undefined },
+  { method: "GET" as const, url: "/api/users/user-1/characters", payload: undefined },
+  { method: "GET" as const, url: "/api/users/user-1/token-usage", payload: undefined },
+  // Application-settings routes (§66.16)
   { method: "GET" as const, url: "/api/application-settings", payload: undefined },
   {
     method: "PUT" as const,
@@ -84,6 +93,15 @@ const adminRoutes = [
 function makeServices(): AppServices {
   return {
     providerRegistry: { availableIds: () => ["mock"] },
+    userAdmin: {
+      listManagement: (query: { page: number; search?: string }) =>
+        Promise.resolve({ accounts: [], page: query.page, pageSize: 100, totalCount: 0 }),
+      findById: (id: string) => Promise.resolve(id === "user-1" ? signedInUser : null),
+      suspend: () => Promise.resolve(signedInUser),
+      reactivate: () => Promise.resolve(signedInUser),
+      resetPassword: () =>
+        Promise.resolve({ user: signedInUser, temporaryPassword: "a-temp-password" }),
+    },
     characters: {
       listDtos: () => Promise.resolve([]),
       listManagementDtos: () => Promise.resolve([]),
@@ -220,7 +238,7 @@ describe("read endpoints", () => {
   });
 });
 
-describe("admin-only application-settings endpoints while signed out", () => {
+describe("admin-only endpoints while signed out", () => {
   const apps: FastifyInstance[] = [];
 
   afterEach(async () => {
@@ -241,7 +259,7 @@ describe("admin-only application-settings endpoints while signed out", () => {
   });
 });
 
-describe("admin-only application-settings endpoints while signed in as a non-admin", () => {
+describe("admin-only endpoints while signed in as a non-admin", () => {
   const apps: FastifyInstance[] = [];
 
   afterEach(async () => {
@@ -263,7 +281,7 @@ describe("admin-only application-settings endpoints while signed in as a non-adm
   });
 });
 
-describe("admin-only application-settings endpoints while signed in as an admin", () => {
+describe("admin-only endpoints while signed in as an admin", () => {
   const apps: FastifyInstance[] = [];
 
   afterEach(async () => {
@@ -281,5 +299,52 @@ describe("admin-only application-settings endpoints while signed in as an admin"
     });
 
     expect(response.statusCode).toBe(200);
+  });
+
+  it("passes page and search through to the service", async () => {
+    const app = Fastify();
+    apps.push(app);
+    app.decorateRequest("currentUser", null);
+    app.addHook("onRequest", async (request) => {
+      request.currentUser = adminUser;
+    });
+    let received: { page: number; search?: string } | undefined;
+    const services = {
+      ...makeServices(),
+      userAdmin: {
+        ...makeServices().userAdmin,
+        listManagement: (query: { page: number; search?: string }) => {
+          received = query;
+          return Promise.resolve({ accounts: [], page: query.page, pageSize: 100, totalCount: 0 });
+        },
+      },
+    } as unknown as AppServices;
+    await registerRoutes(app, services);
+    await app.ready();
+
+    await app.inject({ method: "GET", url: "/api/users/management?page=2&search=hanako" });
+
+    expect(received).toEqual({ page: 2, search: "hanako" });
+  });
+
+  it("returns the temporary password once from reset-password", async () => {
+    const app = await buildApp(adminUser);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/users/user-1/reset-password",
+    });
+
+    expect(response.json()).toEqual({ temporaryPassword: "a-temp-password" });
+  });
+
+  it("404s for an unknown user id", async () => {
+    const app = await buildApp(adminUser);
+    apps.push(app);
+
+    const response = await app.inject({ method: "GET", url: "/api/users/nobody" });
+
+    expect(response.statusCode).toBe(404);
   });
 });
