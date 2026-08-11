@@ -8,7 +8,12 @@ import type { PostService, PublishInput } from "../posts/post-service.js";
 import type { ThreadContext, ThreadService } from "../posts/thread-service.js";
 import { EventHub } from "./event-hub.js";
 import type { SimulationRepository } from "./simulation-repository.js";
-import { SimulationService, type SimulationLogger } from "./simulation-service.js";
+import {
+  SimulationForbiddenError,
+  SimulationService,
+  type SimulationActor,
+  type SimulationLogger,
+} from "./simulation-service.js";
 import type { Simulation } from "./simulation.js";
 
 const SIMULATION: Simulation = {
@@ -16,7 +21,10 @@ const SIMULATION: Simulation = {
   title: "test",
   status: "active",
   createdAt: new Date("2026-01-01T00:00:00Z"),
+  createdByUserId: USER_AUTHOR_ID,
 };
+
+const OWNER: SimulationActor = { id: USER_AUTHOR_ID, isAdmin: false };
 
 function makeCharacter(id: string, overrides: Partial<Character> = {}): Character {
   return {
@@ -69,6 +77,8 @@ function makeHarness(options: HarnessOptions): Harness {
       Promise.resolve(id === SIMULATION.id ? SIMULATION : null),
     updateStatus: (_id: string, status: Simulation["status"]): Promise<Simulation> =>
       Promise.resolve({ ...SIMULATION, status }),
+    updateTitle: (_id: string, title: string): Promise<Simulation> =>
+      Promise.resolve({ ...SIMULATION, title }),
   } as unknown as SimulationRepository;
 
   const characterRepository = {
@@ -378,10 +388,10 @@ describe("SimulationService orchestration", () => {
     const alpha = makeCharacter("alpha");
     const harness = makeHarness({ characters: [alpha] });
 
-    const stopped = await harness.service.stop(SIMULATION.id);
+    const stopped = await harness.service.stop(SIMULATION.id, OWNER);
     expect(stopped.status).toBe("stopped");
 
-    const resumed = await harness.service.resume(SIMULATION.id);
+    const resumed = await harness.service.resume(SIMULATION.id, OWNER);
     expect(resumed.status).toBe("active");
 
     const stream = collectUntilCompleted(harness.events);
@@ -397,5 +407,46 @@ describe("SimulationService orchestration", () => {
       USER_AUTHOR_ID,
       alpha.id,
     ]);
+  });
+});
+
+describe("SimulationService ownership (CLAUDE.md §66.6)", () => {
+  const ADMIN: SimulationActor = { id: "admin-1", isAdmin: true };
+  const OTHER_USER: SimulationActor = { id: "someone-else", isAdmin: false };
+
+  it("lets the creator stop, resume and rename their own simulation", async () => {
+    const harness = makeHarness({ characters: [makeCharacter("alpha")] });
+
+    await expect(harness.service.stop(SIMULATION.id, OWNER)).resolves.toMatchObject({
+      status: "stopped",
+    });
+    await expect(harness.service.resume(SIMULATION.id, OWNER)).resolves.toMatchObject({
+      status: "active",
+    });
+    await expect(
+      harness.service.rename(SIMULATION.id, "new title", OWNER),
+    ).resolves.toMatchObject({ title: "new title" });
+  });
+
+  it("lets an admin manage a simulation created by someone else", async () => {
+    const harness = makeHarness({ characters: [makeCharacter("alpha")] });
+
+    await expect(harness.service.stop(SIMULATION.id, ADMIN)).resolves.toMatchObject({
+      status: "stopped",
+    });
+  });
+
+  it("rejects a signed-in caller who did not create the simulation", async () => {
+    const harness = makeHarness({ characters: [makeCharacter("alpha")] });
+
+    await expect(harness.service.stop(SIMULATION.id, OTHER_USER)).rejects.toBeInstanceOf(
+      SimulationForbiddenError,
+    );
+    await expect(harness.service.resume(SIMULATION.id, OTHER_USER)).rejects.toBeInstanceOf(
+      SimulationForbiddenError,
+    );
+    await expect(
+      harness.service.rename(SIMULATION.id, "new title", OTHER_USER),
+    ).rejects.toBeInstanceOf(SimulationForbiddenError);
   });
 });

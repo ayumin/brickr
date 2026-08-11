@@ -8,10 +8,12 @@ import type {
   GeneratedCharacterPersona,
 } from "./character-generator.js";
 import {
+  CharacterForbiddenError,
   CharacterHandleConflictError,
   CharacterGenerationError,
   CharacterNotFoundError,
   CharacterService,
+  type CharacterActor,
   ModelProfileNotFoundError,
 } from "./character-service.js";
 import type { Character, SaveCharacter } from "./character.js";
@@ -37,8 +39,23 @@ const REQUEST: SaveCharacterRequest = {
   modelProfileId: PROFILE.id,
 };
 
-function makeCharacter(id: string, input: SaveCharacterRequest = REQUEST): Character {
-  return { id, ...input };
+/** The default actor for tests that are not themselves about ownership. */
+const OWNER: CharacterActor = { id: "owner-1", isAdmin: false };
+const OTHER_USER: CharacterActor = { id: "other-1", isAdmin: false };
+const ADMIN: CharacterActor = { id: "admin-1", isAdmin: true };
+
+/**
+ * `createdByUserId` defaults to `OWNER.id`; pass `null` explicitly for a
+ * System-owned (seed) character. A default parameter would not do — JS
+ * substitutes the default for an explicit `undefined` too, silently hiding
+ * the "no owner" case this function exists to express.
+ */
+function makeCharacter(
+  id: string,
+  input: SaveCharacterRequest = REQUEST,
+  createdByUserId: string | null = OWNER.id,
+): Character {
+  return { id, ...input, ...(createdByUserId ? { createdByUserId } : {}) };
 }
 
 function makeService(
@@ -53,6 +70,8 @@ function makeService(
     findAll: (): Promise<Character[]> =>
       Promise.resolve(characters.filter((character) => !character.deletedAt)),
     findAllIncludingDeleted: (): Promise<Character[]> => Promise.resolve([...characters]),
+    findAllIncludingDeletedByCreatedByUserId: (userId: string): Promise<Character[]> =>
+      Promise.resolve(characters.filter((character) => character.createdByUserId === userId)),
     findById: (id: string): Promise<Character | null> =>
       Promise.resolve(
         characters.find((character) => character.id === id && !character.deletedAt) ?? null,
@@ -71,21 +90,30 @@ function makeService(
       Promise.resolve(
         new Map(ids.map((id) => [id, postCounts.get(id) ?? 0])),
       ),
-    create: (id: string, input: SaveCharacter): Promise<Character> => {
-      const character = { id, ...input };
+    create: (
+      id: string,
+      input: SaveCharacter,
+      createdByUserId: string | null,
+    ): Promise<Character> => {
+      const character = { id, ...input, ...(createdByUserId ? { createdByUserId } : {}) };
       characters.push(character);
       return Promise.resolve(character);
     },
     createMany: (
-      entries: Array<{ id: string; input: SaveCharacter }>,
+      entries: Array<{ id: string; input: SaveCharacter; createdByUserId: string | null }>,
     ): Promise<Character[]> => {
-      const created = entries.map(({ id, input }) => ({ id, ...input }));
+      const created = entries.map(({ id, input, createdByUserId }) => ({
+        id,
+        ...input,
+        ...(createdByUserId ? { createdByUserId } : {}),
+      }));
       characters.push(...created);
       return Promise.resolve(created);
     },
     update: (id: string, input: SaveCharacter): Promise<Character> => {
       const index = characters.findIndex((character) => character.id === id);
-      const character = { id, ...input };
+      // Mirrors the real repository: an update never touches createdByUserId.
+      const character = { id, ...input, createdByUserId: characters[index]?.createdByUserId };
       characters[index] = character;
       return Promise.resolve(character);
     },
@@ -142,17 +170,19 @@ describe("CharacterService", () => {
   it("creates a character with editable persona, behaviour and model profile settings", async () => {
     const { service, characters } = makeService();
 
-    const created = await service.create(REQUEST);
+    const created = await service.create(REQUEST, OWNER);
 
     expect(created.id).toBeTruthy();
     expect(created).toMatchObject(REQUEST);
+    expect(created.createdByUserId).toBe(OWNER.id);
     expect(characters).toHaveLength(1);
+    expect(characters[0]?.createdByUserId).toBe(OWNER.id);
   });
 
   it("bulk creates LLM personas with unique handles and random behaviour", async () => {
     const { service, characters } = makeService();
 
-    const created = await service.createMany(3);
+    const created = await service.createMany(3, OWNER.id);
 
     expect(created).toHaveLength(3);
     expect(characters).toHaveLength(3);
@@ -161,6 +191,7 @@ describe("CharacterService", () => {
     expect(new Set(created.map((character) => character.avatarUrl)).size).toBe(3);
     expect(created.every((character) => character.avatarUrl?.startsWith("data:image/jpeg;base64,"))).toBe(true);
     expect(created[0]).not.toHaveProperty("modelProfileId");
+    expect(characters.every((character) => character.createdByUserId === OWNER.id)).toBe(true);
     expect(characters[0]).toMatchObject({
       displayName: "LLM Character 1",
       description: "LLM profile 1",
@@ -179,7 +210,7 @@ describe("CharacterService", () => {
       Promise.reject(new Error("invalid LLM output")),
     );
 
-    await expect(service.createMany(3)).rejects.toBeInstanceOf(
+    await expect(service.createMany(3, OWNER.id)).rejects.toBeInstanceOf(
       CharacterGenerationError,
     );
     expect(characters).toEqual([]);
@@ -188,7 +219,7 @@ describe("CharacterService", () => {
   it("tracks a background bulk creation job through completion", async () => {
     const { service } = makeService();
 
-    const started = service.startCreateMany(2);
+    const started = service.startCreateMany(2, OWNER.id);
 
     expect(started).toMatchObject({
       status: "generating",
@@ -209,7 +240,7 @@ describe("CharacterService", () => {
       Promise.reject(new Error("invalid structured output")),
     );
 
-    const started = service.startCreateMany(2);
+    const started = service.startCreateMany(2, OWNER.id);
 
     await vi.waitFor(() => {
       expect(service.findBulkCreationJob(started.id)).toMatchObject({
@@ -224,11 +255,11 @@ describe("CharacterService", () => {
     const existing = makeCharacter("character-1");
     const { service } = makeService([existing]);
 
-    const updated = await service.update(existing.id, {
-      ...REQUEST,
-      displayName: "変更後",
-      rolePrompt: "変更後の考え方。",
-    });
+    const updated = await service.update(
+      existing.id,
+      { ...REQUEST, displayName: "変更後", rolePrompt: "変更後の考え方。" },
+      OWNER,
+    );
 
     expect(updated.id).toBe(existing.id);
     expect(updated.displayName).toBe("変更後");
@@ -240,7 +271,7 @@ describe("CharacterService", () => {
     const { service } = makeService([existing]);
 
     const publicDto = await service.findDto(existing.id);
-    const configDto = await service.findConfigDto(existing.id);
+    const configDto = await service.findConfigDto(existing.id, OWNER);
 
     expect(publicDto).not.toHaveProperty("rolePrompt");
     expect(configDto).toHaveProperty("rolePrompt", REQUEST.rolePrompt);
@@ -293,7 +324,7 @@ describe("CharacterService", () => {
     const existing = makeCharacter("character-1");
     const { service } = makeService([existing]);
 
-    await expect(service.create(REQUEST)).rejects.toBeInstanceOf(
+    await expect(service.create(REQUEST, OWNER)).rejects.toBeInstanceOf(
       CharacterHandleConflictError,
     );
   });
@@ -301,7 +332,7 @@ describe("CharacterService", () => {
   it("rejects an unknown model profile", async () => {
     const { service } = makeService([], []);
 
-    await expect(service.create(REQUEST)).rejects.toBeInstanceOf(
+    await expect(service.create(REQUEST, OWNER)).rejects.toBeInstanceOf(
       ModelProfileNotFoundError,
     );
   });
@@ -309,7 +340,7 @@ describe("CharacterService", () => {
   it("rejects an update for an unknown character", async () => {
     const { service } = makeService();
 
-    await expect(service.update("missing", REQUEST)).rejects.toBeInstanceOf(
+    await expect(service.update("missing", REQUEST, OWNER)).rejects.toBeInstanceOf(
       CharacterNotFoundError,
     );
   });
@@ -318,14 +349,14 @@ describe("CharacterService", () => {
     const existing = makeCharacter("character-1");
     const { service, characters } = makeService([existing]);
 
-    await expect(service.delete(existing.id)).resolves.toBe(existing.id);
+    await expect(service.delete(existing.id, OWNER)).resolves.toBe(existing.id);
     expect(characters).toEqual([]);
   });
 
   it("rejects deletion of an unknown character", async () => {
     const { service } = makeService();
 
-    await expect(service.delete("missing")).rejects.toBeInstanceOf(
+    await expect(service.delete("missing", OWNER)).rejects.toBeInstanceOf(
       CharacterNotFoundError,
     );
   });
@@ -337,7 +368,7 @@ describe("CharacterService", () => {
     };
     const { service, characters } = makeService([stopped]);
 
-    await expect(service.restore(stopped.id)).resolves.toBe(stopped.id);
+    await expect(service.restore(stopped.id, OWNER)).resolves.toBe(stopped.id);
     expect(characters[0]?.deletedAt).toBeUndefined();
     await expect(service.listDtos()).resolves.toHaveLength(1);
   });
@@ -348,8 +379,155 @@ describe("CharacterService", () => {
     const { service, characters } = makeService([first, second]);
 
     await expect(
-      service.deleteMany([first.id, first.id, "missing"]),
+      service.deleteMany([first.id, first.id, "missing"], OWNER),
     ).resolves.toEqual([first.id]);
     expect(characters).toEqual([second]);
+  });
+});
+
+describe("CharacterService ownership (CLAUDE.md §66.5)", () => {
+  it("lets the creator update their own character", async () => {
+    const existing = makeCharacter("character-1");
+    const { service } = makeService([existing]);
+
+    await expect(
+      service.update(existing.id, { ...REQUEST, displayName: "変更後" }, OWNER),
+    ).resolves.toMatchObject({ displayName: "変更後" });
+  });
+
+  it("lets an admin update someone else's character", async () => {
+    const existing = makeCharacter("character-1");
+    const { service } = makeService([existing]);
+
+    await expect(
+      service.update(existing.id, { ...REQUEST, displayName: "変更後" }, ADMIN),
+    ).resolves.toMatchObject({ displayName: "変更後" });
+  });
+
+  it("rejects an update from a signed-in user who did not create the character", async () => {
+    const existing = makeCharacter("character-1");
+    const { service } = makeService([existing]);
+
+    await expect(
+      service.update(existing.id, REQUEST, OTHER_USER),
+    ).rejects.toBeInstanceOf(CharacterForbiddenError);
+  });
+
+  it("rejects deletion from a non-owner, non-admin", async () => {
+    const existing = makeCharacter("character-1");
+    const { service } = makeService([existing]);
+
+    await expect(service.delete(existing.id, OTHER_USER)).rejects.toBeInstanceOf(
+      CharacterForbiddenError,
+    );
+  });
+
+  it("rejects restoration from a non-owner, non-admin", async () => {
+    const stopped = {
+      ...makeCharacter("character-stopped"),
+      deletedAt: new Date("2026-01-01T00:00:00Z"),
+    };
+    const { service } = makeService([stopped]);
+
+    await expect(service.restore(stopped.id, OTHER_USER)).rejects.toBeInstanceOf(
+      CharacterForbiddenError,
+    );
+  });
+
+  it("rejects any non-admin from touching a System-owned (seed) character, owner or not", async () => {
+    const seedCharacter = makeCharacter("architect", REQUEST, null);
+    const { service } = makeService([seedCharacter]);
+
+    await expect(service.update(seedCharacter.id, REQUEST, OWNER)).rejects.toBeInstanceOf(
+      CharacterForbiddenError,
+    );
+    await expect(service.delete(seedCharacter.id, OWNER)).rejects.toBeInstanceOf(
+      CharacterForbiddenError,
+    );
+  });
+
+  it("lets an admin edit a System-owned (seed) character", async () => {
+    const seedCharacter = makeCharacter("architect", REQUEST, null);
+    const { service } = makeService([seedCharacter]);
+
+    await expect(
+      service.update(seedCharacter.id, { ...REQUEST, displayName: "変更後" }, ADMIN),
+    ).resolves.toMatchObject({ displayName: "変更後" });
+  });
+
+  it("bulk-deletes only the ids the actor owns, silently dropping the rest", async () => {
+    const own = makeCharacter("character-own", { ...REQUEST, handle: "own" });
+    const someoneElses = makeCharacter(
+      "character-other",
+      { ...REQUEST, handle: "someone-elses" },
+      OTHER_USER.id,
+    );
+    const { service, characters } = makeService([own, someoneElses]);
+
+    await expect(
+      service.deleteMany([own.id, someoneElses.id], OWNER),
+    ).resolves.toEqual([own.id]);
+    expect(characters).toEqual([someoneElses]);
+  });
+
+  it("lets an admin bulk-delete characters owned by anyone", async () => {
+    const own = makeCharacter("character-own", { ...REQUEST, handle: "own" });
+    const someoneElses = makeCharacter(
+      "character-other",
+      { ...REQUEST, handle: "someone-elses" },
+      OTHER_USER.id,
+    );
+    const { service } = makeService([own, someoneElses]);
+
+    await expect(
+      service.deleteMany([own.id, someoneElses.id], ADMIN),
+    ).resolves.toEqual(expect.arrayContaining([own.id, someoneElses.id]));
+  });
+
+  it("includes createdByUserId in the Config DTO for the creator", async () => {
+    const existing = makeCharacter("character-1");
+    const { service } = makeService([existing]);
+
+    const dto = await service.findConfigDto(existing.id, OWNER);
+    expect(dto?.createdByUserId).toBe(OWNER.id);
+  });
+
+  it("includes createdByUserId in the Config DTO for an admin", async () => {
+    const existing = makeCharacter("character-1");
+    const { service } = makeService([existing]);
+
+    const dto = await service.findConfigDto(existing.id, ADMIN);
+    expect(dto?.createdByUserId).toBe(OWNER.id);
+  });
+
+  it("omits createdByUserId from the Config DTO for anyone else, signed in or not", async () => {
+    const existing = makeCharacter("character-1");
+    const { service } = makeService([existing]);
+
+    const forOtherUser = await service.findConfigDto(existing.id, OTHER_USER);
+    const forSignedOut = await service.findConfigDto(existing.id, null);
+
+    expect(forOtherUser).not.toHaveProperty("createdByUserId");
+    expect(forSignedOut).not.toHaveProperty("createdByUserId");
+  });
+
+  it("lists only the characters a given user created, including their deleted ones", async () => {
+    const ownedActive = makeCharacter("character-owned", { ...REQUEST, handle: "owned" });
+    const ownedDeleted = {
+      ...makeCharacter("character-owned-deleted", { ...REQUEST, handle: "owned_deleted" }),
+      deletedAt: new Date("2026-01-01T00:00:00Z"),
+    };
+    const someoneElses = makeCharacter(
+      "character-other",
+      { ...REQUEST, handle: "someone-elses" },
+      OTHER_USER.id,
+    );
+    const { service } = makeService([ownedActive, ownedDeleted, someoneElses]);
+
+    const listed = await service.listManagementDtosByCreator(OWNER.id);
+
+    expect(listed.map((character) => character.id).sort()).toEqual(
+      [ownedActive.id, ownedDeleted.id].sort(),
+    );
   });
 });

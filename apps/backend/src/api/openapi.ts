@@ -262,8 +262,7 @@ export const openApiDocument: OpenAPIV3.Document = {
         operationId: "listUserCharacters",
         tags: ["Users"],
         summary: "List characters created by this account",
-        description:
-          "Admin-only (CLAUDE.md 66.15). Always empty for now: Character ownership (createdByUserId) has not shipped yet.",
+        description: "Admin-only (CLAUDE.md 66.5, 66.15). Includes the account's deleted characters too.",
         parameters: [idParameter("User id")],
         responses: {
           "200": jsonResponse("Characters created by this account", ref("UserCharactersResponse")),
@@ -442,6 +441,8 @@ export const openApiDocument: OpenAPIV3.Document = {
         operationId: "createCharacter",
         tags: ["Characters"],
         summary: "Create a character",
+        description:
+          "The signed-in caller becomes createdByUserId (CLAUDE.md 66.5), which is never accepted from the request body.",
         requestBody: jsonBody(ref("SaveCharacter")),
         responses: {
           "201": jsonResponse("Created character", {
@@ -449,6 +450,7 @@ export const openApiDocument: OpenAPIV3.Document = {
             required: ["character"],
             properties: { character: ref("CharacterConfig") },
           }),
+          "401": { $ref: "#/components/responses/Unauthorized" },
           ...errorResponses,
           "502": { $ref: "#/components/responses/BadGateway" },
         },
@@ -534,6 +536,7 @@ export const openApiDocument: OpenAPIV3.Document = {
         operationId: "updateCharacter",
         tags: ["Characters"],
         summary: "Update a character",
+        description: "The creator or an admin only (CLAUDE.md 66.5).",
         parameters: [idParameter("Character ID")],
         requestBody: jsonBody(ref("SaveCharacter")),
         responses: {
@@ -542,6 +545,8 @@ export const openApiDocument: OpenAPIV3.Document = {
             required: ["character"],
             properties: { character: ref("CharacterConfig") },
           }),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "403": { $ref: "#/components/responses/Forbidden" },
           ...errorResponses,
         },
       },
@@ -549,6 +554,7 @@ export const openApiDocument: OpenAPIV3.Document = {
         operationId: "deleteCharacter",
         tags: ["Characters"],
         summary: "Delete a character",
+        description: "The creator or an admin only (CLAUDE.md 66.5).",
         parameters: [
           idParameter("Character ID"),
           {
@@ -564,6 +570,8 @@ export const openApiDocument: OpenAPIV3.Document = {
             required: ["deletedId"],
             properties: { deletedId: { type: "string" } },
           }),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "403": { $ref: "#/components/responses/Forbidden" },
           ...errorResponses,
         },
       },
@@ -573,6 +581,8 @@ export const openApiDocument: OpenAPIV3.Document = {
         operationId: "getCharacterConfig",
         tags: ["Characters"],
         summary: "Get editable character configuration",
+        description:
+          "Public read. createdByUserId rides along only for the creator or an admin (CLAUDE.md 66.5).",
         parameters: [idParameter("Character ID")],
         responses: {
           "200": jsonResponse("Character configuration", {
@@ -589,6 +599,7 @@ export const openApiDocument: OpenAPIV3.Document = {
         operationId: "restoreCharacter",
         tags: ["Characters"],
         summary: "Restore a logically deleted character",
+        description: "The creator or an admin only (CLAUDE.md 66.5).",
         parameters: [idParameter("Character ID")],
         responses: {
           "200": jsonResponse("Restored character ID", {
@@ -596,6 +607,8 @@ export const openApiDocument: OpenAPIV3.Document = {
             required: ["restoredId"],
             properties: { restoredId: { type: "string" } },
           }),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "403": { $ref: "#/components/responses/Forbidden" },
           ...errorResponses,
         },
       },
@@ -605,6 +618,8 @@ export const openApiDocument: OpenAPIV3.Document = {
         operationId: "bulkCreateCharacters",
         tags: ["Characters"],
         summary: "Start bulk character generation",
+        description:
+          "The signed-in caller becomes createdByUserId for every generated character (CLAUDE.md 66.5).",
         requestBody: jsonBody({
           type: "object",
           required: ["count"],
@@ -617,6 +632,7 @@ export const openApiDocument: OpenAPIV3.Document = {
             properties: { job: ref("CharacterBulkCreationJob") },
           }),
           "400": errorResponses["400"],
+          "401": { $ref: "#/components/responses/Unauthorized" },
           "500": errorResponses["500"],
         },
       },
@@ -642,6 +658,8 @@ export const openApiDocument: OpenAPIV3.Document = {
         operationId: "bulkDeleteCharacters",
         tags: ["Characters"],
         summary: "Delete multiple characters",
+        description:
+          "Silently drops any id the caller did not create and is not an admin for, rather than rejecting the whole batch (CLAUDE.md 66.5).",
         requestBody: jsonBody({
           type: "object",
           required: ["ids"],
@@ -664,6 +682,7 @@ export const openApiDocument: OpenAPIV3.Document = {
             },
           }),
           "400": errorResponses["400"],
+          "401": { $ref: "#/components/responses/Unauthorized" },
           "500": errorResponses["500"],
         },
       },
@@ -777,6 +796,7 @@ export const openApiDocument: OpenAPIV3.Document = {
         operationId: "updateSimulation",
         tags: ["Simulations"],
         summary: "Rename a simulation",
+        description: "Creator or admin only (CLAUDE.md 66.6).",
         parameters: [idParameter("Simulation ID")],
         requestBody: jsonBody({
           type: "object",
@@ -789,6 +809,8 @@ export const openApiDocument: OpenAPIV3.Document = {
             required: ["simulation"],
             properties: { simulation: ref("Simulation") },
           }),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "403": { $ref: "#/components/responses/Forbidden" },
           ...errorResponses,
         },
       },
@@ -798,6 +820,8 @@ export const openApiDocument: OpenAPIV3.Document = {
         operationId: "analyzeSimulation",
         tags: ["Simulations"],
         summary: "Analyze posts in a simulation",
+        description:
+          "Unlike the simulation itself, the analysis is not public: only the creator or an admin may view it (CLAUDE.md 66.6).",
         parameters: [idParameter("Simulation ID")],
         responses: {
           "200": jsonResponse("Simulation analysis", {
@@ -805,6 +829,8 @@ export const openApiDocument: OpenAPIV3.Document = {
             required: ["analysis"],
             properties: { analysis: ref("SimulationAnalysis") },
           }),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "403": { $ref: "#/components/responses/Forbidden" },
           ...errorResponses,
         },
       },
@@ -814,6 +840,7 @@ export const openApiDocument: OpenAPIV3.Document = {
         operationId: "stopSimulation",
         tags: ["Simulations"],
         summary: "Stop response generation",
+        description: "Creator or admin only (CLAUDE.md 66.6).",
         parameters: [idParameter("Simulation ID")],
         responses: {
           "200": jsonResponse("Stopped simulation", {
@@ -821,6 +848,8 @@ export const openApiDocument: OpenAPIV3.Document = {
             required: ["simulation"],
             properties: { simulation: ref("Simulation") },
           }),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "403": { $ref: "#/components/responses/Forbidden" },
           ...errorResponses,
         },
       },
@@ -830,6 +859,7 @@ export const openApiDocument: OpenAPIV3.Document = {
         operationId: "resumeSimulation",
         tags: ["Simulations"],
         summary: "Resume response generation",
+        description: "Creator or admin only (CLAUDE.md 66.6).",
         parameters: [idParameter("Simulation ID")],
         responses: {
           "200": jsonResponse("Resumed simulation", {
@@ -837,6 +867,8 @@ export const openApiDocument: OpenAPIV3.Document = {
             required: ["simulation"],
             properties: { simulation: ref("Simulation") },
           }),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "403": { $ref: "#/components/responses/Forbidden" },
           ...errorResponses,
         },
       },
@@ -996,6 +1028,11 @@ export const openApiDocument: OpenAPIV3.Document = {
               quoteProbability: { type: "number", minimum: 0, maximum: 1 },
               influence: { type: "number", minimum: 0, maximum: 1 },
               modelProfileId: { type: "string" },
+              createdByUserId: {
+                type: "string",
+                description:
+                  "Present only for the creator or an admin (CLAUDE.md 66.5); omitted for everyone else and for System-owned (seed) characters.",
+              },
             },
           },
         ],
@@ -1276,6 +1313,11 @@ export const openApiDocument: OpenAPIV3.Document = {
           title: { type: "string", nullable: true },
           status: { type: "string", enum: ["active", "stopped"] },
           createdAt: { type: "string", format: "date-time" },
+          createdByUserId: {
+            type: "string",
+            description:
+              "Public to everyone, unlike Character ownership (CLAUDE.md 66.6). Omitted for simulations created before login existed.",
+          },
         },
       },
       SimulationSummary: {

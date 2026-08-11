@@ -9,6 +9,8 @@ export type SimulationDto = {
   title: string | null;
   status: SimulationStatus;
   createdAt: string;
+  /** Public to everyone, unlike Character ownership (§66.6). Absent for pre-login simulations. */
+  createdByUserId?: string;
 };
 
 export type SimulationSummaryDto = SimulationDto & {

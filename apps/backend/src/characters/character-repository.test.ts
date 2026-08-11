@@ -59,9 +59,12 @@ describe("CharacterRepository handle claims", () => {
   it("claims the handle in the same transaction as the new row (§66.13)", async () => {
     const { db, tx } = makeDb();
 
-    await new CharacterRepository(db).create("character-1", saveCharacter);
+    await new CharacterRepository(db).create("character-1", saveCharacter, "user-1");
 
     expect(tx.character.create).toHaveBeenCalledTimes(1);
+    expect(tx.character.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ createdByUserId: "user-1" }) }),
+    );
     expect(tx.handleOwner.create).toHaveBeenCalledWith({
       data: { handle: "architect", ownerType: "character", ownerId: "character-1" },
     });
@@ -89,8 +92,8 @@ describe("CharacterRepository handle claims", () => {
     const { db, tx } = makeDb();
 
     await new CharacterRepository(db).createMany([
-      { id: "c1", input: { ...saveCharacter, handle: "one" } },
-      { id: "c2", input: { ...saveCharacter, handle: "two" } },
+      { id: "c1", input: { ...saveCharacter, handle: "one" }, createdByUserId: "user-1" },
+      { id: "c2", input: { ...saveCharacter, handle: "two" }, createdByUserId: "user-1" },
     ]);
 
     expect(tx.handleOwner.create).toHaveBeenCalledTimes(2);

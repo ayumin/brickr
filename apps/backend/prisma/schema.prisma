@@ -50,13 +50,19 @@ model Character {
   modelProfileId String  @map("model_profile_id")
   avatarUrl      String? @map("avatar_url") @db.Text
 
+  /// Null means "System-owned" — every existing seed Character, forever (CLAUDE.md §66.14).
+  /// Private: visible only to this user or an admin (§66.5), never in the ordinary Character DTO.
+  createdByUserId String? @map("created_by_user_id")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
 
-  modelProfile ModelProfile @relation(fields: [modelProfileId], references: [id])
+  modelProfile  ModelProfile @relation(fields: [modelProfileId], references: [id])
+  createdByUser UserProfile? @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
 
   @@index([handle])
+  @@index([createdByUserId])
   @@map("characters")
 }
 
@@ -64,11 +70,16 @@ model Simulation {
   id        String   @id @default(uuid())
   title     String?
   status    String   @default("active")
+  /// Public to everyone, unlike Character ownership (§66.6). Null for simulations
+  /// created before login existed.
+  createdByUserId String? @map("created_by_user_id")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  posts Post[]
+  posts         Post[]
+  createdByUser UserProfile? @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
 
+  @@index([createdByUserId])
   @@map("simulations")
 }
 
@@ -139,6 +150,8 @@ model UserProfile {
   sessions            Session[]
   issuedInviteCodes   InviteCode[] @relation("InviteCodeIssuer")
   redeemedInviteCodes InviteCode[] @relation("InviteCodeRedeemer")
+  createdCharacters   Character[]
+  createdSimulations  Simulation[]
 
   @@index([handle])
   @@map("user_profiles")

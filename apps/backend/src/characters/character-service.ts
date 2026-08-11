@@ -9,6 +9,7 @@ import type {
   SaveCharacterRequest,
 } from "@brickr/shared";
 import { randomUUID } from "node:crypto";
+import type { UserAccount } from "../auth/user-account.js";
 import { LLMError, LLMTimeoutError } from "../llm/provider.js";
 import type { ModelProfileRepository } from "../model-profiles/model-profile-repository.js";
 import type { ModelProfile } from "../model-profiles/model-profile.js";
@@ -42,7 +43,19 @@ export function toCharacterDto(character: Character): CharacterDto {
   };
 }
 
-export function toCharacterConfigDto(character: Character): CharacterConfigDto {
+/** The signed-in caller, reduced to what an ownership check needs (CLAUDE.md §66.5). */
+export type CharacterActor = Pick<UserAccount, "id" | "isAdmin">;
+
+/**
+ * `createdByUserId` rides along only for the creator or an admin — never for
+ * anyone else, and never for a System-owned (seed) character, which has none.
+ */
+export function toCharacterConfigDto(
+  character: Character,
+  viewer: CharacterActor | null,
+): CharacterConfigDto {
+  const canSeeOwner =
+    viewer !== null && (viewer.isAdmin || viewer.id === character.createdByUserId);
   return {
     ...toCharacterDto(character),
     rolePrompt: character.rolePrompt,
@@ -55,6 +68,9 @@ export function toCharacterConfigDto(character: Character): CharacterConfigDto {
     quoteProbability: character.quoteProbability,
     influence: character.influence,
     modelProfileId: character.modelProfileId,
+    ...(canSeeOwner && character.createdByUserId
+      ? { createdByUserId: character.createdByUserId }
+      : {}),
   };
 }
 
@@ -79,6 +95,14 @@ export class CharacterNotFoundError extends Error {
   constructor(id: string) {
     super(`character "${id}" not found`);
     this.name = "CharacterNotFoundError";
+  }
+}
+
+/** Edit/delete/restore is limited to the creator or an admin (CLAUDE.md §66.5). */
+export class CharacterForbiddenError extends Error {
+  constructor(id: string) {
+    super(`not allowed to modify character "${id}"`);
+    this.name = "CharacterForbiddenError";
   }
 }
 
@@ -122,6 +146,17 @@ export class CharacterService {
 
   async listManagementDtos(): Promise<CharacterManagementDto[]> {
     const all = await this.characters.findAllIncludingDeleted();
+    const postCounts = await this.characters.countPostsByCharacterIds(
+      all.map((character) => character.id),
+    );
+    return all.map((character) =>
+      toCharacterManagementDto(character, postCounts.get(character.id) ?? 0),
+    );
+  }
+
+  /** Admin drilldown onto one user's Characters (§66.5, §66.15). */
+  async listManagementDtosByCreator(userId: string): Promise<CharacterManagementDto[]> {
+    const all = await this.characters.findAllIncludingDeletedByCreatedByUserId(userId);
     const postCounts = await this.characters.countPostsByCharacterIds(
       all.map((character) => character.id),
     );
@@ -220,20 +255,24 @@ export class CharacterService {
     return character ? toCharacterDto(character) : null;
   }
 
-  async findConfigDto(id: string): Promise<CharacterConfigDto | null> {
+  async findConfigDto(
+    id: string,
+    viewer: CharacterActor | null,
+  ): Promise<CharacterConfigDto | null> {
     const character = await this.characters.findByIdIncludingDeleted(id);
-    return character ? toCharacterConfigDto(character) : null;
+    return character ? toCharacterConfigDto(character, viewer) : null;
   }
 
-  async create(input: SaveCharacterRequest): Promise<CharacterConfigDto> {
+  async create(input: SaveCharacterRequest, actor: CharacterActor): Promise<CharacterConfigDto> {
     await this.assertModelProfile(input.modelProfileId);
     await this.assertHandleAvailable(input.handle);
-    const character = await this.characters.create(randomUUID(), toSaveCharacter(input));
-    return toCharacterConfigDto(character);
+    const character = await this.characters.create(randomUUID(), toSaveCharacter(input), actor.id);
+    return toCharacterConfigDto(character, actor);
   }
 
   async createMany(
     count: number,
+    createdByUserId: string,
     onProgress?: (completed: number) => void,
   ): Promise<CharacterDto[]> {
     const [defaultProfile] = await this.modelProfiles.findAll();
@@ -252,6 +291,7 @@ export class CharacterService {
       const suffix = id.replaceAll("-", "").slice(0, 8);
       return {
         id,
+        createdByUserId,
         input: {
           handle: `character_${suffix}`,
           displayName: persona.displayName,
@@ -274,7 +314,7 @@ export class CharacterService {
     return created.map(toCharacterDto);
   }
 
-  startCreateMany(count: number): CharacterBulkCreationJobDto {
+  startCreateMany(count: number, createdByUserId: string): CharacterBulkCreationJobDto {
     const id = randomUUID();
     const job: CharacterBulkCreationJobDto = {
       id,
@@ -286,7 +326,7 @@ export class CharacterService {
     this.bulkCreationJobs.set(id, job);
     this.pruneBulkCreationJobs();
 
-    void this.createMany(count, (completed) => {
+    void this.createMany(count, createdByUserId, (completed) => {
       this.bulkCreationJobs.set(id, {
         ...job,
         status: completed >= count ? "saving" : "generating",
@@ -332,40 +372,55 @@ export class CharacterService {
     return start;
   }
 
-  async update(id: string, input: SaveCharacterRequest): Promise<CharacterConfigDto> {
+  async update(
+    id: string,
+    input: SaveCharacterRequest,
+    actor: CharacterActor,
+  ): Promise<CharacterConfigDto> {
     const existing = await this.characters.findByIdIncludingDeleted(id);
     if (!existing) throw new CharacterNotFoundError(id);
+    this.assertOwnerOrAdmin(existing, actor);
 
     await this.assertModelProfile(input.modelProfileId);
     await this.assertHandleAvailable(input.handle, id);
     const character = await this.characters.update(id, toSaveCharacter(input));
-    return toCharacterConfigDto(character);
+    return toCharacterConfigDto(character, actor);
   }
 
-  async delete(id: string, mode: CharacterDeletionMode = "soft"): Promise<string> {
-    if (!(await this.characters.findByIdIncludingDeleted(id))) {
-      throw new CharacterNotFoundError(id);
-    }
+  async delete(
+    id: string,
+    actor: CharacterActor,
+    mode: CharacterDeletionMode = "soft",
+  ): Promise<string> {
+    const existing = await this.characters.findByIdIncludingDeleted(id);
+    if (!existing) throw new CharacterNotFoundError(id);
+    this.assertOwnerOrAdmin(existing, actor);
+
     if (mode === "hard") await this.characters.hardDeleteMany([id]);
     else await this.characters.delete(id);
     return id;
   }
 
-  async restore(id: string): Promise<string> {
-    if (!(await this.characters.findByIdIncludingDeleted(id))) {
-      throw new CharacterNotFoundError(id);
-    }
+  async restore(id: string, actor: CharacterActor): Promise<string> {
+    const existing = await this.characters.findByIdIncludingDeleted(id);
+    if (!existing) throw new CharacterNotFoundError(id);
+    this.assertOwnerOrAdmin(existing, actor);
+
     await this.characters.restore(id);
     return id;
   }
 
+  /** Silently drops any id the actor may not touch, rather than rejecting the whole batch. */
   async deleteMany(
     ids: string[],
+    actor: CharacterActor,
     mode: CharacterDeletionMode = "soft",
   ): Promise<string[]> {
     const uniqueIds = [...new Set(ids)];
     const existing = await this.characters.findByIdsIncludingDeleted(uniqueIds);
-    const deletedIds = existing.map((character) => character.id);
+    const deletedIds = existing
+      .filter((character) => this.isOwnerOrAdmin(character, actor))
+      .map((character) => character.id);
     if (mode === "hard") await this.characters.hardDeleteMany(deletedIds);
     else await this.characters.deleteMany(deletedIds);
     return deletedIds;
@@ -378,6 +433,18 @@ export class CharacterService {
   private async assertHandleAvailable(handle: string, currentId?: string): Promise<void> {
     const existing = await this.characters.findByHandle(handle);
     if (existing && existing.id !== currentId) throw new CharacterHandleConflictError(handle);
+  }
+
+  /**
+   * A character with no owner (a seed) matches no id, so only an admin can
+   * touch it — `createdByUserId` never equals `undefined` (CLAUDE.md §66.14).
+   */
+  private isOwnerOrAdmin(character: Character, actor: CharacterActor): boolean {
+    return actor.isAdmin || actor.id === character.createdByUserId;
+  }
+
+  private assertOwnerOrAdmin(character: Character, actor: CharacterActor): void {
+    if (!this.isOwnerOrAdmin(character, actor)) throw new CharacterForbiddenError(character.id);
   }
 }
 

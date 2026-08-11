@@ -108,6 +108,7 @@ function makeServices(): AppServices {
     characters: {
       listDtos: () => Promise.resolve([]),
       listManagementDtos: () => Promise.resolve([]),
+      listManagementDtosByCreator: () => Promise.resolve([]),
       create: () => Promise.resolve({ id: "c1" }),
       update: () => Promise.resolve({ id: "c1" }),
       delete: () => Promise.resolve("c1"),
@@ -130,6 +131,7 @@ function makeServices(): AppServices {
       submitUserPost: () => Promise.resolve({ id: "p1" }),
     },
     posts: { toDto: () => Promise.resolve({ id: "p1" }) },
+    simulationAnalysis: { analyze: () => Promise.resolve({ postCount: 0 }) },
     applicationSettings: {
       get: () => Promise.resolve({ environment: [], llm: {} }),
       update: () => Promise.resolve({ environment: [], llm: {} }),
@@ -241,6 +243,25 @@ describe("read endpoints", () => {
     apps.push(app);
 
     const response = await app.inject({ method: "GET", url: "/api/user-profile" });
+
+    expect(response.statusCode).toBe(200);
+  });
+
+  // Also an exception: unlike the simulation itself, its analysis is not public (§66.6).
+  it("refuses GET /api/simulations/:id/analysis while signed out", async () => {
+    const app = await buildApp(null);
+    apps.push(app);
+
+    const response = await app.inject({ method: "GET", url: "/api/simulations/s1/analysis" });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it("lets a signed-in caller request the analysis (ownership is checked in the service)", async () => {
+    const app = await buildApp(signedInUser);
+    apps.push(app);
+
+    const response = await app.inject({ method: "GET", url: "/api/simulations/s1/analysis" });
 
     expect(response.statusCode).toBe(200);
   });
