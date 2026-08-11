@@ -127,10 +127,10 @@ function SimulationBootstrap() {
       }
 
       const existingSimulations = await api.getSimulations();
-      const existingSimulations = await api.getSimulations();
       const mostRecent = [...existingSimulations].sort(
         (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
       )[0];
+      if (mostRecent) {
         // Loaded as-is, not auto-resumed: unlike the legacy path above, this
         // is the common case for every signed-out (or simply second) visitor,
         // and only the Simulation's creator or an admin may resume it.

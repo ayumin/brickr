@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import type { SignupRequest } from "@brickr/shared";
+import { MIN_PASSWORD_LENGTH, type SignupRequest } from "@brickr/shared";
 
 import { APP_FULL_NAME } from "../../brand";
 import { BrandLogo } from "../../components/BrandLogo";
