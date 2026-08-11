@@ -164,7 +164,7 @@ export async function registerRoutes(
     "/api/characters/import",
     {
       bodyLimit: 50 * 1024 * 1024,
-      preHandler: async (request, reply) => {
+      onRequest: async (request, reply) => {
         requireUser(request, reply);
       },
     },
