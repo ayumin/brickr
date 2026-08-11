@@ -1,3 +1,5 @@
+import type { CharacterManagementDto } from "./character.js";
+
 /**
  * Authentication contract shared between frontend and backend (CLAUDE.md §66).
  *
@@ -66,4 +68,54 @@ export type AuthUserResponse = {
 /** `null` while signed out, so the frontend can bootstrap without a 401 round trip. */
 export type SessionResponse = {
   user: AuthUserDto | null;
+};
+
+/** Admin user-management table (§66.7, §66.15), same page size as Character management (§48). */
+export const USER_MANAGEMENT_PAGE_SIZE = 100;
+
+/** Row shape for the admin user-management table. Distinct from `AuthUserDto`: an admin sees the email too. */
+export type UserManagementDto = {
+  id: string;
+  handle: string;
+  displayName: string;
+  avatarUrl?: string;
+  email: string;
+  isAdmin: boolean;
+  status: UserStatus;
+};
+
+export type UserManagementResponse = {
+  users: UserManagementDto[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
+};
+
+export type UserDetailResponse = {
+  user: UserManagementDto;
+};
+
+export type SuspendUserResponse = {
+  user: UserManagementDto;
+};
+
+export type ReactivateUserResponse = {
+  user: UserManagementDto;
+};
+
+/** The temporary password is returned once, for the admin to relay out of band (§66.10). */
+export type ResetPasswordResponse = {
+  temporaryPassword: string;
+};
+
+/** Empty until Character ownership (createdByUserId) lands; shape is stable ahead of that. */
+export type UserCharactersResponse = {
+  characters: CharacterManagementDto[];
+};
+
+/** Zeroed until per-user LLM token tracking lands; shape is stable ahead of that. */
+export type UserTokenUsageResponse = {
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalTokens: number;
 };

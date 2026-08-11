@@ -170,6 +170,39 @@ export class UserAccountRepository {
   async updateStatus(id: string, status: UserStatus): Promise<void> {
     await this.db.userProfile.updateMany({ where: { id }, data: { status } });
   }
+
+  /**
+   * The admin user-management table (§66.15). `page` is 1-based; `search`
+   * matches handle, display name or email, case-insensitively.
+   */
+  async listManagement(options: {
+    page: number;
+    pageSize: number;
+    search?: string;
+  }): Promise<{ accounts: UserAccountWithSecret[]; totalCount: number }> {
+    const where = options.search
+      ? {
+          OR: [
+            { handle: { contains: options.search, mode: "insensitive" as const } },
+            { displayName: { contains: options.search, mode: "insensitive" as const } },
+            { email: { contains: options.search, mode: "insensitive" as const } },
+          ],
+        }
+      : {};
+
+    const [rows, totalCount] = await Promise.all([
+      this.db.userProfile.findMany({
+        where,
+        select: SELECT,
+        orderBy: { createdAt: "asc" },
+        skip: (options.page - 1) * options.pageSize,
+        take: options.pageSize,
+      }),
+      this.db.userProfile.count({ where }),
+    ]);
+
+    return { accounts: rows.map(toAccount), totalCount };
+  }
 }
 
 export function normalizeEmail(email: string): string {

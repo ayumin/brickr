@@ -7,8 +7,9 @@ import {
   InvalidCredentialsError,
   InviteCodeInvalidError,
   UnderageSignupError,
+  UserNotFoundError,
 } from "../auth/auth-errors.js";
-import { requireUser } from "../auth/auth-context.js";
+import { requireAdmin, requireUser } from "../auth/auth-context.js";
 import type { IssuedSession } from "../auth/auth-service.js";
 import {
   readSessionCookie,
@@ -16,7 +17,7 @@ import {
   serializeSessionCookie,
   type SessionCookieOptions,
 } from "../auth/session-cookie.js";
-import { toAuthUserDto } from "../auth/user-account.js";
+import { toAuthUserDto, toUserManagementDto } from "../auth/user-account.js";
 import { env } from "../config/env.js";
 import type { AppServices } from "../services.js";
 import { InvalidApplicationSettingError } from "../settings/runtime-settings.js";
@@ -49,6 +50,7 @@ import {
   saveUserProfileSchema,
   updateApplicationSettingsSchema,
   updateSimulationSchema,
+  userManagementQuerySchema,
 } from "./schemas.js";
 
 export async function registerRoutes(
@@ -109,6 +111,121 @@ export async function registerRoutes(
     return reply
       .header("set-cookie", serializeClearedSessionCookie(cookieOptions))
       .send({ user: null });
+  });
+
+  // -- users (admin) ----------------------------------------------------------
+
+  /**
+   * All routes below act on somebody else's account, so every one of them is
+   * gated to admins only (§66.7, §66.15) — never just `requireUser`.
+   */
+
+  app.get("/api/users/management", async (request, reply) => {
+    if (!requireAdmin(request, reply)) return reply;
+
+    const query = userManagementQuerySchema.safeParse(request.query);
+    if (!query.success) {
+      return sendError(reply, 400, "invalid_query", "query is invalid", query.error.issues);
+    }
+
+    const page = await services.userAdmin.listManagement({
+      page: query.data.page ?? 1,
+      ...(query.data.search ? { search: query.data.search } : {}),
+    });
+    return {
+      users: page.accounts.map(toUserManagementDto),
+      page: page.page,
+      pageSize: page.pageSize,
+      totalCount: page.totalCount,
+    };
+  });
+
+  app.get("/api/users/:id", async (request, reply) => {
+    if (!requireAdmin(request, reply)) return reply;
+
+    const params = idParams.safeParse(request.params);
+    if (!params.success) {
+      return sendError(reply, 400, "invalid_params", "user id is invalid");
+    }
+
+    const user = await services.userAdmin.findById(params.data.id);
+    if (!user) return sendError(reply, 404, "not_found", "user not found");
+    return { user: toUserManagementDto(user) };
+  });
+
+  app.post("/api/users/:id/suspend", async (request, reply) => {
+    if (!requireAdmin(request, reply)) return reply;
+
+    const params = idParams.safeParse(request.params);
+    if (!params.success) {
+      return sendError(reply, 400, "invalid_params", "user id is invalid");
+    }
+    try {
+      const user = await services.userAdmin.suspend(params.data.id);
+      return { user: toUserManagementDto(user) };
+    } catch (error) {
+      return handleDomainError(reply, error);
+    }
+  });
+
+  app.post("/api/users/:id/reactivate", async (request, reply) => {
+    if (!requireAdmin(request, reply)) return reply;
+
+    const params = idParams.safeParse(request.params);
+    if (!params.success) {
+      return sendError(reply, 400, "invalid_params", "user id is invalid");
+    }
+    try {
+      const user = await services.userAdmin.reactivate(params.data.id);
+      return { user: toUserManagementDto(user) };
+    } catch (error) {
+      return handleDomainError(reply, error);
+    }
+  });
+
+  /** Returns the temporary password once, in clear text, for the admin to relay (§66.10). */
+  app.post("/api/users/:id/reset-password", async (request, reply) => {
+    if (!requireAdmin(request, reply)) return reply;
+
+    const params = idParams.safeParse(request.params);
+    if (!params.success) {
+      return sendError(reply, 400, "invalid_params", "user id is invalid");
+    }
+    try {
+      const { temporaryPassword } = await services.userAdmin.resetPassword(params.data.id);
+      return { temporaryPassword };
+    } catch (error) {
+      return handleDomainError(reply, error);
+    }
+  });
+
+  /**
+   * Empty until Character ownership (`createdByUserId`) lands (#25). The shape
+   * is stable ahead of that, so the frontend can build against it now.
+   */
+  app.get("/api/users/:id/characters", async (request, reply) => {
+    if (!requireAdmin(request, reply)) return reply;
+
+    const params = idParams.safeParse(request.params);
+    if (!params.success) {
+      return sendError(reply, 400, "invalid_params", "user id is invalid");
+    }
+    const user = await services.userAdmin.findById(params.data.id);
+    if (!user) return sendError(reply, 404, "not_found", "user not found");
+    return { characters: [] };
+  });
+
+  /** Zeroed until per-user LLM token tracking lands (#27). */
+  app.get("/api/users/:id/token-usage", async (request, reply) => {
+    if (!requireAdmin(request, reply)) return reply;
+
+    const params = idParams.safeParse(request.params);
+    if (!params.success) {
+      return sendError(reply, 400, "invalid_params", "user id is invalid");
+    }
+    const user = await services.userAdmin.findById(params.data.id);
+    if (!user) return sendError(reply, 404, "not_found", "user not found");
+    return { totalInputTokens: 0, totalOutputTokens: 0, totalTokens: 0 };
   });
 
   // -- handles --------------------------------------------------------------
@@ -509,6 +626,9 @@ function handleDomainError(reply: FastifyReply, error: unknown): FastifyReply {
   }
   if (error instanceof EmailTakenError) {
     return sendError(reply, 409, "email_conflict", error.message);
+  }
+  if (error instanceof UserNotFoundError) {
+    return sendError(reply, 404, "not_found", error.message);
   }
   if (error instanceof CharacterNotFoundError || error instanceof ModelProfileNotFoundError) {
     return sendError(reply, 404, "not_found", error.message);

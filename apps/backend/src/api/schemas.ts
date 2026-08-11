@@ -190,3 +190,9 @@ export const loginSchema = z.object({
   // be able to sign in, and the answer is the same generic error either way.
   password: z.string().min(1).max(MAX_PASSWORD_LENGTH),
 });
+
+/** `GET /api/users/management` (§66.15). Page size is fixed server-side, not accepted here. */
+export const userManagementQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).optional(),
+  search: z.string().trim().min(1).max(254).optional(),
+});

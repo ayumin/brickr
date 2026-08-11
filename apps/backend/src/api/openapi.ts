@@ -56,6 +56,7 @@ export const openApiDocument: OpenAPIV3.Document = {
   tags: [
     { name: "System", description: "Backend status" },
     { name: "Auth", description: "Invite-only signup, login and session lifecycle" },
+    { name: "Users", description: "Admin-only account management" },
     { name: "Characters", description: "AI character profiles and bulk management" },
     { name: "Models", description: "Available LLM provider/model profiles" },
     { name: "User", description: "Editable human user profile" },
@@ -152,6 +153,143 @@ export const openApiDocument: OpenAPIV3.Document = {
         responses: {
           "200": jsonResponse("Signed out", ref("SessionResponse")),
           "500": { $ref: "#/components/responses/InternalError" },
+        },
+      },
+    },
+    "/api/users/management": {
+      get: {
+        operationId: "listUserManagement",
+        tags: ["Users"],
+        summary: "List and search accounts for the admin management table",
+        description:
+          "Admin-only (CLAUDE.md 66.15). Paginated at a fixed page size of 100; `search` matches handle, display name or email.",
+        parameters: [
+          {
+            name: "page",
+            in: "query",
+            required: false,
+            description: "1-based page number, defaults to 1",
+            schema: { type: "integer", minimum: 1 },
+          },
+          {
+            name: "search",
+            in: "query",
+            required: false,
+            schema: { type: "string", minLength: 1, maxLength: 254 },
+          },
+        ],
+        responses: {
+          "200": jsonResponse("Accounts page", ref("UserManagementResponse")),
+          "400": errorResponses["400"],
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "403": { $ref: "#/components/responses/Forbidden" },
+          "500": errorResponses["500"],
+        },
+      },
+    },
+    "/api/users/{id}": {
+      get: {
+        operationId: "getUser",
+        tags: ["Users"],
+        summary: "Get one account for the admin management table",
+        description: "Admin-only (CLAUDE.md 66.15).",
+        parameters: [idParameter("User id")],
+        responses: {
+          "200": jsonResponse("Account", ref("UserDetailResponse")),
+          "400": errorResponses["400"],
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "403": { $ref: "#/components/responses/Forbidden" },
+          "404": errorResponses["404"],
+          "500": errorResponses["500"],
+        },
+      },
+    },
+    "/api/users/{id}/suspend": {
+      post: {
+        operationId: "suspendUser",
+        tags: ["Users"],
+        summary: "Suspend an account",
+        description:
+          "Admin-only (CLAUDE.md 66.12). Blocks future logins and immediately revokes every existing session for the account.",
+        parameters: [idParameter("User id")],
+        responses: {
+          "200": jsonResponse("Account suspended", ref("UserDetailResponse")),
+          "400": errorResponses["400"],
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "403": { $ref: "#/components/responses/Forbidden" },
+          "404": errorResponses["404"],
+          "500": errorResponses["500"],
+        },
+      },
+    },
+    "/api/users/{id}/reactivate": {
+      post: {
+        operationId: "reactivateUser",
+        tags: ["Users"],
+        summary: "Reactivate a suspended account",
+        description: "Admin-only (CLAUDE.md 66.12).",
+        parameters: [idParameter("User id")],
+        responses: {
+          "200": jsonResponse("Account reactivated", ref("UserDetailResponse")),
+          "400": errorResponses["400"],
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "403": { $ref: "#/components/responses/Forbidden" },
+          "404": errorResponses["404"],
+          "500": errorResponses["500"],
+        },
+      },
+    },
+    "/api/users/{id}/reset-password": {
+      post: {
+        operationId: "resetUserPassword",
+        tags: ["Users"],
+        summary: "Issue a temporary password",
+        description:
+          "Admin-only (CLAUDE.md 66.10). There is no self-service reset; the admin relays this password to the user out of band. It is returned once and never logged.",
+        parameters: [idParameter("User id")],
+        responses: {
+          "200": jsonResponse("Temporary password issued", ref("ResetPasswordResponse")),
+          "400": errorResponses["400"],
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "403": { $ref: "#/components/responses/Forbidden" },
+          "404": errorResponses["404"],
+          "500": errorResponses["500"],
+        },
+      },
+    },
+    "/api/users/{id}/characters": {
+      get: {
+        operationId: "listUserCharacters",
+        tags: ["Users"],
+        summary: "List characters created by this account",
+        description:
+          "Admin-only (CLAUDE.md 66.15). Always empty for now: Character ownership (createdByUserId) has not shipped yet.",
+        parameters: [idParameter("User id")],
+        responses: {
+          "200": jsonResponse("Characters created by this account", ref("UserCharactersResponse")),
+          "400": errorResponses["400"],
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "403": { $ref: "#/components/responses/Forbidden" },
+          "404": errorResponses["404"],
+          "500": errorResponses["500"],
+        },
+      },
+    },
+    "/api/users/{id}/token-usage": {
+      get: {
+        operationId: "getUserTokenUsage",
+        tags: ["Users"],
+        summary: "Get this account's LLM token usage",
+        description:
+          "Admin-only (CLAUDE.md 66.4, 66.15). Always zeroed for now: per-user token tracking has not shipped yet.",
+        parameters: [idParameter("User id")],
+        responses: {
+          "200": jsonResponse("Token usage totals", ref("UserTokenUsageResponse")),
+          "400": errorResponses["400"],
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "403": { $ref: "#/components/responses/Forbidden" },
+          "404": errorResponses["404"],
+          "500": errorResponses["500"],
         },
       },
     },
@@ -978,6 +1116,64 @@ export const openApiDocument: OpenAPIV3.Document = {
         properties: {
           email: { type: "string", format: "email" },
           password: { type: "string" },
+        },
+      },
+      UserManagement: {
+        type: "object",
+        description:
+          "Admin-only view of an account (CLAUDE.md 66.15). Unlike AuthUser, this includes the email.",
+        required: ["id", "handle", "displayName", "email", "isAdmin", "status"],
+        properties: {
+          id: { type: "string" },
+          handle: { type: "string" },
+          displayName: { type: "string" },
+          avatarUrl: ref("AvatarUrl"),
+          email: { type: "string", format: "email" },
+          isAdmin: { type: "boolean" },
+          status: { type: "string", enum: ["active", "suspended"] },
+        },
+      },
+      UserManagementResponse: {
+        type: "object",
+        required: ["users", "page", "pageSize", "totalCount"],
+        properties: {
+          users: { type: "array", items: ref("UserManagement") },
+          page: { type: "integer", minimum: 1 },
+          pageSize: { type: "integer", minimum: 1 },
+          totalCount: { type: "integer", minimum: 0 },
+        },
+      },
+      UserDetailResponse: {
+        type: "object",
+        required: ["user"],
+        properties: { user: ref("UserManagement") },
+      },
+      ResetPasswordResponse: {
+        type: "object",
+        description:
+          "The temporary password, returned once in clear text for the admin to relay out of band (66.10). Never logged or stored anywhere else.",
+        required: ["temporaryPassword"],
+        properties: {
+          temporaryPassword: { type: "string" },
+        },
+      },
+      UserCharactersResponse: {
+        type: "object",
+        description:
+          "Always empty until Character ownership (createdByUserId) ships; the shape is stable ahead of that.",
+        required: ["characters"],
+        properties: {
+          characters: { type: "array", items: ref("CharacterManagement") },
+        },
+      },
+      UserTokenUsageResponse: {
+        type: "object",
+        description: "Always zeroed until per-user LLM token tracking ships.",
+        required: ["totalInputTokens", "totalOutputTokens", "totalTokens"],
+        properties: {
+          totalInputTokens: { type: "integer", minimum: 0 },
+          totalOutputTokens: { type: "integer", minimum: 0 },
+          totalTokens: { type: "integer", minimum: 0 },
         },
       },
       UserProfile: {
