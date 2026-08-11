@@ -162,10 +162,13 @@ export async function registerRoutes(
 
   app.post(
     "/api/characters/import",
-    { bodyLimit: 50 * 1024 * 1024 },
+    {
+      bodyLimit: 50 * 1024 * 1024,
+      preHandler: async (request, reply) => {
+        requireUser(request, reply);
+      },
+    },
     async (request, reply) => {
-      if (!requireUser(request, reply)) return reply;
-
       const body = importCharactersCsvSchema.safeParse(request.body);
       if (!body.success) {
         return sendError(reply, 400, "invalid_body", "CSV data is invalid", body.error.issues);
