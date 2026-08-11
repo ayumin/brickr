@@ -1,10 +1,12 @@
 import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH } from "@brickr/shared";
 import { describe, expect, it } from "vitest";
+import type { z } from "zod";
 import {
   bulkCreateCharactersSchema,
   bulkDeleteCharactersSchema,
   createPostSchema,
   createSimulationSchema,
+  handleParams,
   loginSchema,
   saveCharacterSchema,
   saveUserProfileSchema,
@@ -12,6 +14,30 @@ import {
   updateApplicationSettingsSchema,
   updateSimulationSchema,
 } from "./schemas.js";
+
+const VALID_CHARACTER: z.input<typeof saveCharacterSchema> = {
+  handle: "valid_handle",
+  displayName: "Valid",
+  description: "プロフィール",
+  rolePrompt: "立場",
+  tonePrompt: "口調",
+  interests: [],
+  activityLevel: 0.5,
+  responseProbability: 0.5,
+  replyProbability: 0.5,
+  quoteProbability: 0.5,
+  influence: 0.5,
+  modelProfileId: "test-profile",
+};
+
+const VALID_SIGNUP: z.input<typeof signupSchema> = {
+  inviteCode: "invite-1",
+  email: "person@example.com",
+  password: "a".repeat(12),
+  handle: "valid_handle",
+  displayName: "Valid",
+  birthdate: "2000-01-01",
+};
 
 const PNG_DATA_URL = "data:image/png;base64,iVBORw0KGgo=";
 
@@ -117,6 +143,34 @@ describe("avatar image validation", () => {
         avatarUrl: "data:image/svg+xml;base64,PHN2Zz4=",
       }).success,
     ).toBe(false);
+  });
+});
+
+describe("handle validation (CLAUDE.md §66.2, §66.13)", () => {
+  it("accepts a 3-character handle, the new minimum", () => {
+    expect(saveCharacterSchema.safeParse({ ...VALID_CHARACTER, handle: "ceo" }).success).toBe(
+      true,
+    );
+    expect(signupSchema.safeParse({ ...VALID_SIGNUP, handle: "ceo" }).success).toBe(true);
+  });
+
+  it("rejects a handle shorter than 3 characters", () => {
+    expect(saveCharacterSchema.safeParse({ ...VALID_CHARACTER, handle: "ab" }).success).toBe(
+      false,
+    );
+    expect(signupSchema.safeParse({ ...VALID_SIGNUP, handle: "ab" }).success).toBe(false);
+  });
+
+  it("rejects a reserved handle for both characters and signup", () => {
+    expect(saveCharacterSchema.safeParse({ ...VALID_CHARACTER, handle: "login" }).success).toBe(
+      false,
+    );
+    expect(signupSchema.safeParse({ ...VALID_SIGNUP, handle: "admin" }).success).toBe(false);
+  });
+
+  it("resolves a 3-character handle but rejects one below the minimum", () => {
+    expect(handleParams.safeParse({ handle: "ceo" }).success).toBe(true);
+    expect(handleParams.safeParse({ handle: "ab" }).success).toBe(false);
   });
 });
 

@@ -17,7 +17,7 @@ export const MIN_PASSWORD_LENGTH = 12;
 export const MAX_PASSWORD_LENGTH = 128;
 
 /** Handles live in one namespace shared with characters (§66.13). */
-export const HANDLE_PATTERN = "^[a-z0-9_]{1,32}$";
+export const HANDLE_PATTERN = "^[a-z0-9_]{3,32}$";
 
 export type UserStatus = "active" | "suspended";
 

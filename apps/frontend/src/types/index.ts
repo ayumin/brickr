@@ -40,7 +40,8 @@ export type ComposerScope = {
 
 /**
  * Which screen the single page is showing.
- * A view switch, not a route: no React Router in this app.
+ * Kept in sync with the URL by `routes.ts` / `SimulationView`, not owned by a
+ * `<Route>` tree — see the comment at the top of `routes.ts` for why.
  */
 export type TimelineView =
   | { kind: "home" }

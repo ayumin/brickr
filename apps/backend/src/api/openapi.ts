@@ -334,7 +334,7 @@ export const openApiDocument: OpenAPIV3.Document = {
             in: "path",
             required: true,
             description: "Handle without the `@`, lower-cased",
-            schema: { type: "string", pattern: "^@?[A-Za-z0-9_]{1,32}$" },
+            schema: { type: "string", pattern: "^@?[A-Za-z0-9_]{3,32}$" },
           },
         ],
         responses: {
@@ -1099,7 +1099,7 @@ export const openApiDocument: OpenAPIV3.Document = {
           "modelProfileId",
         ],
         properties: {
-          handle: { type: "string", pattern: "^[a-z0-9_]{1,32}$" },
+          handle: { type: "string", pattern: "^[a-z0-9_]{3,32}$" },
           displayName: { type: "string", minLength: 1, maxLength: 80 },
           description: { type: "string", minLength: 1, maxLength: 500 },
           rolePrompt: { type: "string", minLength: 1, maxLength: 4000 },
@@ -1180,7 +1180,7 @@ export const openApiDocument: OpenAPIV3.Document = {
           inviteCode: { type: "string", minLength: 1, maxLength: 64 },
           email: { type: "string", format: "email", maxLength: 254 },
           password: { type: "string", minLength: 12, maxLength: 128 },
-          handle: { type: "string", pattern: "^[a-z0-9_]{1,32}$" },
+          handle: { type: "string", pattern: "^[a-z0-9_]{3,32}$" },
           displayName: { type: "string", minLength: 1, maxLength: 50 },
           birthdate: {
             type: "string",
