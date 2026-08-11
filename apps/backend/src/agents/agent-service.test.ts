@@ -17,7 +17,10 @@ type Responder = (providerId: ProviderId, request: LLMGenerateRequest) => string
  * Stands in for the whole LLM layer. Proves the simulation side never needs a
  * provider SDK, an API key or a network call.
  */
-function makeFakeClient(respond: Responder): { client: LLMClient; calls: ClientCall[] } {
+function makeFakeClient(
+  respond: Responder,
+  usage?: LLMGenerateResult["usage"],
+): { client: LLMClient; calls: ClientCall[] } {
   const calls: ClientCall[] = [];
 
   const fake = {
@@ -27,6 +30,7 @@ function makeFakeClient(respond: Responder): { client: LLMClient; calls: ClientC
         text: respond(providerId, request),
         model: request.model,
         providerId,
+        ...(usage ? { usage } : {}),
       });
     },
   };
@@ -151,6 +155,29 @@ describe("AgentService.generate", () => {
 
       expect(generated.providerId).toBe("anthropic");
       expect(generated.model).toBe("test-anthropic-model");
+    });
+
+    it("passes the provider's token usage through for per-user tracking (CLAUDE.md §66.4)", async () => {
+      const usage = { inputTokens: 120, outputTokens: 40, totalTokens: 160 };
+      const { client } = makeFakeClient(() => "本文です。", usage);
+      const { repository } = makeFakeModelProfiles([OPENAI_PROFILE]);
+
+      const generated = await new AgentService(client, repository).generate(
+        makeRequest(architect),
+      );
+
+      expect(generated.usage).toEqual(usage);
+    });
+
+    it("omits usage when the provider does not report it", async () => {
+      const { client } = makeFakeClient(() => "本文です。");
+      const { repository } = makeFakeModelProfiles([OPENAI_PROFILE]);
+
+      const generated = await new AgentService(client, repository).generate(
+        makeRequest(architect),
+      );
+
+      expect(generated).not.toHaveProperty("usage");
     });
 
     it("changes provider and model without changing the persona prompt", async () => {

@@ -32,6 +32,7 @@ const expectedPaths = [
   "/api/characters/bulk-delete",
   "/api/model-profiles",
   "/api/user-profile",
+  "/api/user-profile/token-usage",
   "/api/simulations",
   "/api/simulations/{id}",
   "/api/simulations/{id}/analysis",

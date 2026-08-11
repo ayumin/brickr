@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentService, GenerateRequest, GeneratedPost } from "../agents/agent-service.js";
 import type { CharacterRepository } from "../characters/character-repository.js";
 import type { Character } from "../characters/character.js";
+import type { TokenUsageService } from "../llm/token-usage-service.js";
 import type { Post } from "../posts/post.js";
 import type { PostService, PublishInput } from "../posts/post-service.js";
 import type { ThreadContext, ThreadService } from "../posts/thread-service.js";
@@ -50,7 +51,11 @@ type HarnessOptions = {
   generate?: (request: GenerateRequest) => Promise<GeneratedPost>;
   maxConcurrentCharacters?: number;
   maxCascadeDepth?: number;
+  /** Defaults to pushing onto `tokenUsageRecords`; override to simulate a recording failure. */
+  recordTokenUsage?: (userId: string, usage: NonNullable<GeneratedPost["usage"]>) => Promise<void>;
 };
+
+type TokenUsageRecord = { userId: string; usage: NonNullable<GeneratedPost["usage"]> };
 
 type Harness = {
   service: SimulationService;
@@ -58,6 +63,7 @@ type Harness = {
   posts: Post[];
   generationCalls: GenerateRequest[];
   threadSnapshots: Array<{ targetId: string; postIds: string[] }>;
+  tokenUsageRecords: TokenUsageRecord[];
 };
 
 /**
@@ -69,6 +75,7 @@ function makeHarness(options: HarnessOptions): Harness {
   const posts: Post[] = [];
   const generationCalls: GenerateRequest[] = [];
   const threadSnapshots: Array<{ targetId: string; postIds: string[] }> = [];
+  const tokenUsageRecords: TokenUsageRecord[] = [];
   let nextPostId = 1;
 
   const simulationRepository = {
@@ -179,6 +186,14 @@ function makeHarness(options: HarnessOptions): Harness {
     error: () => undefined,
   };
 
+  const tokenUsage = {
+    record: (userId: string, usage: NonNullable<GeneratedPost["usage"]>): Promise<void> => {
+      if (options.recordTokenUsage) return options.recordTokenUsage(userId, usage);
+      tokenUsageRecords.push({ userId, usage });
+      return Promise.resolve();
+    },
+  } as unknown as TokenUsageService;
+
   const events = new EventHub();
   const service = new SimulationService(
     simulationRepository,
@@ -195,9 +210,10 @@ function makeHarness(options: HarnessOptions): Harness {
       maxCascadeDepth: options.maxCascadeDepth ?? 0,
     },
     logger,
+    tokenUsage,
   );
 
-  return { service, events, posts, generationCalls, threadSnapshots };
+  return { service, events, posts, generationCalls, threadSnapshots, tokenUsageRecords };
 }
 
 function knownMentions(content: string, characters: Character[]): string[] {
@@ -448,5 +464,91 @@ describe("SimulationService ownership (CLAUDE.md §66.6)", () => {
     await expect(
       harness.service.rename(SIMULATION.id, "new title", OTHER_USER),
     ).rejects.toBeInstanceOf(SimulationForbiddenError);
+  });
+});
+
+describe("SimulationService token usage (CLAUDE.md §66.4)", () => {
+  const USAGE = { inputTokens: 10, outputTokens: 5, totalTokens: 15 };
+
+  it("bills every generation from one submission to the user who posted it, including cascades", async () => {
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    const alpha = makeCharacter("alpha");
+    const beta = makeCharacter("beta");
+    const harness = makeHarness({
+      characters: [alpha, beta],
+      maxCascadeDepth: 1,
+      generate: (request) =>
+        Promise.resolve({
+          content:
+            request.character.id === alpha.id ? "@beta what do you think?" : "beta reply",
+          action: request.action,
+          providerId: "mock",
+          model: "test-model",
+          usage: USAGE,
+        }),
+    });
+    const stream = collectUntilCompleted(harness.events);
+
+    await harness.service.submitUserPost({
+      simulationId: SIMULATION.id,
+      authorId: USER_AUTHOR_ID,
+      content: "hello",
+      responderIds: [alpha.id],
+    });
+    await stream.completed;
+
+    // alpha's reply and beta's cascaded reply both trace back to the same
+    // human submission, so both are billed to that human — not to alpha.
+    expect(harness.tokenUsageRecords).toEqual([
+      { userId: USER_AUTHOR_ID, usage: USAGE },
+      { userId: USER_AUTHOR_ID, usage: USAGE },
+    ]);
+  });
+
+  it("records nothing when the provider does not report usage", async () => {
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    const alpha = makeCharacter("alpha");
+    const harness = makeHarness({ characters: [alpha] });
+    const stream = collectUntilCompleted(harness.events);
+
+    await harness.service.submitUserPost({
+      simulationId: SIMULATION.id,
+      authorId: USER_AUTHOR_ID,
+      content: "hello",
+      responderIds: [alpha.id],
+    });
+    await stream.completed;
+
+    expect(harness.tokenUsageRecords).toEqual([]);
+  });
+
+  it("does not turn a successful response into character.failed when recording usage throws", async () => {
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    const alpha = makeCharacter("alpha");
+    const harness = makeHarness({
+      characters: [alpha],
+      generate: (request) =>
+        Promise.resolve({
+          content: "generated",
+          action: request.action,
+          providerId: "mock",
+          model: "test-model",
+          usage: USAGE,
+        }),
+      recordTokenUsage: () => Promise.reject(new Error("token_usages write failed")),
+    });
+    const stream = collectUntilCompleted(harness.events);
+
+    await harness.service.submitUserPost({
+      simulationId: SIMULATION.id,
+      authorId: USER_AUTHOR_ID,
+      content: "hello",
+      responderIds: [alpha.id],
+    });
+    const completed = await stream.completed;
+
+    expect(harness.posts.map((post) => post.authorId)).toEqual([USER_AUTHOR_ID, alpha.id]);
+    expect(completed.generatedPostIds).toEqual(["post-2"]);
+    expect(stream.received.map((event) => event.type)).not.toContain("character.failed");
   });
 });

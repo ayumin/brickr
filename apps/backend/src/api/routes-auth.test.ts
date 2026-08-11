@@ -141,6 +141,10 @@ function makeServices(): AppServices {
         Promise.resolve({ code: "abc123", issuedById: "admin-1", createdAt: new Date() }),
       list: () => Promise.resolve([]),
     },
+    tokenUsage: {
+      getDto: () =>
+        Promise.resolve({ totalInputTokens: 0, totalOutputTokens: 0, totalTokens: 0 }),
+    },
   } as unknown as AppServices;
 }
 
@@ -262,6 +266,25 @@ describe("read endpoints", () => {
     apps.push(app);
 
     const response = await app.inject({ method: "GET", url: "/api/simulations/s1/analysis" });
+
+    expect(response.statusCode).toBe(200);
+  });
+
+  // Also an exception: "my token usage" has no meaning without a session (§66.4).
+  it("refuses GET /api/user-profile/token-usage while signed out", async () => {
+    const app = await buildApp(null);
+    apps.push(app);
+
+    const response = await app.inject({ method: "GET", url: "/api/user-profile/token-usage" });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it("returns the signed-in user's own token usage", async () => {
+    const app = await buildApp(signedInUser);
+    apps.push(app);
+
+    const response = await app.inject({ method: "GET", url: "/api/user-profile/token-usage" });
 
     expect(response.statusCode).toBe(200);
   });

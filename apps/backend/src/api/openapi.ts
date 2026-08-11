@@ -280,7 +280,7 @@ export const openApiDocument: OpenAPIV3.Document = {
         tags: ["Users"],
         summary: "Get this account's LLM token usage",
         description:
-          "Admin-only (CLAUDE.md 66.4, 66.15). Always zeroed for now: per-user token tracking has not shipped yet.",
+          "Admin-only (CLAUDE.md 66.4, 66.15). Zeroed, not 404, for a user who has never triggered a generation.",
         parameters: [idParameter("User id")],
         responses: {
           "200": jsonResponse("Token usage totals", ref("UserTokenUsageResponse")),
@@ -732,6 +732,20 @@ export const openApiDocument: OpenAPIV3.Document = {
             properties: { profile: ref("UserProfile") },
           }),
           "400": errorResponses["400"],
+          "500": errorResponses["500"],
+        },
+      },
+    },
+    "/api/user-profile/token-usage": {
+      get: {
+        operationId: "getOwnTokenUsage",
+        tags: ["User"],
+        summary: "Get the signed-in user's own LLM token usage",
+        description:
+          "Self-service counterpart to the admin-only GET /api/users/{id}/token-usage (CLAUDE.md 66.4). Always the caller's own totals; there is no id parameter to substitute another account.",
+        responses: {
+          "200": jsonResponse("Token usage totals", ref("UserTokenUsageResponse")),
+          "401": { $ref: "#/components/responses/Unauthorized" },
           "500": errorResponses["500"],
         },
       },
