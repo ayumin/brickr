@@ -11,6 +11,7 @@ import {
 } from "../auth/auth-errors.js";
 import { requireAdmin, requireUser } from "../auth/auth-context.js";
 import type { IssuedSession } from "../auth/auth-service.js";
+import { toInviteCodeDto } from "../auth/invite-code.js";
 import {
   readSessionCookie,
   serializeClearedSessionCookie,
@@ -38,6 +39,7 @@ import { registerEventsRoute } from "./events-route.js";
 import {
   bulkCreateCharactersSchema,
   bulkDeleteCharactersSchema,
+  createInviteCodeSchema,
   createPostSchema,
   createSimulationSchema,
   deleteCharacterQuerySchema,
@@ -226,6 +228,30 @@ export async function registerRoutes(
     const user = await services.userAdmin.findById(params.data.id);
     if (!user) return sendError(reply, 404, "not_found", "user not found");
     return { totalInputTokens: 0, totalOutputTokens: 0, totalTokens: 0 };
+  });
+
+  // -- invite codes -----------------------------------------------------------
+
+  /** Admin-only (§66.9, §66.15): signup itself validates and burns the code, in AuthService.signup. */
+  app.post("/api/invite-codes", async (request, reply) => {
+    const admin = requireAdmin(request, reply);
+    if (!admin) return reply;
+
+    // The whole body is optional (OpenAPI marks it so), so an omitted body must
+    // parse the same as `{}` rather than fail validation.
+    const body = createInviteCodeSchema.safeParse(request.body ?? {});
+    if (!body.success) {
+      return sendError(reply, 400, "invalid_body", "invite code request is invalid", body.error.issues);
+    }
+    const inviteCode = await services.inviteCodes.issue(admin.id, body.data);
+    return reply.status(201).send({ inviteCode: toInviteCodeDto(inviteCode) });
+  });
+
+  app.get("/api/invite-codes", async (request, reply) => {
+    if (!requireAdmin(request, reply)) return reply;
+
+    const inviteCodes = await services.inviteCodes.list();
+    return { inviteCodes: inviteCodes.map((inviteCode) => toInviteCodeDto(inviteCode)) };
   });
 
   // -- handles --------------------------------------------------------------

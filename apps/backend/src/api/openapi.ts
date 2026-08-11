@@ -293,6 +293,35 @@ export const openApiDocument: OpenAPIV3.Document = {
         },
       },
     },
+    "/api/invite-codes": {
+      post: {
+        operationId: "createInviteCode",
+        tags: ["Auth"],
+        summary: "Issue a single-use invite code",
+        description:
+          "Admin-only (CLAUDE.md 66.9). The code is returned once; the admin relays it out of band. Signup consumes it, so it works exactly once.",
+        requestBody: jsonBody(ref("CreateInviteCodeRequest"), false),
+        responses: {
+          "201": jsonResponse("Invite code issued", ref("CreateInviteCodeResponse")),
+          "400": errorResponses["400"],
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "403": { $ref: "#/components/responses/Forbidden" },
+          "500": errorResponses["500"],
+        },
+      },
+      get: {
+        operationId: "listInviteCodes",
+        tags: ["Auth"],
+        summary: "List issued invite codes and their usage status",
+        description: "Admin-only (CLAUDE.md 66.9, 66.15).",
+        responses: {
+          "200": jsonResponse("Issued invite codes", ref("InviteCodesResponse")),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "403": { $ref: "#/components/responses/Forbidden" },
+          "500": errorResponses["500"],
+        },
+      },
+    },
     "/api/handles/{handle}": {
       get: {
         operationId: "resolveHandle",
@@ -1179,6 +1208,44 @@ export const openApiDocument: OpenAPIV3.Document = {
           totalInputTokens: { type: "integer", minimum: 0 },
           totalOutputTokens: { type: "integer", minimum: 0 },
           totalTokens: { type: "integer", minimum: 0 },
+        },
+      },
+      InviteCode: {
+        type: "object",
+        description:
+          "Admin-only view of an invite code (66.9, 66.15). `status` is derived from usedById/expiresAt, not stored separately.",
+        required: ["code", "issuedById", "createdAt", "status"],
+        properties: {
+          code: { type: "string" },
+          issuedById: { type: "string" },
+          usedById: { type: "string" },
+          usedAt: { type: "string", format: "date-time" },
+          expiresAt: { type: "string", format: "date-time" },
+          createdAt: { type: "string", format: "date-time" },
+          status: { type: "string", enum: ["unused", "used", "expired"] },
+        },
+      },
+      CreateInviteCodeRequest: {
+        type: "object",
+        properties: {
+          expiresInDays: {
+            type: "integer",
+            minimum: 1,
+            maximum: 365,
+            description: "Omit for a code that never expires.",
+          },
+        },
+      },
+      CreateInviteCodeResponse: {
+        type: "object",
+        required: ["inviteCode"],
+        properties: { inviteCode: ref("InviteCode") },
+      },
+      InviteCodesResponse: {
+        type: "object",
+        required: ["inviteCodes"],
+        properties: {
+          inviteCodes: { type: "array", items: ref("InviteCode") },
         },
       },
       UserProfile: {
