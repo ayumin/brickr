@@ -32,12 +32,22 @@ export function handlePath(handle: string): string {
   return `/${encodeURIComponent(handle)}`;
 }
 
+/**
+ * Under the already-reserved `admin` segment (packages/shared/src/handle.ts)
+ * rather than a new top-level `/users`, so no new word has to be added to
+ * `RESERVED_HANDLES` just to make room for this screen.
+ */
+export function usersManagementPath(): string {
+  return "/admin/users";
+}
+
 export type RouteMatch =
   | { kind: "home" }
   | { kind: "characters" }
   | { kind: "simulations" }
   | { kind: "simulation-analysis"; simulationId: string }
   | { kind: "post"; postId: string }
+  | { kind: "users-management" }
   | { kind: "handle"; handle: string }
   | { kind: "not-found" };
 
@@ -56,6 +66,9 @@ export function matchRoute(pathname: string): RouteMatch {
   }
   if (matchPath({ path: simulationListPath(), end: true }, pathname)) {
     return { kind: "simulations" };
+  }
+  if (matchPath({ path: usersManagementPath(), end: true }, pathname)) {
+    return { kind: "users-management" };
   }
 
   const analysis = matchPath({ path: "/simulations/:id/analysis", end: true }, pathname);

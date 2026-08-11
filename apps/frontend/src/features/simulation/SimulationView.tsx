@@ -19,11 +19,13 @@ import {
   postPath,
   simulationAnalysisPath,
   simulationListPath,
+  usersManagementPath,
 } from "../../routes";
 import { api } from "../../services/api-client";
 import type { Theme } from "../../services/theme";
 import type { ConnectionState, TimelineView } from "../../types";
 import { useAuth } from "../auth/AuthContext";
+import { UserManagementList } from "../admin/UserManagementList";
 import { CharacterPicker } from "../characters/CharacterPicker";
 import { CharacterEditor } from "../characters/CharacterEditor";
 import { CharacterList } from "../characters/CharacterList";
@@ -276,6 +278,12 @@ export function SimulationView({
         return { kind: "simulation-analysis", simulationId: route.simulationId };
       case "post":
         return { kind: "post", postId: route.postId };
+      case "users-management":
+        // Defense in depth: the only nav entry point into this route is
+        // itself admin-gated, but a non-admin could still type the URL.
+        // The backend would 403 on every request anyway (CLAUDE.md §66.7),
+        // so treat it the same as any other unreachable URL for them.
+        return isAdmin ? { kind: "users-management" } : { kind: "not-found" };
       case "not-found":
         return { kind: "not-found" };
       case "handle":
@@ -303,7 +311,7 @@ export function SimulationView({
           ? { kind: "home" }
           : { kind: "timeline", authorId: handleResolution.authorId };
     }
-  }, [route, handleResolution, userProfile.id]);
+  }, [route, handleResolution, userProfile.id, isAdmin]);
 
   const openAuthor = useCallback(
     (authorId: string) => {
@@ -352,6 +360,12 @@ export function SimulationView({
     },
     [navigate],
   );
+
+  const openUsersManagement = useCallback(() => {
+    navigate(usersManagementPath());
+    setSidebarOpen(false);
+    window.scrollTo({ top: 0 });
+  }, [navigate]);
 
   const openPost = useCallback(
     (postId: string) => {
@@ -563,7 +577,7 @@ export function SimulationView({
       <div className="mx-auto flex w-full max-w-[1000px] justify-center gap-6 px-0 lg:px-4">
         <main
           className={`min-w-0 w-full border-x border-line pb-24 ${
-            view.kind === "characters" || view.kind === "simulations" || view.kind === "simulation-analysis" ? "max-w-[1000px]" : "max-w-[600px]"
+            view.kind === "characters" || view.kind === "simulations" || view.kind === "simulation-analysis" || view.kind === "users-management" ? "max-w-[1000px]" : "max-w-[600px]"
           }`}
         >
           {view.kind === "timeline" ? (
@@ -623,7 +637,7 @@ export function SimulationView({
                 <p className="text-xs text-ink-faint">返信とリポストをすべて表示</p>
               </div>
             </div>
-          ) : view.kind === "characters" || view.kind === "simulations" || view.kind === "simulation-analysis" ? (
+          ) : view.kind === "characters" || view.kind === "simulations" || view.kind === "simulation-analysis" || view.kind === "users-management" ? (
             <div className="flex items-center gap-3 border-b border-line px-4 py-2.5">
               <button
                 type="button"
@@ -639,14 +653,18 @@ export function SimulationView({
                     ? "キャラクター一覧"
                     : view.kind === "simulations"
                       ? "シミュレーション一覧"
-                      : simulations.find((item) => item.id === view.simulationId)?.title ?? "シミュレーション分析"}
+                      : view.kind === "users-management"
+                        ? "User管理"
+                        : simulations.find((item) => item.id === view.simulationId)?.title ?? "シミュレーション分析"}
                 </p>
                 <p className="text-xs text-ink-faint">
                   {view.kind === "characters"
                     ? "作成・編集・削除"
                     : view.kind === "simulations"
                       ? "履歴の確認・復帰・新規開始"
-                      : "シミュレーション全体の分析"}
+                      : view.kind === "users-management"
+                        ? "検索・停止/復帰・仮パスワード発行・招待コード発行"
+                        : "シミュレーション全体の分析"}
                 </p>
               </div>
             </div>
@@ -811,6 +829,8 @@ export function SimulationView({
             />
           ) : view.kind === "simulation-analysis" ? (
             <SimulationAnalysis simulationId={view.simulationId} />
+          ) : view.kind === "users-management" ? (
+            <UserManagementList />
           ) : view.kind === "post" ? (
             selectedPost ? (
               <PostDetail
@@ -900,7 +920,7 @@ export function SimulationView({
           )}
         </main>
 
-        {view.kind !== "characters" && view.kind !== "simulations" && view.kind !== "simulation-analysis" ? (
+        {view.kind !== "characters" && view.kind !== "simulations" && view.kind !== "simulation-analysis" && view.kind !== "users-management" ? (
           <aside className={`relative hidden shrink-0 py-4 transition-[width] lg:block ${sidebarCollapsed ? "w-12" : "w-[320px]"}`}>
             <div className="sticky top-[4.5rem]">
               <button
@@ -958,6 +978,10 @@ export function SimulationView({
             onUserProfileUpdated(saved);
             setUserEditorOpen(false);
             events.reload();
+          }}
+          onOpenUsersManagement={() => {
+            setUserEditorOpen(false);
+            openUsersManagement();
           }}
         />
       ) : null}

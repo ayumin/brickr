@@ -49,4 +49,5 @@ export type TimelineView =
   | { kind: "simulations" }
   | { kind: "simulation-analysis"; simulationId: string }
   | { kind: "post"; postId: string }
+  | { kind: "users-management" }
   | { kind: "timeline"; authorId: string };

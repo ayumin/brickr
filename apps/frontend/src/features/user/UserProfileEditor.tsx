@@ -28,12 +28,14 @@ export function UserProfileEditor({
   onSaved,
   theme,
   onThemeChange,
+  onOpenUsersManagement,
 }: {
   profile: UserProfileDto;
   onClose: () => void;
   onSaved: (profile: UserProfileDto) => void;
   theme: Theme;
   onThemeChange: (theme: Theme) => void;
+  onOpenUsersManagement: () => void;
 }) {
   const navigate = useNavigate();
   const { user, setUser } = useAuth();
@@ -152,6 +154,14 @@ export function UserProfileEditor({
                     <NavButton nested active={section === "models"} onClick={() => setSection("models")}>プロバイダー / モデル</NavButton>
                     <NavButton nested active={section === "usage"} onClick={() => setSection("usage")}>消費トークン（全体）</NavButton>
                   </div>
+                </div>
+              </div>
+            ) : null}
+            {isAdmin ? (
+              <div className="min-w-max sm:pt-3">
+                <p className="px-3 py-1 text-xs font-semibold uppercase tracking-wide text-ink-faint">管理</p>
+                <div className="flex gap-1 sm:block sm:space-y-1">
+                  <NavButton nested active={false} onClick={onOpenUsersManagement}>User管理</NavButton>
                 </div>
               </div>
             ) : null}
