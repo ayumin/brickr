@@ -143,7 +143,21 @@ type RequestOptions = {
   signal?: AbortSignal;
 };
 
+function validateApiPath(path: string): void {
+  if (!path.startsWith("/api/")) {
+    throw new Error("Invalid API path: path must start with /api/");
+  }
+  if (path.includes("://")) {
+    throw new Error("Invalid API path: path must not contain protocol specifiers");
+  }
+  if (path.includes("//")) {
+    throw new Error("Invalid API path: path must not contain protocol-relative URLs");
+  }
+}
+
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  validateApiPath(path);
+
   const { method = "GET", body, signal } = options;
 
   const headers: Record<string, string> = { Accept: "application/json" };
