@@ -369,6 +369,9 @@ export function Timeline({
       return null;
     }
     const reposts = selectReposts(repostIndex, post.id);
+    if (reposts.length === 0) {
+      return null;
+    }
     return (
       <div className="border-b border-line bg-surface">
         <p className="px-4 pt-2 text-[11px] font-medium text-ink-faint">
