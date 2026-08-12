@@ -394,7 +394,7 @@ export function CharacterList({
           </button>
         </div>
 
-        <div className="flex min-h-8 flex-wrap items-center gap-3 text-sm">
+        <div className="flex min-h-8 flex-wrap items-center gap-4 text-sm">
           <label className="flex cursor-pointer items-center gap-2 text-ink-muted">
             <input
               type="checkbox"
