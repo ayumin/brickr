@@ -9,13 +9,14 @@
 このシステムは、ユーザーのSNS投稿を起点に、異なるPersonaを持つAIキャラクターが
 返信、引用、独立投稿を順次生成する様子をリアルタイムに観察するWebアプリケーションです。
 
-設計上の中心は次の5点です。
+設計上の中心は次の6点です。
 
 1. Character PersonaとLLM Providerを分離する
 2. ユーザー投稿を即時保存し、LLM処理をHTTPレスポンスから切り離す
 3. Character単位の失敗を隔離し、成功した投稿を順次配信する
 4. Postを単一モデルとして扱い、ReplyとQuoteを参照関係で表現する
 5. APIキーとProvider SDKをBackend境界内に閉じ込める
+6. 公開Readと認証必須Writeを分け、Character/Simulationの変更をOwnerまたはAdminへ限定する
 
 ## 2. システムコンテキスト
 
@@ -30,8 +31,8 @@ flowchart LR
 ```
 
 BrowserはBackendだけを呼び出します。LLM ProviderへのRequest、API Key、Provider固有形式は
-Frontendへ公開しません。PostgreSQLはCharacter、ModelProfile、Simulation、Post、
-UserProfileの永続化を担当します。
+Frontendへ公開しません。PostgreSQLはCharacter、ModelProfile、Simulation、Post、UserProfileに
+加え、Session、共有Handle、InviteCode、ApplicationSetting、User別Token使用量を永続化します。
 
 ## 3. Monorepo構成
 
@@ -43,12 +44,15 @@ brickr/
 │   │   └── src/
 │   │       ├── agents/          Prompt構築、生成結果のsanitize
 │   │       ├── api/             REST/SSE境界とZod検証
+│   │       ├── auth/            Account、Session、招待、Admin操作
 │   │       ├── characters/      Character Domainと一括生成
 │   │       ├── config/          環境変数の唯一の読取場所
+│   │       ├── handles/         User/Character共有handleの解決
 │   │       ├── llm/             Provider抽象化とSDK Adapter
 │   │       ├── model-profiles/  CharacterとProvider/Modelの間接参照
 │   │       ├── posts/           Post永続化、Mapper、Thread取得
 │   │       ├── simulation/      応答選択とオーケストレーション
+│   │       ├── settings/        DB上書き可能な実行設定
 │   │       └── user-profile/    User Profile
 │   └── frontend/
 │       └── src/
@@ -103,13 +107,17 @@ flowchart TD
 
 ```text
 PrismaClient
+  ├─ UserAccount / Session / InviteCode Repository ─ Auth / UserAdmin / InviteCode Service
+  ├─ HandleRepository ─ HandleService
   ├─ CharacterRepository ─ CharacterService
   ├─ ModelProfileRepository ─ ModelProfileService
   ├─ PostRepository ─ PostService / ThreadService
-  ├─ SimulationRepository ─ SimulationService
+  ├─ SimulationRepository ─ SimulationService / SimulationAnalysisService
+  ├─ ApplicationSettingRepository ─ ApplicationSettingsService / RuntimeSettings
+  ├─ TokenUsageRepository ─ TokenUsageService
   └─ UserProfileRepository ─ UserProfileService
 
-ProviderRegistry ─ LLMClient ─ AgentService
+ProviderRegistry ─ LLMClient ─ AgentService / CharacterGenerator / SimulationAnalysisService
 EventHub ─ SimulationService
 ```
 
@@ -129,35 +137,43 @@ Service Testを記述できます。
 - OpenAPI JSON: `/documentation/json`
 - OpenAPI YAML: `/documentation/yaml`
 
-OpenAPI仕様のテストは全公開Pathと`operationId`の一意性、UI/JSONの配信を検証します。
+OpenAPIは`brickr_session`をCookie API Key Schemeとして定義し、認証必須Operationへ`security`と401を
+明示します。仕様のテストは全公開Pathと`operationId`の一意性、Routeとの一致、保護Operationの
+Cookie Security、UI/JSONの配信を検証します。
 
-主要Endpoint:
+主要Endpoint（`Public`はSession不要、`User`はログイン必須、`Owner/Admin`は所有者または管理者、
+`Admin`は管理者限定）:
 
-| Method | Path | 用途 |
-| --- | --- | --- |
-| `GET` | `/api/health` | Backendと利用可能Providerの確認 |
-| `GET` | `/api/characters` | 通常表示用Character一覧 |
-| `GET` | `/api/characters/management` | 管理テーブル用Character一覧 |
-| `POST` | `/api/characters` | Character作成 |
-| `PUT` | `/api/characters/:id` | Character更新 |
-| `GET` | `/api/characters/export` | 投稿数を含むCharacter CSV出力 |
-| `POST` | `/api/characters/import` | Character CSVの新規作成・更新 |
-| `DELETE` | `/api/characters/:id` | Characterの論理削除または完全削除 |
-| `POST` | `/api/characters/bulk-create` | Character一括生成Job開始 |
-| `GET` | `/api/character-bulk-jobs/:id` | 一括生成進捗取得 |
-| `POST` | `/api/characters/bulk-delete` | Character一括論理削除または完全削除 |
-| `GET` | `/api/model-profiles` | Provider Model同期と選択肢取得 |
-| `GET/PUT` | `/api/user-profile` | User Profile取得・更新 |
-| `POST` | `/api/simulations` | Simulation作成 |
-| `GET` | `/api/simulations/:id` | SimulationとPost履歴取得 |
-| `POST` | `/api/simulations/:id/posts` | User Post作成と生成開始 |
-| `GET` | `/api/simulations/:id/events` | Simulation単位のSSE購読 |
+| Method | Path | Access | 用途 |
+| --- | --- | --- | --- |
+| `GET` | `/api/health`, `/api/auth/session` | Public | Health/Providerと現在のSession確認 |
+| `POST` | `/api/auth/signup`, `/login`, `/logout` | Public | 招待登録、Login、Logout |
+| `GET/POST` | `/api/invite-codes` | Admin | 招待コード一覧・発行 |
+| `GET/POST` | `/api/users/...` | Admin | User一覧・詳細・停止・再開・Password再発行・利用量 |
+| `GET/PUT` | `/api/application-settings` | Admin | 安全化した設定参照とRuntime override |
+| `GET` | `/api/handles/:handle` | Public | User/Character共有handleの解決 |
+| `GET` | `/api/characters...`, `/api/model-profiles` | Public | Character表示/管理DTO、CSV出力、Model選択肢 |
+| `POST/PUT/DELETE` | `/api/characters...` | User / Owner/Admin | 作成・一括生成・import、更新・削除・復活 |
+| `GET/PUT` | `/api/user-profile` | User | 自分のProfile取得・更新 |
+| `GET` | `/api/user-profile/token-usage` | User | 自分の累積Token使用量 |
+| `GET` | `/api/simulations`, `/api/simulations/:id` | Public | 一覧・SimulationとPost履歴 |
+| `POST` | `/api/simulations` | User | Simulation作成 |
+| `PUT/POST` | `/api/simulations/:id`, `/stop`, `/resume` | Owner/Admin | 改名・停止・再開 |
+| `GET` | `/api/simulations/:id/analysis` | Owner/Admin | 会話の集計とLLM要約 |
+| `POST` | `/api/simulations/:id/posts` | User | User Post作成と生成開始 |
+| `GET` | `/api/posts/:id`, `/api/simulations/:id/events` | Public | Post詳細とSSE購読 |
 
 ### 5.3 永続化モデル
 
 ```mermaid
 erDiagram
   MODEL_PROFILE ||--o{ CHARACTER : assigned_to
+  USER_PROFILE o|--o{ CHARACTER : creates
+  USER_PROFILE o|--o{ SIMULATION : creates
+  USER_PROFILE ||--o{ SESSION : has
+  USER_PROFILE ||--o{ INVITE_CODE : issues
+  USER_PROFILE o|--o{ INVITE_CODE : redeems
+  USER_PROFILE ||--o| TOKEN_USAGE : accumulates
   SIMULATION ||--o{ POST : contains
   POST o|--o{ POST : replies
   POST o|--o{ POST : quotes
@@ -169,13 +185,15 @@ erDiagram
   }
   CHARACTER {
     string id PK
-    string handle UK
+    string handle
     string modelProfileId FK
+    string createdByUserId FK
     datetime deletedAt
   }
   SIMULATION {
     string id PK
     string status
+    string createdByUserId FK
   }
   POST {
     string id PK
@@ -186,13 +204,50 @@ erDiagram
   }
   USER_PROFILE {
     string id PK
+    string handle
+    string email UK
     string displayName
+    boolean isAdmin
+    string status
+  }
+  SESSION {
+    string tokenHash PK
+    string userId FK
+    datetime expiresAt
+  }
+  HANDLE_OWNER {
+    string handle PK
+    string ownerType
+    string ownerId
+  }
+  INVITE_CODE {
+    string code PK
+    string issuedById FK
+    string usedById FK
+  }
+  APPLICATION_SETTING {
+    string key PK
+    string value
+  }
+  TOKEN_USAGE {
+    string userId PK
+    int inputTokens
+    int outputTokens
+    int totalTokens
   }
 ```
 
 重要な判断:
 
-- `Post.authorId`はCharacterへの外部キーではありません。固定IDのUserとCharacterが同じPostを使うためです。
+- `Post.authorId`はUserProfile/Characterへの外部キーではありません。UserとCharacterが同じPostを使うためです。
+- UserとCharacterのhandle一意性は`HandleOwner.handle`で横断的に保証します。予約語はShared Packageと
+  Frontend Routerでも共通利用します。
+- `Session`はCookieの生TokenではなくSHA-256 hashだけを保存します。期限切れ・未知・停止UserのSessionは
+  認証Contextで`null`として扱います。
+- 招待コードは管理者が発行する単回使用コードです。Signupでは18歳以上、Password長、Email/handleの
+  一意性を検証し、User作成と招待コード消費を同じTransactionで行います。
+- Seed Characterの`createdByUserId`は`null`でSystem所有です。User作成CharacterとSimulationにはOwnerを
+  保存し、変更・停止・分析はOwnerまたはAdminだけに許可します。Simulation自体とPost履歴は公開Readです。
 - Characterの論理削除は`deletedAt`を設定し、過去Postを維持します。完全削除では、外部キーを
   持たない`Post.authorId`をCharacter削除前に明示的に削除します。この2操作は同一Transactionで
   実行され、対象Postを参照する他のReply/QuoteはSelf Relationの`onDelete: SetNull`に従います。
@@ -200,8 +255,9 @@ erDiagram
 - `quotedPost`はDTO生成時に1階層だけ平坦化します。再帰的な巨大Payloadを防ぎます。
 - Avatarと投稿画像は現在Data URLとしてText列へ保存します。
 
-Seedは再実行可能なupsertで、User Profile、ModelProfile、初期Characterを投入します。
-Docker Backendは起動時にSchema適用、Prisma Client生成、Seedを実行します。
+Seedは再実行可能なupsertで、互換用User Profile、ModelProfile、初期Characterと共有handleを投入します。
+`ADMIN_EMAIL`と`ADMIN_PASSWORD`があれば最初のAdminも作成しますが、既存AccountのPasswordや権限は
+上書きしません。Docker Backendは起動時にSchema適用、Prisma Client生成、Seedを実行します。
 
 通常のCharacter一覧EndpointはアクティブなCharacterだけを返し、タイムラインの候補と右パネルに
 使用します。管理一覧Endpointは論理削除済みも返し、`isDeleted`で表示を切り替えます。
@@ -211,6 +267,8 @@ Character CSVは日本語ヘッダーを使用し、管理画面と同じ設定�
 照合し、一致すれば更新、どちらも一致しなければ新規作成します。停止フラグは`deletedAt`へ反映
 します。`投稿数`は集計結果なので入力値を保存せず、インポート時に無視します。CSVに未登録の
 ModelProfileが含まれる場合はProvider/Model列から作成します。旧英語ヘッダーのCSVも入力できます。
+Import RouteはLoginを要求しますが、現在のServiceは行ごとのOwner判定を行わず、作成Rowにも
+`createdByUserId`を設定しません。したがって、CSV Importは信頼された利用者向けの全体保守機能です。
 
 画面から変更可能な実行設定は`application_settings`へ環境変数名と上書き値を保存します。
 有効値の優先順位は「DB上書き > 環境変数 > コード既定値」です。APIキー、
@@ -218,6 +276,18 @@ ModelProfileが含まれる場合はProvider/Model列から作成します。旧
 RuntimeSettingsは同じ設定Objectを更新するため、LLMのTimeout/Retry、Responder数、
 Context上限、並列数、Cascade深度はサーバー再起動なしで後続処理へ反映されます。
 既定Modelの変更時は対応するdefault ModelProfileも同期します。
+
+### 5.4 認証と認可
+
+`registerAuthContext`は全Requestで`brickr_session` Cookieを解決し、`request.currentUser`へAccountまたは
+`null`を設定します。Routeごとの`requireUser`と`requireAdmin`、Domain ServiceのOwner判定を組み合わせ、
+未認証は401、権限不足は403として返します。Public Read Routeも同じHookを通るため、Character Configの
+所有者情報など、閲覧者に応じたDTO制御が可能です。
+
+Session Cookieは`HttpOnly`、`SameSite=Lax`、`Path=/`で、HTTPS運用時は
+`SESSION_COOKIE_SECURE=true`により`Secure`を追加します。CORSはcredentialを許可し、FrontendのRESTと
+EventSourceは同じCookieを利用します。AdminはUser停止・再開、一時Password発行、InviteCode管理、
+Application Settings参照/変更を行えます。停止Userは既存Sessionを解決できず、新規Loginも拒否されます。
 
 ## 6. 投稿生成フロー
 
@@ -304,6 +374,13 @@ Thread状態から`reply`、`quote`、`post`を決めます。選択結果は次
 Frontendでは独立した停止ボタンを置かず、SSE接続表示から購読を切断・再接続します。
 古い停止済みSimulationを復元した場合は自動的にresumeします。
 
+### 6.5 シミュレーション分析
+
+`SimulationAnalysisService`はOwner/Admin確認後、全Postから投稿者数、Reply/Repost数、反応数に基づく
+Post/Author Rankingを計算します。要約には新しい順の最大100 Post、各本文最大500文字を渡し、利用可能な
+実Providerがあればstructured outputで4観点の日本語要約を生成します。Provider未設定、生成失敗、空の
+Simulationでは、外部APIを使わないfallback要約を返します。RankingはPost/Authorとも上位10件です。
+
 ## 7. LLMアーキテクチャ
 
 ### 7.1 CharacterとModelの分離
@@ -378,6 +455,13 @@ ReplyとQuoteへの新規画像添付はSchemaで拒否します。
 Job状態は`generating`、`saving`、`completed`、`failed`です。JobはProcess Memoryにあり、
 Backend再起動で失われます。最大100 Jobを保持します。
 
+### 7.6 Token使用量
+
+LLM呼び出しの使用量は2つの粒度で追跡します。`LLMUsageTracker`はProvider/Model別のRequest数とToken、
+推定USD CostをProcess Memoryへ集計し、Admin設定画面へ表示します。この集計はBackend再起動でリセット
+されます。`TokenUsageService`はUser Postが起点となった生成のTokenをUser別累積値としてPostgreSQLへ
+保存し、本人とAdminへ返します。履歴Logではなく、Userごとに1 RowのRunning Totalです。
+
 ## 8. SSEと整合性
 
 `EventHub`はSimulation IDごとのProcess内Pub/Subです。SSE Routeは購読をHTTP Streamへ変換し、
@@ -405,19 +489,24 @@ Job/停止状態の共有Storeが必要です。
 
 ### 9.1 Bootstrap
 
-`App.tsx`はUser ProfileとCharacter一覧を取得し、`localStorage`のSimulation IDを復元します。
-保存済みSimulationがなければ新規作成します。Theme選択もBrowserへ保存します。
+`App.tsx`は`AuthProvider`配下に`/login`と`/signup`を独立Routeとして置き、それ以外を
+`SimulationBootstrap`へ渡します。Bootstrapは`localStorage`のSimulation ID、最新Simulation、新規作成の
+順に解決します。公開Simulationがあれば未Loginでも閲覧でき、最初のSimulation作成が必要な場合だけ
+Loginへ誘導します。Theme選択もBrowserへ保存します。
 
 `SimulationView.tsx`が次のView状態を管理します。
 
 - Home
 - Character Timeline
 - Character管理テーブル
+- Simulation一覧とOwner/Admin限定の分析
 - Post詳細
+- Admin User管理
 - Character/User編集Modal
 
-独立したRouter Libraryは使わず、現在はComponent Stateによる画面遷移です。URL Deep Linkや
-Browser Back連携が必要になった場合はRouter導入を検討します。
+`react-router-dom`を使用し、`routes.ts`が`/characters`、`/simulations`、
+`/simulations/:id/analysis`、`/posts/:id`、`/admin/users`、`/:handle`を静的Path優先で解決します。
+`SimulationView`は画面遷移でremountせず、SSE接続とShell状態を維持したままURL・Browser Historyと同期します。
 
 ### 9.2 Network境界
 
@@ -432,7 +521,7 @@ ComponentはNetwork Protocolを知りません。
 
 FrontendはSimulation内の全Postを保持し、`thread-utils.ts`の純粋関数で表示を作ります。
 
-- User Timeline: UserのThread Starterと`@you` Mention
+- User Timeline: Login UserのThread Starterと、そのUserの`@handle` Mention
 - Character Timeline: 本人のPostと本人へのMention
 - Reply Index: `replyTo`ごとの直接返信
 - Reply展開: Cycle-safeな探索で全子孫を平坦化
@@ -455,6 +544,8 @@ Paginationを使用します。管理テーブルのHeaderはScroll領域内で�
 エラーは影響範囲で扱いを分けます。
 
 - 入力不正: Zodで400
+- 未認証: Route Guardで401
+- Role/所有権不足: Route GuardまたはDomain Serviceで403
 - Resource不存在: Domain Errorを404
 - Handle競合: 409
 - Character単位のLLM失敗: Logと`character.failed`、他Characterは継続
@@ -471,13 +562,17 @@ LLM Retryは`LLM_MAX_RETRIES`で上限を持ち、Timeoutは`LLM_TIMEOUT_MS`でA
 - `.env`とAPIキーはGit管理外です。
 - APIキーはBackendだけが読み、DTO、SSE、Frontend Bundleへ含めません。
 - Authorization/Cookie HeaderはBackend LoggerでRedactします。
+- Session CookieはHttpOnly/SameSite=Laxで、生TokenはDBへ保存せずhash化します。
+- User/Characterのhandleは共有Namespaceで一意にし、認証必須WriteはOwner/AdminをService層でも確認します。
 - Request BodyはZodで型、長さ、画像形式、画像サイズを検証します。
 - 投稿本文はReact Elementとして分割表示し、HTMLとして注入しません。
 - Persona Promptと行動確率は専用Config/Management API以外へ返しません。
 - CORS Originは`CORS_ORIGIN`で制限します。
 
-現在、利用者認証、認可、CSRF保護、Rate Limit、Object Storage、Content Moderationはありません。
-したがって、現状のDocker構成をそのまま信頼できないネットワークへ公開する設計ではありません。
+現在、専用CSRF Token、Rate Limit、Email確認、Self-service Password Reset、Object Storage、
+Content Moderationはありません。CSRF軽減は`SameSite=Lax`だけで、Composeも開発用のため、現状の構成を
+そのまま信頼できないネットワークへ公開する設計ではありません。Character CSV ImportもLoginは
+要求しますがOwner単位では制限していません。
 
 ## 12. テスト戦略
 
@@ -487,6 +582,8 @@ Vitestを使用し、外部APIやNetworkに依存しない高速なテストを�
 - SimulationService: Event、部分失敗、停止、cascade、生成ID
 - Prompt/Mapper/Sanitize: Providerへ渡す境界形式
 - CharacterService/Generator: CRUD、一括生成、structured output、失敗理由
+- Auth/Ownership: Signup、Session Cookie、Admin Guard、共有handle、停止Account、Owner判定
+- Settings/Usage: DB override、既定値同期、Token集計とCost計算
 - API Schema: 入力制限と画像検証
 - Thread helpers: Reply/Repostの順序、平坦化、cycle
 - Frontend utilities: URL、Mention、Avatar crop、Theme
@@ -500,9 +597,9 @@ Vitestを使用し、外部APIやNetworkに依存しない高速なテストを�
 | --- | --- | --- |
 | Backend単一Process | EventHub、Job、停止SetがMemory内 | Redis、Queue、共有Job Store |
 | Data URL画像 | MVPでStorageを単純化 | Object Storage、署名URL、Thumbnail |
-| Component State遷移 | 画面数が少ない | Router、URL Deep Link |
+| SPA内の手動Route match | SimulationViewとSSEを維持 | Route Data API、画面単位のCode Split |
 | `prisma db push` | 開発優先 | Versioned Migration |
-| 認証なし | 単一利用者の開発用途 | Authentication、Ownership、RBAC |
+| Cookie + boolean Admin | 小規模な招待制運用 | CSRF Token、Rate Limit、Email確認、Role Model |
 | Model Catalog 5分Cache | Provider API負荷抑制 | 明示Refresh、永続Status、Capability metadata |
 | Bulk JobはMemory内 | 小規模な非同期処理 | Durable Queue、Worker、再開 |
 

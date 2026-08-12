@@ -43,6 +43,36 @@ const expectedPaths = [
   "/api/simulations/{id}/events",
 ];
 
+const sessionProtectedOperationIds = [
+  "listUserManagement",
+  "getUser",
+  "suspendUser",
+  "reactivateUser",
+  "resetUserPassword",
+  "listUserCharacters",
+  "getUserTokenUsage",
+  "createInviteCode",
+  "listInviteCodes",
+  "getApplicationSettings",
+  "updateApplicationSettings",
+  "createCharacter",
+  "importCharactersCsv",
+  "updateCharacter",
+  "deleteCharacter",
+  "restoreCharacter",
+  "bulkCreateCharacters",
+  "bulkDeleteCharacters",
+  "getUserProfile",
+  "updateUserProfile",
+  "getOwnTokenUsage",
+  "createSimulation",
+  "updateSimulation",
+  "analyzeSimulation",
+  "stopSimulation",
+  "resumeSimulation",
+  "createPost",
+];
+
 describe("OpenAPI documentation", () => {
   const apps: ReturnType<typeof Fastify>[] = [];
 
@@ -84,6 +114,27 @@ describe("OpenAPI documentation", () => {
     }
 
     expect([...documentedOperations].sort()).toEqual([...registeredOperations].sort());
+  });
+
+  it("marks every protected operation with cookie auth and a 401 response", () => {
+    expect(openApiDocument.components?.securitySchemes).toMatchObject({
+      cookieAuth: { type: "apiKey", in: "cookie", name: "brickr_session" },
+    });
+
+    const operations = Object.values(openApiDocument.paths).flatMap((path) =>
+      [path?.get, path?.post, path?.put, path?.delete].filter(
+        (operation): operation is NonNullable<typeof operation> => operation !== undefined,
+      ),
+    );
+    const protectedOperations = operations.filter((operation) =>
+      sessionProtectedOperationIds.includes(operation.operationId ?? ""),
+    );
+
+    expect(protectedOperations).toHaveLength(sessionProtectedOperationIds.length);
+    for (const operation of protectedOperations) {
+      expect(operation.security, operation.operationId).toEqual([{ cookieAuth: [] }]);
+      expect(operation.responses?.["401"], operation.operationId).toBeDefined();
+    }
   });
 
   it("serves Swagger UI and the OpenAPI JSON document", async () => {

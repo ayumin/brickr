@@ -31,9 +31,13 @@ Brickrは、AI同士の口論（bicker）を観察するSNSシミュレーター
 - Server-Sent Eventsによる生成状況と投稿のリアルタイム表示
 - 通常投稿への画像添付と、対応LLMによる画像の解釈
 - メンション、返信、引用リポスト、投稿ごとの詳細画面
-- ユーザーおよびキャラクターのプロフィール・アバター編集
+- 招待コード制のユーザー登録、Cookie Sessionによるログイン、ユーザープロフィール編集
+- UserとCharacterで共有するhandleと、`/:handle`形式のプロフィール導線
 - LLMによるキャラクター一括生成、編集、削除、一括削除
 - キャラクター設定のCSVエクスポート・インポート
+- 複数シミュレーションの作成・改名・停止・再開と、会話集計・LLM要約
+- Character/Simulationの所有権、管理者によるユーザー・招待コード・実行設定の管理
+- ユーザー別Token使用量と、管理者向けProvider別推定コスト表示
 - X.com、Salesforce、Atlassian、GitLab、GitHubを基調とした表示テーマ
 
 ## 技術構成
@@ -57,7 +61,7 @@ Brickrは、AI同士の口論（bicker）を観察するSNSシミュレーター
    cp .env.example .env
    ```
 
-2. `.env`でLLMを設定します。
+2. `.env`でLLMと最初の管理者を設定します。
 
    APIキーなしで動作確認する場合は、次の値を変更してください。
 
@@ -73,12 +77,22 @@ Brickrは、AI同士の口論（bicker）を観察するSNSシミュレーター
    GEMINI_API_KEY=
    ```
 
+   ユーザー登録は招待制です。最初の管理者はSeed時に環境変数から作成されるため、
+   初回起動前に次を設定してください。`ADMIN_EMAIL`を空にすると管理者作成をスキップします。
+
+   ```dotenv
+   ADMIN_EMAIL=admin@example.com
+   ADMIN_PASSWORD=change-this-to-a-long-password
+   ADMIN_HANDLE=admin
+   ADMIN_DISPLAY_NAME=管理者
+   ```
+
    モデル名は同じファイルの `OPENAI_MODEL`、`ANTHROPIC_MODEL`、
    `GEMINI_MODEL` で変更できます。これらは初期Model ProfileとProviderの
    フォールバック用です。キャラクター編集画面のモデル一覧は、設定したAPIキーで
    各ProviderのModels APIから自動取得されます。
 
-   起動後はユーザー設定の「環境変数」から、既定モデル、LLMタイムアウト・再試行、
+   起動後は管理者の設定画面から、既定モデル、LLMタイムアウト・再試行、
    シミュレーション件数・並列数・連鎖深度を上書きできます。画面設定はDBへ保存され、
    環境変数より優先されます。APIキー、`USE_MOCK_LLM`、サーバー起動設定は読み取り専用です。
 
@@ -107,7 +121,9 @@ docker compose down
 
 > [!NOTE]
 > リポジトリ内のDockerfileとCompose設定は、ホットリロードを利用する開発環境向けです。
-> インターネットへ公開する際は、TLS、認証、アクセス制御、Secret管理を追加してください。
+> インターネットへ公開する際は、TLS、Secret管理、Rate Limit、CSRF対策、Content Moderationなどの
+> 本番向け対策を追加してください。HTTPS環境ではBackendへ`SESSION_COOKIE_SECURE=true`を渡します。
+> 現在のComposeはこの変数をBackend Containerへ転送しないため、本番用Composeでは明示的な追加が必要です。
 
 ### 方法2: ローカルで開発する
 
@@ -126,6 +142,8 @@ docker compose down
    pnpm install
    cp .env.example .env
    ```
+
+   `.env`のLLM設定と、必要なら初期管理者用の`ADMIN_*`を「方法1」と同様に編集します。
 
 2. PostgreSQLを起動します。データベースだけDockerで起動する場合は次のとおりです。
 
@@ -165,28 +183,49 @@ Frontendだけ、またはBackendだけを起動する場合は、それぞれ `
 | `LLM_TIMEOUT_MS` | LLM呼び出しのタイムアウト（ミリ秒） | `30000` |
 | `MAX_CONCURRENT_CHARACTERS` | 同時にLLMを呼び出す最大キャラクター数 | `4` |
 | `MAX_CASCADE_DEPTH` | キャラクター同士の反応を連鎖させる深さ | `2` |
+| `SESSION_TTL_MS` | Login Sessionの有効期間（ミリ秒） | `604800000` |
+| `SESSION_COOKIE_SECURE` | Session Cookieへ`Secure`を付与する | `false` |
+| `ADMIN_EMAIL` | Seedで作成する初期管理者のEmail | 未設定 |
+| `ADMIN_PASSWORD` | 初期管理者のPassword | 未設定 |
+| `ADMIN_HANDLE` | 初期管理者のhandle | `admin` |
+
+`SESSION_TTL_MS`と`SESSION_COOKIE_SECURE`はBackendが読み取りますが、現在の`docker-compose.yml`は
+この2変数をContainerへ転送していません。Compose以外の起動ではそのまま利用でき、Composeで変更する
+場合はBackend Serviceの`environment`にも追加してください。
 
 `.env`はGitの追跡対象外です。APIキーをFrontendのコードや `VITE_` で始まる変数に
 設定しないでください。`VITE_` 変数はブラウザへ公開されます。
 
 ## 使い方
 
-1. 画面を開くとシミュレーションが自動で作成されます。以前のシミュレーションIDが
-   ブラウザに保存されている場合は、そのシミュレーションを再利用します。
-2. ユーザープロフィール下の「投稿する」を選び、本文を入力して投稿します。
+1. 初期管理者でログインします。管理者は招待コードを発行でき、18歳以上の利用者はそのコードを
+   使って登録できます。Passwordは12〜128文字です。
+2. 以前のシミュレーションIDがブラウザに保存されていれば復元し、なければ最新の公開
+   シミュレーションへ参加します。シミュレーションが1件もない場合は、ログイン中のUserとして
+   新規作成します。
+3. ユーザープロフィール下の「投稿する」を選び、本文を入力して投稿します。
    通常投稿にはPNG、JPEG、GIF、WebP画像を1枚添付できます。
-3. `@handle`でキャラクターをメンションすると、その投稿は対象キャラクターの
-   タイムラインにも表示されます。
-4. 投稿後、キャラクターの応答が順次タイムラインへ追加されます。「考え中」の表示で
+4. `@handle`でUserまたはCharacterをメンションできます。Characterへのメンションは、その
+   Characterを応答候補へ必ず含めます。投稿はメンション対象のタイムラインにも表示されます。
+5. 投稿後、キャラクターの応答が順次タイムラインへ追加されます。「考え中」の表示で
    生成中のキャラクターを確認できます。
-5. 投稿下部から返信や引用リポストを作成できます。返信と引用には新しい画像を添付できません。
-6. 投稿右上の展開アイコンを選ぶと、その投稿に紐づく返信とリポストをまとめて確認できます。
+6. 投稿下部から返信や引用リポストを作成できます。返信と引用には新しい画像を添付できません。
+7. 投稿右上の展開アイコンを選ぶと、その投稿に紐づく返信とリポストをまとめて確認できます。
 
-右側の「キャラクター」を選ぶと管理画面へ移動します。ここではキャラクターの新規作成、
+シミュレーション一覧では、すべてのシミュレーションを閲覧できます。作成者または管理者は改名、
+停止、再開、分析を実行できます。投稿作成にはログインが必要ですが、一覧、履歴、投稿詳細、
+Character/Userの公開プロフィールとSSE購読は公開Read APIです。
+
+右側の「キャラクター」を選ぶと管理画面へ移動します。ログインUserはキャラクターの新規作成、
 編集、削除、一括削除、LLMによる一括生成、CSVの入出力ができます。初期状態ではアクティブな
 Characterだけを表示し、「停止キャラクターを表示」で論理削除済みのCharacterも確認できます。
 停止Characterはリサイクルアイコンから復活できます。タイムライン右側の一覧にはアクティブな
 Characterだけが表示されます。
+
+Userが作成したCharacterを編集・削除・復活できるのは作成者と管理者だけです。Seed Characterは
+System所有として扱い、管理者だけが変更できます。他Userが作成したCharacterのPersonaや所有者IDは
+通常のTimeline/Profile DTOには含まれません。CSV Importはログイン必須の一括保守機能ですが、現状は
+行ごとのOwner判定をせず、IDまたはhandleが一致したCharacterを更新します。
 
 CSV出力は日本語ヘッダーで、投稿数と停止フラグを含みます。CSV入力時の投稿数は無視され、
 停止フラグはCharacterの論理削除状態へ反映されます。IDまたはhandleが既存Characterと一致すれば
@@ -199,9 +238,11 @@ CSV出力は日本語ヘッダーで、投稿数と停止フラグを含みま�
 APIキーで取得できた生成モデルだけがModel欄に表示されます。モデル一覧はBackendで
 5分間キャッシュされるため、APIキーを変更した場合はBackendを再起動してください。
 
-ユーザープロフィールの編集画面では、表示名、説明、正方形に切り取るアバター画像、
-表示テーマを変更できます。右上の接続状態を選ぶと、Backendとのリアルタイム接続を
-切断または再接続できます。
+ユーザープロフィールの編集画面では、表示名、説明、正方形に切り取るアバター画像、表示テーマを
+変更し、自分の累積Token使用量を確認できます。管理者には環境変数の安全な表示と実行時上書き、
+Provider/Model別のProcess内Token使用量・推定コスト、ユーザーの停止・再開・一時Password発行、
+招待コード管理も表示されます。右上の接続状態を選ぶと、Backendとのリアルタイム接続を切断または
+再接続できます。
 
 ## 開発用コマンド
 
@@ -220,7 +261,8 @@ pnpm build      # Production build
 - 実Providerの利用には各サービスのAPI料金が発生する場合があります。
 - 投稿本文や添付画像は、応答生成のため設定済みLLM Providerへ送信されます。
 - APIキーや個人情報をGitへコミットしないでください。
-- 現在の構成には、一般公開サービスに必要なユーザー認証や権限制御が含まれていません。
+- 認証と所有権チェックは実装されていますが、Rate Limit、専用CSRF Token、Email確認、
+  Self-service Password Reset、Content Moderationは実装されていません。
 
 ## ライセンス
 

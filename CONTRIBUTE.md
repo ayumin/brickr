@@ -52,6 +52,9 @@ APIキーを使用しない開発では、`.env`を次のように変更して�
 USE_MOCK_LLM=true
 ```
 
+Signupは招待制なので、最初の管理者を作る場合はSeed前に`ADMIN_EMAIL`と`ADMIN_PASSWORD`も
+設定してください。`ADMIN_EMAIL`が空の場合、管理者Bootstrapはスキップされます。
+
 PostgreSQLだけをDockerで起動し、スキーマと初期データを準備します。
 
 ```bash
@@ -92,10 +95,16 @@ packages/
 | REST API | `apps/backend/src/api/routes.ts` | RouteとDomain ErrorのHTTP変換 |
 | 入力検証 | `apps/backend/src/api/schemas.ts` | Zodによる境界検証 |
 | API仕様 | `apps/backend/src/api/openapi.ts` | OpenAPI 3.0とSwagger UI設定 |
+| 認証Context | `apps/backend/src/auth/auth-context.ts` | Session解決とUser/Admin Guard |
+| Account/招待 | `apps/backend/src/auth/` | Signup/Login、Session、Admin、InviteCode |
+| Handle | `apps/backend/src/handles/` | User/Character共有Namespace |
 | シミュレーション | `apps/backend/src/simulation/simulation-service.ts` | 投稿生成のオーケストレーション |
+| シミュレーション分析 | `apps/backend/src/simulation/simulation-analysis-service.ts` | 集計とLLM要約 |
 | LLM抽象化 | `apps/backend/src/llm/provider.ts` | Provider共通契約 |
+| 実行設定 | `apps/backend/src/settings/` | 環境変数とDB Overrideの合成 |
 | DB Schema | `apps/backend/prisma/schema.prisma` | PostgreSQLのデータモデル |
 | Frontend起動 | `apps/frontend/src/App.tsx` | 初期ロードとSimulation復元 |
+| Frontend Route | `apps/frontend/src/routes.ts` | URL生成と静的Path優先のRoute match |
 | 主要画面 | `apps/frontend/src/features/simulation/SimulationView.tsx` | 画面遷移と主要UIの統合 |
 | API Client | `apps/frontend/src/services/api-client.ts` | Frontend唯一のRESTアクセス層 |
 | SSE Client | `apps/frontend/src/services/sse-client.ts` | EventSourceの薄いラッパー |
@@ -136,6 +145,7 @@ docs: explain local database setup
 - SSEの接続処理は`services/sse-client.ts`へ閉じ込めてください。
 - FrontendとBackend間のDTOは`packages/shared`へ置いてください。
 - Domain ModelとAPI DTOを同一視しないでください。Personaや内部確率は通常APIへ返しません。
+- REST ClientはCookieを送る`credentials: "include"`を維持し、SSEも同じSession Cookieを使用します。
 
 ### Backendの責務分離
 
@@ -144,6 +154,18 @@ docs: explain local database setup
 - PrismaへのアクセスはRepositoryへ閉じ込めます。
 - Provider SDK固有の型やエラーを`llm/`の外へ漏らさないでください。
 - `services.ts`をComposition Rootとして保ち、別の場所で依存を直接構築しないでください。
+- Routeの`requireUser`/`requireAdmin`だけに依存せず、Owner固有の認可はServiceでも確認してください。
+
+### 認証、所有権、handle
+
+- Read APIを公開するか、User/Admin/Ownerへ制限するかを明示し、401と403を分けてください。
+- Password、Session生Token、BirthdateはDTOやLogへ出さないでください。Sessionはhashだけを保存します。
+- UserとCharacterのhandleは`handles` Tableの共有Namespaceです。予約語、正規化、競合処理を
+  Frontend、Zod Schema、Domainで不一致にしないでください。
+- User作成CharacterとSimulationには`createdByUserId`を設定し、Owner/Adminだけが管理できます。
+  `createdByUserId = null`のSeed CharacterはSystem所有で、Adminだけが変更できます。
+- Signup、InviteCode消費、handle確保のように途中状態を残せない操作はTransaction境界を維持してください。
+- 停止UserはLoginと既存Session解決の両方で拒否し、Admin自身を停止・再開する境界ケースもテストしてください。
 
 ### シミュレーション
 
@@ -188,9 +210,11 @@ docs: explain local database setup
 3. Schemaの正常系・境界値・拒否ケースをテストします。
 4. `apps/backend/src/api/openapi.ts`へPath、Request、Response、Errorを追加します。
 5. Domain ServiceとRepositoryへ必要な処理を追加します。
-6. `api/routes.ts`でRouteを登録し、Domain ErrorをHTTP Errorへ変換します。
-7. `apps/frontend/src/services/api-client.ts`に型付きメソッドを追加します。
-8. API一覧や重要なフローが変わる場合は文書を更新します。
+6. Public/User/Admin/OwnerのAccess levelを決め、認証必須ならOpenAPIの`cookieAuth`、401/403 Response、
+   `sessionProtectedOperationIds`の契約テストへ反映します。
+7. `api/routes.ts`でRouteを登録し、Domain ErrorをHTTP Errorへ変換します。
+8. `apps/frontend/src/services/api-client.ts`に型付きメソッドを追加します。
+9. API一覧や重要なフローが変わる場合は文書を更新します。
 
 ### データベースSchemaを変更する
 
@@ -201,7 +225,8 @@ docs: explain local database setup
 5. Seedが再実行可能であることを確認します。
 6. 既存データへの影響、nullability、削除時の挙動をPull Requestに記載します。
 
-`db:push`は開発用です。公開運用へ移行する場合は、履歴を持つMigration運用を別途導入してください。
+`db:push` Scriptは`--accept-data-loss`付きの開発用です。対象Databaseを確認してから実行してください。
+公開運用へ移行する場合は、履歴を持つMigration運用を別途導入してください。
 
 ### LLM Providerを追加・変更する
 
@@ -224,11 +249,13 @@ docs: explain local database setup
 
 ### Frontend画面を追加する
 
-1. Network処理と表示ロジックを分離します。
-2. 配列の絞り込み、並び替え、Thread展開は可能なら純粋関数にします。
-3. Loading、Error、Empty、Disabledの各状態を実装します。
-4. キーボード操作、`aria-label`、Focus表示を確認します。
-5. Light/Darkを含む全Theme Tokenで読めることを確認します。
+1. `routes.ts`へPath生成とMatchを追加し、静的Pathを`/:handle`より先に判定します。
+2. `SimulationView`を不要にremountしてSSE接続やShell状態を失わない構成にします。
+3. Network処理と表示ロジックを分離します。
+4. 配列の絞り込み、並び替え、Thread展開は可能なら純粋関数にします。
+5. Loading、Error、Empty、Disabled、Unauthenticated、Forbiddenの各状態を実装します。
+6. キーボード操作、`aria-label`、Focus表示を確認します。
+7. Light/Darkを含む全Theme Tokenで読めることを確認します。
 
 ## テスト
 
@@ -238,6 +265,8 @@ docs: explain local database setup
 - Service: Fake RepositoryやFake Providerを使い、成功・部分失敗・例外を確認
 - API Schema: 正常値、最小・最大値、不正な型、サイズ制限を確認
 - Provider Mapper: SDKへ渡す形式とSDKから受ける形式を、Networkなしで確認
+- Auth/認可: Cookie属性、期限切れSession、停止User、User/Admin/Ownerごとの401/403を確認
+- Repository: Transaction、共有handle、Ownership、delete cascade/set-nullをFake Prismaで確認
 - Frontend helper: URL、Mention、Thread派生、ThemeなどをVitestで確認
 
 対象パッケージだけを検証する場合:
@@ -271,15 +300,15 @@ git diff --check
 
 リポジトリ直下の`.gitlab-ci.yml`は、Branch、Tag、Merge RequestのPipelineで次を実行します。
 
-1. Frontend、Backend、SharedのLintを並列実行
-2. Frontend、Backend、Sharedの型検査を並列実行
-3. Frontend、Backend、Sharedのテストを並列実行
-4. Frontend、Backend、Sharedを並列ビルド
-5. 各workspaceの`dist/`を1週間Artifactとして保存
+1. Frontend、Backend、SharedのLint、型検査、Coverage付きTestを独立Jobとして並列実行
+2. GitLab SAST、Dependency Scanning、Secret Detectionを実行
+3. Default BranchとTagだけでFrontend、Backend、SharedをBuild
+4. Buildした各workspaceの`dist/`を1週間Artifactとして保存
 
 CIは開発環境と同じNode.js 22と、`packageManager`で固定しているpnpm 11.21.0を使用します。依存関係は
 `pnpm-lock.yaml`に基づいて固定され、pnpm storeはLockfile単位でキャッシュされます。
 テストは外部LLM APIやPostgreSQLへ接続しないため、APIキーやDatabase Serviceは不要です。
+Backend JobだけがInstall後にPrisma Clientを生成します。
 
 ## Pull Request
 
@@ -303,7 +332,8 @@ Pull Requestは、レビュアーが目的と影響を短時間で確認でき�
 - [ ] `pnpm test`が成功する
 - [ ] `pnpm typecheck`が成功する
 - [ ] `pnpm build`が成功する
-- [ ] APIキー、個人情報、生成された`.env`を含んでいない
+- [ ] APIキー、Password、Session/Invite Code、個人情報、生成された`.env`を含んでいない
+- [ ] 新規EndpointのPublic/User/Admin/Owner境界と401/403を検証した
 - [ ] 必要なREADME、CLAUDE.md、ARCHITECTURE.mdを更新した
 - [ ] UIでBootstrap IconsとTheme Tokenを使用した
 - [ ] 失敗時に他の処理を不必要に停止させない
@@ -311,8 +341,7 @@ Pull Requestは、レビュアーが目的と影響を短時間で確認でき�
 ## セキュリティ上の問題
 
 APIキー漏えい、認証回避、任意コード実行など、悪用可能な問題をPublic Issueへ詳細に投稿しないでください。
-GitHubのPrivate vulnerability reportingが利用できる場合はそれを使用し、利用できない場合は
-機密情報を含めずにMaintainerへ非公開の連絡方法を確認してください。
+Maintainerへ非公開の連絡方法を確認し、再現情報やSecretはPrivate Channelで共有してください。
 
 ## ライセンス
 

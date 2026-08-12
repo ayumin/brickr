@@ -40,6 +40,9 @@ const errorResponses = {
   "500": { $ref: "#/components/responses/InternalError" },
 };
 
+/** OpenAPI marker for routes guarded by the httpOnly session cookie. */
+const sessionSecurity: OpenAPIV3.SecurityRequirementObject[] = [{ cookieAuth: [] }];
+
 export const openApiDocument: OpenAPIV3.Document = {
   openapi: "3.0.3",
   info: {
@@ -47,10 +50,11 @@ export const openApiDocument: OpenAPIV3.Document = {
     version: "0.1.0",
     description:
       "Brickr — Post something. Watch the AIs bicker. Backend REST and Server-Sent Events API.\n\n" +
-      "Write operations (creating, updating and deleting posts, simulations and characters, and " +
-      "editing the user profile) require the session cookie issued by `/api/auth/login` or " +
-      "`/api/auth/signup`, and answer 401 without it. `/api/user-profile` also requires it, because " +
-      "it means the signed-in user's own profile. Other reads and the event stream are public.",
+      "Protected operations use the `brickr_session` httpOnly cookie issued by `/api/auth/login` or " +
+      "`/api/auth/signup`. They answer 401 without a valid session. Account administration, invite " +
+      "codes and application settings additionally require an administrator; character and simulation " +
+      "lifecycle changes may require the creator or an administrator. Timeline/profile reads and the " +
+      "event stream are public unless an operation explicitly declares `cookieAuth` below.",
   },
   servers: [{ url: "/", description: "Current Backend origin" }],
   tags: [
@@ -159,6 +163,7 @@ export const openApiDocument: OpenAPIV3.Document = {
     "/api/users/management": {
       get: {
         operationId: "listUserManagement",
+        security: sessionSecurity,
         tags: ["Users"],
         summary: "List and search accounts for the admin management table",
         description:
@@ -190,6 +195,7 @@ export const openApiDocument: OpenAPIV3.Document = {
     "/api/users/{id}": {
       get: {
         operationId: "getUser",
+        security: sessionSecurity,
         tags: ["Users"],
         summary: "Get one account for the admin management table",
         description: "Admin-only (CLAUDE.md 66.15).",
@@ -207,6 +213,7 @@ export const openApiDocument: OpenAPIV3.Document = {
     "/api/users/{id}/suspend": {
       post: {
         operationId: "suspendUser",
+        security: sessionSecurity,
         tags: ["Users"],
         summary: "Suspend an account",
         description:
@@ -225,6 +232,7 @@ export const openApiDocument: OpenAPIV3.Document = {
     "/api/users/{id}/reactivate": {
       post: {
         operationId: "reactivateUser",
+        security: sessionSecurity,
         tags: ["Users"],
         summary: "Reactivate a suspended account",
         description: "Admin-only (CLAUDE.md 66.12).",
@@ -242,6 +250,7 @@ export const openApiDocument: OpenAPIV3.Document = {
     "/api/users/{id}/reset-password": {
       post: {
         operationId: "resetUserPassword",
+        security: sessionSecurity,
         tags: ["Users"],
         summary: "Issue a temporary password",
         description:
@@ -260,6 +269,7 @@ export const openApiDocument: OpenAPIV3.Document = {
     "/api/users/{id}/characters": {
       get: {
         operationId: "listUserCharacters",
+        security: sessionSecurity,
         tags: ["Users"],
         summary: "List characters created by this account",
         description: "Admin-only (CLAUDE.md 66.5, 66.15). Includes the account's deleted characters too.",
@@ -277,6 +287,7 @@ export const openApiDocument: OpenAPIV3.Document = {
     "/api/users/{id}/token-usage": {
       get: {
         operationId: "getUserTokenUsage",
+        security: sessionSecurity,
         tags: ["Users"],
         summary: "Get this account's LLM token usage",
         description:
@@ -295,6 +306,7 @@ export const openApiDocument: OpenAPIV3.Document = {
     "/api/invite-codes": {
       post: {
         operationId: "createInviteCode",
+        security: sessionSecurity,
         tags: ["Auth"],
         summary: "Issue a single-use invite code",
         description:
@@ -310,6 +322,7 @@ export const openApiDocument: OpenAPIV3.Document = {
       },
       get: {
         operationId: "listInviteCodes",
+        security: sessionSecurity,
         tags: ["Auth"],
         summary: "List issued invite codes and their usage status",
         description: "Admin-only (CLAUDE.md 66.9, 66.15).",
@@ -348,49 +361,13 @@ export const openApiDocument: OpenAPIV3.Document = {
     "/api/application-settings": {
       get: {
         operationId: "getApplicationSettings",
+        security: sessionSecurity,
         tags: ["System", "Models"],
         summary: "Get safe application settings and in-process LLM usage",
         description:
           "Admin-only (CLAUDE.md 66.16). Returns an allowlisted view of environment configuration. API key values and database credentials are never included. Token usage resets when the backend process restarts.",
         responses: {
-          "200": jsonResponse("Application settings", {
-            type: "object",
-            required: ["environment", "llm"],
-            properties: {
-              environment: {
-                type: "array",
-                items: {
-                  type: "object",
-                  required: ["name", "description", "value", "secret", "editable", "source", "inputType"],
-                  properties: {
-                    name: { type: "string" },
-                    description: { type: "string" },
-                    value: { type: "string" },
-                    secret: { type: "boolean" },
-                    editable: { type: "boolean" },
-                    source: { type: "string", enum: ["environment", "override"] },
-                    inputType: { type: "string", enum: ["text", "number", "toggle"] },
-                  },
-                },
-              },
-              llm: {
-                type: "object",
-                required: ["providers", "models", "usage"],
-                properties: {
-                  providers: { type: "array", items: { type: "object" } },
-                  models: { type: "array", items: ref("ModelProfile") },
-                  usage: {
-                    type: "object",
-                    required: ["trackedSince", "entries"],
-                    properties: {
-                      trackedSince: { type: "string", format: "date-time" },
-                      entries: { type: "array", items: { type: "object" } },
-                    },
-                  },
-                },
-              },
-            },
-          }),
+          "200": jsonResponse("Application settings", ref("ApplicationSettingsResponse")),
           "401": { $ref: "#/components/responses/Unauthorized" },
           "403": { $ref: "#/components/responses/Forbidden" },
           "500": errorResponses["500"],
@@ -398,24 +375,13 @@ export const openApiDocument: OpenAPIV3.Document = {
       },
       put: {
         operationId: "updateApplicationSettings",
+        security: sessionSecurity,
         tags: ["System", "Models"],
         summary: "Save or remove editable application setting overrides",
         description: "Admin-only (CLAUDE.md 66.16).",
-        requestBody: jsonBody({
-          type: "object",
-          required: ["overrides"],
-          properties: {
-            overrides: {
-              type: "object",
-              additionalProperties: {
-                type: "string",
-                nullable: true,
-              },
-            },
-          },
-        }),
+        requestBody: jsonBody(ref("UpdateApplicationSettingsRequest")),
         responses: {
-          "200": jsonResponse("Updated application settings", { type: "object" }),
+          "200": jsonResponse("Updated application settings", ref("ApplicationSettingsResponse")),
           "400": errorResponses["400"],
           "401": { $ref: "#/components/responses/Unauthorized" },
           "403": { $ref: "#/components/responses/Forbidden" },
@@ -439,6 +405,7 @@ export const openApiDocument: OpenAPIV3.Document = {
       },
       post: {
         operationId: "createCharacter",
+        security: sessionSecurity,
         tags: ["Characters"],
         summary: "Create a character",
         description:
@@ -494,9 +461,11 @@ export const openApiDocument: OpenAPIV3.Document = {
     "/api/characters/import": {
       post: {
         operationId: "importCharactersCsv",
+        security: sessionSecurity,
         tags: ["Characters"],
         summary: "Create or update characters from an exported CSV",
-        description: "Matches existing characters by ID or handle. The postCount column is ignored.",
+        description:
+          "Requires a signed-in user. Matches existing characters by ID or handle and ignores the postCount column. The current import service is a trusted bulk-maintenance operation: it does not apply per-row owner checks and imported new rows are system-owned.",
         requestBody: jsonBody({
           type: "object",
           required: ["csv"],
@@ -513,6 +482,7 @@ export const openApiDocument: OpenAPIV3.Document = {
             },
           }),
           "400": errorResponses["400"],
+          "401": { $ref: "#/components/responses/Unauthorized" },
           "500": errorResponses["500"],
         },
       },
@@ -534,6 +504,7 @@ export const openApiDocument: OpenAPIV3.Document = {
       },
       put: {
         operationId: "updateCharacter",
+        security: sessionSecurity,
         tags: ["Characters"],
         summary: "Update a character",
         description: "The creator or an admin only (CLAUDE.md 66.5).",
@@ -552,6 +523,7 @@ export const openApiDocument: OpenAPIV3.Document = {
       },
       delete: {
         operationId: "deleteCharacter",
+        security: sessionSecurity,
         tags: ["Characters"],
         summary: "Delete a character",
         description: "The creator or an admin only (CLAUDE.md 66.5).",
@@ -597,6 +569,7 @@ export const openApiDocument: OpenAPIV3.Document = {
     "/api/characters/{id}/restore": {
       post: {
         operationId: "restoreCharacter",
+        security: sessionSecurity,
         tags: ["Characters"],
         summary: "Restore a logically deleted character",
         description: "The creator or an admin only (CLAUDE.md 66.5).",
@@ -616,6 +589,7 @@ export const openApiDocument: OpenAPIV3.Document = {
     "/api/characters/bulk-create": {
       post: {
         operationId: "bulkCreateCharacters",
+        security: sessionSecurity,
         tags: ["Characters"],
         summary: "Start bulk character generation",
         description:
@@ -656,6 +630,7 @@ export const openApiDocument: OpenAPIV3.Document = {
     "/api/characters/bulk-delete": {
       post: {
         operationId: "bulkDeleteCharacters",
+        security: sessionSecurity,
         tags: ["Characters"],
         summary: "Delete multiple characters",
         description:
@@ -707,6 +682,7 @@ export const openApiDocument: OpenAPIV3.Document = {
     "/api/user-profile": {
       get: {
         operationId: "getUserProfile",
+        security: sessionSecurity,
         tags: ["User"],
         summary: "Get the human user profile",
         responses: {
@@ -722,6 +698,7 @@ export const openApiDocument: OpenAPIV3.Document = {
       },
       put: {
         operationId: "updateUserProfile",
+        security: sessionSecurity,
         tags: ["User"],
         summary: "Update the human user profile",
         requestBody: jsonBody(ref("SaveUserProfile")),
@@ -732,6 +709,8 @@ export const openApiDocument: OpenAPIV3.Document = {
             properties: { profile: ref("UserProfile") },
           }),
           "400": errorResponses["400"],
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "404": errorResponses["404"],
           "500": errorResponses["500"],
         },
       },
@@ -739,6 +718,7 @@ export const openApiDocument: OpenAPIV3.Document = {
     "/api/user-profile/token-usage": {
       get: {
         operationId: "getOwnTokenUsage",
+        security: sessionSecurity,
         tags: ["User"],
         summary: "Get the signed-in user's own LLM token usage",
         description:
@@ -768,6 +748,7 @@ export const openApiDocument: OpenAPIV3.Document = {
       },
       post: {
         operationId: "createSimulation",
+        security: sessionSecurity,
         tags: ["Simulations"],
         summary: "Create a simulation",
         requestBody: jsonBody(
@@ -784,6 +765,7 @@ export const openApiDocument: OpenAPIV3.Document = {
             properties: { simulation: ref("Simulation") },
           }),
           "400": errorResponses["400"],
+          "401": { $ref: "#/components/responses/Unauthorized" },
           "500": errorResponses["500"],
         },
       },
@@ -808,6 +790,7 @@ export const openApiDocument: OpenAPIV3.Document = {
       },
       put: {
         operationId: "updateSimulation",
+        security: sessionSecurity,
         tags: ["Simulations"],
         summary: "Rename a simulation",
         description: "Creator or admin only (CLAUDE.md 66.6).",
@@ -832,6 +815,7 @@ export const openApiDocument: OpenAPIV3.Document = {
     "/api/simulations/{id}/analysis": {
       get: {
         operationId: "analyzeSimulation",
+        security: sessionSecurity,
         tags: ["Simulations"],
         summary: "Analyze posts in a simulation",
         description:
@@ -852,6 +836,7 @@ export const openApiDocument: OpenAPIV3.Document = {
     "/api/simulations/{id}/stop": {
       post: {
         operationId: "stopSimulation",
+        security: sessionSecurity,
         tags: ["Simulations"],
         summary: "Stop response generation",
         description: "Creator or admin only (CLAUDE.md 66.6).",
@@ -871,6 +856,7 @@ export const openApiDocument: OpenAPIV3.Document = {
     "/api/simulations/{id}/resume": {
       post: {
         operationId: "resumeSimulation",
+        security: sessionSecurity,
         tags: ["Simulations"],
         summary: "Resume response generation",
         description: "Creator or admin only (CLAUDE.md 66.6).",
@@ -904,6 +890,7 @@ export const openApiDocument: OpenAPIV3.Document = {
       },
       post: {
         operationId: "createPost",
+        security: sessionSecurity,
         tags: ["Posts"],
         summary: "Create a user post and start AI responses",
         description:
@@ -916,6 +903,7 @@ export const openApiDocument: OpenAPIV3.Document = {
             required: ["post"],
             properties: { post: ref("Post") },
           }),
+          "401": { $ref: "#/components/responses/Unauthorized" },
           ...errorResponses,
         },
       },
@@ -955,6 +943,15 @@ export const openApiDocument: OpenAPIV3.Document = {
     },
   },
   components: {
+    securitySchemes: {
+      cookieAuth: {
+        type: "apiKey",
+        in: "cookie",
+        name: "brickr_session",
+        description:
+          "Opaque httpOnly session cookie issued by signup/login. Browsers attach it automatically; clients must preserve cookies between requests.",
+      },
+    },
     responses: {
       BadRequest: jsonResponse("Invalid request parameters or body", ref("ApiError")),
       Unauthorized: jsonResponse("Authentication is required or has failed", ref("ApiError")),
@@ -1148,6 +1145,105 @@ export const openApiDocument: OpenAPIV3.Document = {
           model: { type: "string" },
         },
       },
+      EnvironmentSetting: {
+        type: "object",
+        required: ["name", "description", "value", "secret", "editable", "source", "inputType"],
+        properties: {
+          name: { type: "string" },
+          description: { type: "string" },
+          value: { type: "string" },
+          secret: {
+            type: "boolean",
+            description: "True when value only reports configured/unconfigured state.",
+          },
+          editable: { type: "boolean" },
+          source: { type: "string", enum: ["environment", "override"] },
+          inputType: { type: "string", enum: ["text", "number", "toggle"] },
+        },
+      },
+      LLMProviderSetting: {
+        type: "object",
+        required: ["providerId", "available", "defaultModel"],
+        properties: {
+          providerId: { type: "string", enum: ["openai", "anthropic", "gemini", "mock"] },
+          available: { type: "boolean" },
+          defaultModel: { type: "string" },
+        },
+      },
+      LLMTokenUsage: {
+        type: "object",
+        required: [
+          "providerId",
+          "model",
+          "requestCount",
+          "inputTokens",
+          "outputTokens",
+          "totalTokens",
+          "estimatedCostUsd",
+        ],
+        properties: {
+          providerId: { type: "string", enum: ["openai", "anthropic", "gemini", "mock"] },
+          model: { type: "string" },
+          requestCount: { type: "integer", minimum: 0 },
+          inputTokens: { type: "integer", minimum: 0 },
+          outputTokens: { type: "integer", minimum: 0 },
+          totalTokens: { type: "integer", minimum: 0 },
+          estimatedCostUsd: {
+            type: "number",
+            minimum: 0,
+            nullable: true,
+            description: "Null when the model has no price entry.",
+          },
+        },
+      },
+      ApplicationSettingsResponse: {
+        type: "object",
+        required: ["environment", "llm"],
+        properties: {
+          environment: { type: "array", items: ref("EnvironmentSetting") },
+          llm: {
+            type: "object",
+            required: ["providers", "models", "usage"],
+            properties: {
+              providers: { type: "array", items: ref("LLMProviderSetting") },
+              models: { type: "array", items: ref("ModelProfile") },
+              usage: {
+                type: "object",
+                required: ["trackedSince", "entries"],
+                properties: {
+                  trackedSince: { type: "string", format: "date-time" },
+                  entries: { type: "array", items: ref("LLMTokenUsage") },
+                },
+              },
+            },
+          },
+        },
+      },
+      UpdateApplicationSettingsRequest: {
+        type: "object",
+        required: ["overrides"],
+        properties: {
+          overrides: {
+            type: "object",
+            minProperties: 1,
+            additionalProperties: false,
+            description:
+              "A string saves an override; null removes it and restores the environment value. Numeric settings are represented as decimal strings.",
+            properties: {
+              OPENAI_MODEL: { type: "string", nullable: true, maxLength: 200 },
+              ANTHROPIC_MODEL: { type: "string", nullable: true, maxLength: 200 },
+              GEMINI_MODEL: { type: "string", nullable: true, maxLength: 200 },
+              LLM_TIMEOUT_MS: { type: "string", nullable: true, maxLength: 200 },
+              LLM_MAX_RETRIES: { type: "string", nullable: true, maxLength: 200 },
+              MIN_RESPONDERS: { type: "string", nullable: true, maxLength: 200 },
+              MAX_RESPONDERS: { type: "string", nullable: true, maxLength: 200 },
+              CONTEXT_POST_LIMIT: { type: "string", nullable: true, maxLength: 200 },
+              MAX_CONCURRENT_CHARACTERS: { type: "string", nullable: true, maxLength: 200 },
+              MAX_CASCADE_DEPTH: { type: "string", nullable: true, maxLength: 200 },
+            },
+          },
+        },
+      },
       AuthUser: {
         type: "object",
         description:
@@ -1250,7 +1346,7 @@ export const openApiDocument: OpenAPIV3.Document = {
       UserCharactersResponse: {
         type: "object",
         description:
-          "Always empty until Character ownership (createdByUserId) ships; the shape is stable ahead of that.",
+          "Characters created by the selected account, including logically deleted rows. Available to administrators only.",
         required: ["characters"],
         properties: {
           characters: { type: "array", items: ref("CharacterManagement") },
@@ -1258,7 +1354,8 @@ export const openApiDocument: OpenAPIV3.Document = {
       },
       UserTokenUsageResponse: {
         type: "object",
-        description: "Always zeroed until per-user LLM token tracking ships.",
+        description:
+          "Persistent running totals for generations triggered by this user. Returns zeroes when no usage has been recorded.",
         required: ["totalInputTokens", "totalOutputTokens", "totalTokens"],
         properties: {
           totalInputTokens: { type: "integer", minimum: 0 },
