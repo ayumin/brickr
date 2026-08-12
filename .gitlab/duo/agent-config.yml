@@ -1,0 +1,23 @@
+# GitLab Duo Agent configuration
+# Provisions tooling required for the agent to run tests and build the project.
+
+tools:
+  - name: node
+    version: "22"
+
+  - name: corepack
+    # Enables pnpm via Node's built-in corepack shim
+    setup:
+      - corepack enable
+      - corepack prepare pnpm@11.21.0 --activate
+
+  - name: pnpm
+    version: "11.21.0"
+    # Install all workspace dependencies (mirrors the CI .node-setup step)
+    setup:
+      - pnpm config set store-dir .pnpm-store
+      - pnpm install --frozen-lockfile
+
+  - name: vitest
+    # vitest is a devDependency of @brickr/frontend; available after pnpm install
+    # Run frontend tests with: pnpm --filter @brickr/frontend test
