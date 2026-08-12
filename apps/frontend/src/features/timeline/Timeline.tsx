@@ -183,6 +183,12 @@ export type TimelineProps = {
   /** Detail view starts with this post's replies and reposts open. */
   initialExpandedPostId?: string;
   rootPostShowQuotedPost?: boolean;
+  /**
+   * False in the post detail view: the root post is already the focus of the
+   * page, so its header expand icon is redundant and would sit uncomfortably
+   * close to the expand icon on any embedded quoted post.
+   */
+  rootPostExpandable?: boolean;
 };
 
 export function Timeline({
@@ -201,6 +207,7 @@ export function Timeline({
   onOpenPost,
   initialExpandedPostId,
   rootPostShowQuotedPost = true,
+  rootPostExpandable = true,
 }: TimelineProps) {
   const [expandedReplies, setExpandedReplies] = useState<ReadonlySet<string>>(
     () => new Set(initialExpandedPostId ? [initialExpandedPostId] : []),
@@ -426,7 +433,7 @@ export function Timeline({
                 knownHandles={knownHandles}
                 onOpenAuthor={onOpenAuthor}
                 onOpenHandle={openHandle}
-                onExpand={onOpenPost}
+                {...(rootPostExpandable ? { onExpand: onOpenPost } : {})}
                 showQuotedPost={rootPostShowQuotedPost}
                 replyCount={replyCount}
                 repostCount={repostCount}

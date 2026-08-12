@@ -75,6 +75,7 @@ export function PostDetail({
         onPosted={onPosted}
         initialExpandedPostId={post.id}
         rootPostShowQuotedPost={post.replyTo === null}
+        rootPostExpandable={false}
       />
     </section>
   );
