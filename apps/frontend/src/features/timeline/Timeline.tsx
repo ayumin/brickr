@@ -152,8 +152,8 @@ function RepostRow({
 function EmptyState({ title, body }: { title: string; body: string }) {
   return (
     <div className="px-6 py-16 text-center">
-      <p className="text-2xl text-flame">
-        <Icon name="fire" />
+      <p className="text-2xl text-ink-faint">
+        <Icon name="chat-dots" />
       </p>
       <p className="mt-3 font-semibold text-ink">{title}</p>
       <p className="mx-auto mt-2 max-w-sm text-sm whitespace-pre-line text-ink-muted">
