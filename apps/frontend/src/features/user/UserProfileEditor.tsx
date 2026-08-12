@@ -298,9 +298,11 @@ function EnvironmentPanel({ settings, loading, onUpdated }: SettingsPanelProps &
                 <td className="w-1/2 px-4 py-3 align-top">
                   <span className="block font-mono text-xs text-ink">{item.name}</span>
                   <span className="mt-1 block text-xs font-normal leading-relaxed text-ink-faint">{item.description}</span>
-                  <span className={`mt-1.5 inline-block rounded-full px-2 py-0.5 text-[10px] ${item.source === "override" ? "bg-accent/15 text-accent" : "bg-surface-muted text-ink-faint"}`}>
-                    {item.source === "override" ? "画面設定" : "環境変数"}
-                  </span>
+                  {item.source === "override" ? (
+                    <span className="mt-1.5 inline-block rounded-full bg-accent/15 px-2 py-0.5 text-[10px] text-accent">
+                      画面設定
+                    </span>
+                  ) : null}
                 </td>
                 <td className="px-4 py-3 align-top">
                   {item.inputType === "toggle" ? (
