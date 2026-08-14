@@ -262,6 +262,7 @@ function makeHarness(options: HarnessOptions): Harness {
     },
     logger,
     tokenUsage,
+    threadActivity,
   );
 
   return { service, events, posts, generationCalls, threadSnapshots, tokenUsageRecords };

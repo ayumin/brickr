@@ -384,20 +384,16 @@ export class SimulationService {
     const simulationId = target.simulationId;
     if (this.stopped.has(simulationId)) return null;
 
-    this.events.publish({
-      type: "character.processing",
-      simulationId,
-      targetPostId: target.id,
-      characterId: character.id,
-      handle: character.handle,
-      displayName: character.displayName,
-    });
+    // The activity, not the character: subscribers learn that *a* response is
+    // being generated, never whose (§11.2). The id exists only to pair the finish
+    // with this start; everything worth investigating goes to the log below.
+    const activity = this.beginResponse(target);
+    let outcome: ResponseOutcome = "skipped";
 
     try {
       // Context is read immediately before the LLM call (CLAUDE.md §32).
       const thread = await this.threads.getCurrentThread(target.id);
       if (!thread) {
-        this.publishSkipped(simulationId, character.id);
         return null;
       }
 

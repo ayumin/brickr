@@ -230,31 +230,29 @@ export function Timeline({
   const repostIndex = useMemo(() => buildRepostIndex(allPosts), [allPosts]);
   const postsById = useMemo(() => indexPostsById(allPosts), [allPosts]);
 
-  const thinkingByTarget = useMemo(() => {
-    const index = new Map<string, ThinkingCharacter[]>();
-    for (const character of thinking) {
-      const current = index.get(character.targetPostId);
-      if (current) current.push(character);
-      else index.set(character.targetPostId, [character]);
+  const activityCountByTarget = useMemo(() => {
+    const index = new Map<string, number>();
+    for (const activity of activities) {
+      index.set(activity.targetPostId, (index.get(activity.targetPostId) ?? 0) + 1);
     }
     return index;
-  }, [thinking]);
+  }, [activities]);
 
   // A cascade may start while its target is inside a collapsed reply thread.
   // Reveal that thread so the indicator can stay directly below its target.
   useEffect(() => {
-    if (thinking.length === 0) return;
+    if (activities.length === 0) return;
     const visibleRoots = new Set(visibleRootPosts.map((post) => post.id));
     const rootsToExpand = new Set<string>();
 
-    for (const character of thinking) {
-      let post = postsById.get(character.targetPostId);
+    for (const activity of activities) {
+      let post = postsById.get(activity.targetPostId);
       const visited = new Set<string>();
       while (post?.replyTo && !visited.has(post.id)) {
         visited.add(post.id);
         post = postsById.get(post.replyTo);
       }
-      if (post && visibleRoots.has(post.id) && post.id !== character.targetPostId) {
+      if (post && visibleRoots.has(post.id) && post.id !== activity.targetPostId) {
         rootsToExpand.add(post.id);
       }
     }
