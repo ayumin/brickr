@@ -524,6 +524,20 @@ describe("FeedService room feed (§10.2, §10.4)", () => {
     expect(asAdmin.threads).toHaveLength(1);
   });
 
+  /** Both scopes reach the repository together, so it can narrow its lookups (§26). */
+  it("asks for the room and the mine filter in one query description", async () => {
+    const { service, spies } = makeHarness({ posts: [post({ id: "root-1" })] });
+
+    await service.getRoomFeed(ROOM.id, { reader: READER, filter: "mine" });
+
+    expect(spies.findThreadPage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        simulationId: ROOM.id,
+        mine: { userId: READER.id, handle: READER.handle },
+      }),
+    );
+  });
+
   it("reports an unknown room as not found", async () => {
     const { service } = makeHarness({ posts: [] });
 

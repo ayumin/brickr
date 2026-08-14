@@ -180,18 +180,29 @@ export class FeedRepository {
    * through (§8.3), so the thread ids are collected first and matched by id.
    *
    * Two queries regardless of page size, and none of them per thread.
+   *
+   * A room-scoped caller narrows both lookups to that room as well. It changes no
+   * result — a thread never spans simulations, since a reply is refused unless its
+   * target belongs to the same one (§10.5) — but without it one room's "自分あて"
+   * would read every reply and every mention in the database to build a list that
+   * the outer query then throws away (§26).
    */
-  private async concerningUser(mine: FeedMineScope): Promise<Prisma.PostWhereInput> {
+  private async concerningUser(
+    mine: FeedMineScope,
+    simulationId?: string,
+  ): Promise<Prisma.PostWhereInput> {
+    const room = simulationId === undefined ? {} : { simulationId };
+
     const [answered, mentioned] = await Promise.all([
       // A reply whose parent I wrote. Having merely posted in the thread does
       // not count, or `mine` would collapse into `all`.
       this.db.post.findMany({
-        where: { replyTo: { not: null }, replyToPost: { authorId: mine.userId } },
+        where: { ...room, replyTo: { not: null }, replyToPost: { authorId: mine.userId } },
         select: { threadRootId: true },
         distinct: ["threadRootId"],
       }),
       this.db.post.findMany({
-        where: { mentions: { has: mine.handle } },
+        where: { ...room, mentions: { has: mine.handle } },
         select: { threadRootId: true },
         distinct: ["threadRootId"],
       }),
