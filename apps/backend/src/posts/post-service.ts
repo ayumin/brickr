@@ -19,18 +19,6 @@ export type PublishInput = {
 };
 
 /**
- * A reply whose parent cannot be read back. Callers validate the target first,
- * so this only fires if it disappeared in between — in which case the thread
- * information would be a guess, and inventing a root is worse than failing.
- */
-export class ReplyTargetNotFoundError extends Error {
-  constructor(id: string) {
-    super(`reply target "${id}" not found`);
-    this.name = "ReplyTargetNotFoundError";
-  }
-}
-
-/**
  * Creating and reading posts, including mention extraction and DTO mapping.
  * Every post — user, character, reply, quote — goes through `publish`.
  */
@@ -56,10 +44,6 @@ export class PostService {
     // The id is minted here, before the insert, so a top-level post can store
     // `threadRootId = id` in one write instead of an insert plus an update (§8.3).
     const id = randomUUID();
-    const replyTo = input.replyTo ?? null;
-
-    // A quote repost starts its own thread, so only a reply inherits a root.
-    const threadRootId = replyTo === null ? id : await this.resolveThreadRoot(replyTo);
 
     const newPost: NewPost = {
       id,
@@ -68,19 +52,14 @@ export class PostService {
       content: input.content,
       ...(input.imageUrl ? { imageUrl: input.imageUrl } : {}),
       mentions,
-      replyTo,
+      replyTo: input.replyTo ?? null,
       quoteOf: input.quoteOf ?? null,
-      threadRootId,
     };
 
+    // The thread root and both activity timestamps are resolved inside the write
+    // transaction (§8.4), so nothing here can describe a thread that has since
+    // changed.
     return this.posts.createWithThreadActivity(newPost);
-  }
-
-  /** A reply to a reply belongs to the same root, however deep the chain runs. */
-  private async resolveThreadRoot(replyTo: string): Promise<string> {
-    const parent = await this.posts.findById(replyTo);
-    if (!parent) throw new ReplyTargetNotFoundError(replyTo);
-    return parent.threadRootId;
   }
 
   async findById(id: string): Promise<Post | null> {

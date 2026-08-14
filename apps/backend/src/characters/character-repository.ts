@@ -242,11 +242,16 @@ export class CharacterRepository {
         await tx.character.deleteMany({ where: { id: { in: ids } } });
         await releaseHandles(tx, "character", ids);
 
-        await repairThreads(
-          tx,
-          orphans.map((post) => post.id),
-          [...new Set(doomed.map((post) => post.simulationId))],
-        );
+        await repairThreads(tx, {
+          newRootIds: orphans.map((post) => post.id),
+          // A root that outlives the reply deleted under it keeps crediting
+          // activity that has just moved to another thread, so it is re-dated
+          // too. Roots deleted in this same call have nothing left to repair.
+          detachedRootIds: [...new Set(doomed.map((post) => post.threadRootId))].filter(
+            (rootId) => !doomedIds.has(rootId),
+          ),
+          simulationIds: [...new Set(doomed.map((post) => post.simulationId))],
+        });
       },
       { timeout: BULK_TRANSACTION_TIMEOUT_MS },
     );
