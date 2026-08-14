@@ -65,6 +65,8 @@ type HarnessOptions = {
   maxCascadeDepth?: number;
   /** Defaults to pushing onto `tokenUsageRecords`; override to simulate a recording failure. */
   recordTokenUsage?: (userId: string, usage: NonNullable<GeneratedPost["usage"]>) => Promise<void>;
+  /** Defaults to resolving `characters`; override to make the run fail before any post is generated. */
+  findAllCharacters?: () => Promise<Character[]>;
 };
 
 type TokenUsageRecord = { userId: string; usage: NonNullable<GeneratedPost["usage"]> };
@@ -105,7 +107,8 @@ function makeHarness(options: HarnessOptions): Harness {
   } as unknown as SimulationRepository;
 
   const characterRepository = {
-    findAll: (): Promise<Character[]> => Promise.resolve(options.characters),
+    findAll: (): Promise<Character[]> =>
+      options.findAllCharacters ? options.findAllCharacters() : Promise.resolve(options.characters),
   } as unknown as CharacterRepository;
 
   const authorById = new Map(options.characters.map((character) => [character.id, character]));
@@ -316,6 +319,35 @@ function collectUntilCompleted(events: EventHub): {
   return { received, completed };
 }
 
+type TerminalEvent = Extract<
+  InternalSseEvent,
+  { type: "generation.completed" | "generation.failed" }
+>;
+
+/**
+ * Like `collectUntilCompleted`, but resolves on whichever terminal event the run
+ * actually publishes — a failed run never publishes `generation.completed`.
+ */
+function collectUntilTerminal(events: EventHub): {
+  received: InternalSseEvent[];
+  terminal: Promise<TerminalEvent>;
+} {
+  const received: InternalSseEvent[] = [];
+  let resolveTerminal: ((event: TerminalEvent) => void) | undefined;
+  const terminal = new Promise<TerminalEvent>((resolve) => {
+    resolveTerminal = resolve;
+  });
+
+  events.subscribe(SIMULATION.id, (event) => {
+    received.push(event);
+    if (event.type === "generation.completed" || event.type === "generation.failed") {
+      resolveTerminal?.(event);
+    }
+  });
+
+  return { received, terminal };
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -432,6 +464,42 @@ describe("SimulationService orchestration", () => {
       ]),
     );
     expect(JSON.stringify(stream.received)).not.toContain("provider unavailable");
+    // A partial failure is still a successful run: exactly one terminal event,
+    // and it is the completed one.
+    expect(stream.received.filter((event) => event.type === "generation.completed")).toHaveLength(
+      1,
+    );
+    expect(stream.received.some((event) => event.type === "generation.failed")).toBe(false);
+  });
+
+  it("publishes exactly one generation.failed when the run fails before any post is generated", async () => {
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    const alpha = makeCharacter("alpha");
+    const harness = makeHarness({
+      characters: [alpha],
+      findAllCharacters: () => Promise.reject(new Error("characters query failed")),
+    });
+    const stream = collectUntilTerminal(harness.events);
+
+    await harness.service.submitUserPost({
+      simulationId: SIMULATION.id,
+      authorId: USER_AUTHOR_ID,
+      content: "hello",
+      responderIds: [alpha.id],
+    });
+    const terminal = await stream.terminal;
+
+    expect(terminal.type).toBe("generation.failed");
+    expect(stream.received.filter((event) => event.type === "generation.completed")).toHaveLength(
+      0,
+    );
+    expect(stream.received.filter((event) => event.type === "generation.failed")).toHaveLength(1);
+    // The user's own post is unaffected by the character-generation failure.
+    expect(harness.posts.map((post) => post.authorId)).toEqual([USER_AUTHOR_ID]);
+    expect(harness.threadActivityCalls).toEqual(["post-1"]);
+    // The reason is carried internally but never reaches a subscriber (§11.2) —
+    // asserted at the public-conversion boundary in public-events.test.ts.
+    expect(terminal).toMatchObject({ reason: "characters query failed" });
   });
 
   it("cascades from a generated mention using that character post as the next target", async () => {

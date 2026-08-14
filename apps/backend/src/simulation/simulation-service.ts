@@ -209,26 +209,17 @@ export class SimulationService {
     await this.emitPostCreated(post);
 
     // Fire and forget: the HTTP response returns now, posts stream over SSE.
-    void this.runGeneration(post, input.responderIds).catch((error: unknown) => {
-      this.logger.error(
-        { simulationId: input.simulationId, err: describe(error) },
-        "simulation run failed",
-      );
-      // Internal only: the reason names the provider or model that failed, which
-      // would say out loud that the author is an AI (§11.2). Subscribers learn
-      // about failures through `response.finished` outcomes instead.
-      this.events.publish(input.simulationId, {
-        type: "generation.failed",
-        simulationId: input.simulationId,
-        reason: describe(error),
-      });
-    });
+    // `runGeneration` reports its own outcome and does not reject; this `.catch`
+    // is a last resort so a failure in the reporting itself cannot become an
+    // unhandled rejection.
+    void this.runGeneration(post, input.responderIds).catch(() => undefined);
 
     return post;
   }
 
   // -- generation -----------------------------------------------------------
 
+  /** Publishes exactly one of `generation.completed` / `generation.failed` per run. */
   private async runGeneration(triggerPost: Post, explicitIds: string[]): Promise<void> {
     const generatedIds: string[] = [];
     const budget = { remaining: MAX_POSTS_PER_SUBMISSION };
@@ -256,12 +247,25 @@ export class SimulationService {
         // characters deep — is billed to the human who started it (§66.4).
         billingUserId: triggerPost.authorId,
       });
-    } finally {
+
       this.events.publish(triggerPost.simulationId, {
         type: "generation.completed",
         simulationId: triggerPost.simulationId,
         triggerPostId: triggerPost.id,
         generatedPostIds: generatedIds,
+      });
+    } catch (error) {
+      this.logger.error(
+        { simulationId: triggerPost.simulationId, err: describe(error) },
+        "simulation run failed",
+      );
+      // Internal only: the reason names the provider or model that failed, which
+      // would say out loud that the author is an AI (§11.2). Subscribers learn
+      // about failures through `response.finished` outcomes instead.
+      this.events.publish(triggerPost.simulationId, {
+        type: "generation.failed",
+        simulationId: triggerPost.simulationId,
+        reason: describe(error),
       });
     }
   }
