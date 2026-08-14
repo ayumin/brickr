@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { ModelProfileRepository } from "../model-profiles/model-profile-repository.js";
 import type { ModelProfile } from "../model-profiles/model-profile.js";
 import type { CharacterRepository } from "./character-repository.js";
+import type { CharacterActor } from "./character-dto.js";
 import {
   CharacterGenerationError,
   type CharacterPersonaGenerator,
@@ -13,7 +14,6 @@ import {
   CharacterHandleConflictError,
   CharacterNotFoundError,
   CharacterService,
-  type CharacterActor,
   ModelProfileNotFoundError,
 } from "./character-service.js";
 import type { Character, SaveCharacter } from "./character.js";
