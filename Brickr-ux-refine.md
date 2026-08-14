@@ -855,6 +855,7 @@ Dark基準：
 --color-accent-soft: #2b1712;
 --color-live: #6fae7f;
 --color-danger: #e0665c;
+--color-warn: #e0a34a;
 ```
 
 Light基準：
@@ -874,9 +875,12 @@ Light基準：
 --color-accent-soft: #f9ece7;
 --color-live: #3f7f52;
 --color-danger: #c0392b;
+--color-warn: #8a5a10;
 ```
 
 実装時はWCAG AAを確認し、特に `ink-faint` とaccent textは必要ならプロトタイプ値から調整する。
+
+`--color-warn` はプロトタイプのパレットには対応する色が無いが、`ErrorBanner` のwarning tone、SSE再接続表示、生成失敗表示がすでに使用しているため semantic token として維持する。これを削るとcomponent側がhex直書きに戻るため、上記の「コンポーネント内へhexを直接書かない」に反する。`text-warn` としてtextに使うので、他のtext色と同様に4階層すべてでWCAG AAを満たす値とする。
 
 ### 15.2 Theme
 

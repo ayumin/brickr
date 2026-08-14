@@ -46,6 +46,11 @@
  * expects adjustment), so four values are nudged from it; each is marked with its
  * measured ratio and the prototype value it replaces. Surface, line and *-soft
  * tokens are backgrounds and borders, so they are not held to a text ratio.
+ *
+ * `warn` has no counterpart in the prototype palette. It is kept because the
+ * warning tone, the reconnecting indicator and the generation-failure line
+ * already read it (§15.1), and it is used as text, so it is held to the same
+ * ratio as the rest.
  */
 @theme {
   --color-canvas: #100f13;
@@ -105,6 +110,7 @@
  *   accent     #d86a42   4.54-5.51   AA  (prototype #d4643c fell to 4.26 on hover)
  *   live       #6fae7f   6.02-7.31   AA
  *   danger     #e0665c   4.66-5.66   AA
+ *   warn       #e0a34a   7.12-8.65   AA
  *
  * accent-strong #b8501f is 3.31-3.82 here: it is the pressed/hover *fill* for an
  * accent surface, not a text colour, and white on it clears AA. Do not use it as
@@ -144,6 +150,7 @@ html[data-theme="brickr-dark"] {
  *   accent-strong #8d3817   6.30-7.75   AA
  *   live          #3a7449   4.52-5.56   AA  (prototype #3f7f52 fell to 3.91 on hover)
  *   danger        #b93427   4.76-5.86   AA  (prototype #c0392b fell to 4.42 on hover)
+ *   warn          #8a5a10   4.81-5.92   AA
  */
 html[data-theme="brickr-light"] {
   color-scheme: light;
