@@ -47,14 +47,12 @@ export function FeedScreen() {
             simulationId={GLOBAL_SIMULATION_ID}
             characters={[]}
             userProfile={userProfile.profile}
-            onPosted={(post) => {
-              // The Composer already called createPost and the SSE stream will
-              // deliver the thread update. `upsertThread` is not available here
-              // because the Composer only exposes the raw PostDto, not the full
-              // CreatePostResponse. A reload is the simplest guarantee that the
-              // new thread appears even if the SSE echo is delayed.
-              feed.reload();
-              void post;
+            onPosted={(_post, thread) => {
+              // Insert the new thread immediately from the CreatePostResponse,
+              // preserving any additional pages the user had already loaded via
+              // "さらに読み込む". The SSE echo will arrive shortly and upsert
+              // the same thread again, which is a no-op.
+              feed.upsertThread(thread);
             }}
           />
         </div>

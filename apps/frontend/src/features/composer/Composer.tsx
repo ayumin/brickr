@@ -4,6 +4,7 @@ import { MAX_IMAGE_BYTES, MAX_POST_LENGTH } from "@brickr/shared";
 import type {
   CharacterDto,
   CreatePostRequest,
+  FeedThreadDto,
   PostDto,
   UserProfileDto,
 } from "@brickr/shared";
@@ -26,7 +27,7 @@ export type ComposerProps = {
   userProfile: UserProfileDto;
   disabled?: boolean;
   disabledReason?: string;
-  onPosted: (post: PostDto) => void;
+  onPosted: (post: PostDto, thread: FeedThreadDto) => void;
   /** Clicking the user's avatar returns to the unified home timeline. */
   onOpenUser?: () => void;
   /**
@@ -112,9 +113,9 @@ export function Composer({
     };
 
     try {
-      const { post } = await api.createPost(simulationId, request);
+      const { post, thread } = await api.createPost(simulationId, request);
       // Show the user's own post immediately; SSE brings the characters later.
-      onPosted(post);
+      onPosted(post, thread);
       setContent("");
       setImageUrl(null);
       onCancel?.();

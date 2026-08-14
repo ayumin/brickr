@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { CharacterDto, PostDto, UserProfileDto } from "@brickr/shared";
+import type { CharacterDto, FeedThreadDto, PostDto, UserProfileDto } from "@brickr/shared";
 
 import { Avatar } from "../../components/Avatar";
 import { Icon } from "../../components/Icon";
@@ -180,7 +180,7 @@ export type TimelineProps = {
   /** False when the simulation is stopped: no reply / repost composers. */
   canPost: boolean;
   onOpenAuthor: (authorId: string) => void;
-  onPosted: (post: PostDto) => void;
+  onPosted: (post: PostDto, thread: FeedThreadDto) => void;
   onOpenPost: (postId: string) => void;
   /** Detail view starts with this post's replies and reposts open. */
   initialExpandedPostId?: string;
@@ -325,8 +325,8 @@ export function Timeline({
    * After an inline post, reveal it: a reply lands inside the target's thread
    * and a repost inside the target's repost list, both of which may be closed.
    */
-  const handleInlinePosted = (post: PostDto): void => {
-    onPosted(post);
+  const handleInlinePosted = (post: PostDto, thread: FeedThreadDto): void => {
+    onPosted(post, thread);
     const repliedTo = post.replyTo;
     if (repliedTo !== null) {
       setExpandedReplies((current) => new Set(current).add(repliedTo));

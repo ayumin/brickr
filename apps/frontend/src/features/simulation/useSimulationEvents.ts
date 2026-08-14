@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useReducer, useState } from "react";
-import type { PostDto, SseEvent } from "@brickr/shared";
+import type { FeedThreadDto, PostDto, SseEvent } from "@brickr/shared";
 
 import { api, isAbortError, toErrorMessage } from "../../services/api-client";
 import { subscribeToSimulationEvents } from "../../services/sse-client";
@@ -18,7 +18,7 @@ export type UseSimulationEventsResult = {
   loading: boolean;
   error: string | null;
   /** Insert the user's own post immediately, before the stream echoes it back. */
-  addLocalPost: (post: PostDto) => void;
+  addLocalPost: (post: PostDto, thread: FeedThreadDto) => void;
   reload: () => void;
   dismissError: () => void;
   dismissFailures: () => void;
@@ -124,7 +124,7 @@ export function useSimulationEvents(
     };
   }, [simulationId, reloadToken, enabled]);
 
-  const addLocalPost = useCallback((post: PostDto) => {
+  const addLocalPost = useCallback((post: PostDto, _thread: FeedThreadDto) => {
     dispatch({ kind: "upsertPosts", posts: [post] });
   }, []);
 
