@@ -103,18 +103,21 @@ export async function buildServices(db: Db, logger: SimulationLogger): Promise<A
   // simulations, never the other way round.
   const feed = new FeedService(new FeedRepository(db), postService, simulationRepository);
 
-  const simulations = new SimulationService(
-    simulationRepository,
-    postService,
-    characterRepository,
-    threadService,
-    agentService,
+  const simulations = new SimulationService({
+    simulations: simulationRepository,
+    posts: postService,
+    characters: characterRepository,
+    threads: threadService,
+    agents: agentService,
     events,
-    runtime.values.simulation,
+    // The same object RuntimeSettings.recompute mutates in place, not a copy —
+    // an admin changing a setting must take effect on this already-running
+    // service without reconstructing it.
+    options: runtime.values.simulation,
     logger,
     tokenUsage,
-    feed,
-  );
+    threadActivity: feed,
+  });
   const simulationAnalysis = new SimulationAnalysisService(
     simulationRepository,
     postService,

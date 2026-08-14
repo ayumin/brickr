@@ -255,14 +255,14 @@ function makeHarness(options: HarnessOptions): Harness {
   };
 
   const events = new EventHub();
-  const service = new SimulationService(
-    simulationRepository,
-    postService,
-    characterRepository,
-    threadService,
-    agentService,
+  const service = new SimulationService({
+    simulations: simulationRepository,
+    posts: postService,
+    characters: characterRepository,
+    threads: threadService,
+    agents: agentService,
     events,
-    {
+    options: {
       // Tests choose responders explicitly. No opportunistic initial responders.
       minResponders: 0,
       maxResponders: 0,
@@ -272,7 +272,7 @@ function makeHarness(options: HarnessOptions): Harness {
     logger,
     tokenUsage,
     threadActivity,
-  );
+  });
 
   return {
     service,

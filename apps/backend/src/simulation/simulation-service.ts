@@ -61,6 +61,19 @@ export type ThreadActivitySource = {
   buildThreadActivity: (post: Post) => Promise<ThreadActivityEvent>;
 };
 
+export type SimulationServiceDeps = {
+  simulations: SimulationRepository;
+  posts: PostService;
+  characters: CharacterRepository;
+  threads: ThreadService;
+  agents: AgentService;
+  events: EventHub;
+  options: SimulationServiceOptions;
+  logger: SimulationLogger;
+  tokenUsage: TokenUsageService;
+  threadActivity: ThreadActivitySource;
+};
+
 export class SimulationNotFoundError extends DomainError {
   readonly httpStatus = 404;
   readonly errorCode = "not_found" as const;
@@ -128,27 +141,16 @@ export class SimulationService {
   /** Tracks in-flight generation per simulation so `stop` can take effect. */
   private readonly stopped = new Set<string>();
 
-  constructor(
-    private readonly simulations: SimulationRepository,
-    private readonly posts: PostService,
-    private readonly characters: CharacterRepository,
-    private readonly threads: ThreadService,
-    private readonly agents: AgentService,
-    private readonly events: EventHub,
-    private readonly options: SimulationServiceOptions,
-    private readonly logger: SimulationLogger,
-    private readonly tokenUsage: TokenUsageService,
-    private readonly threadActivity: ThreadActivitySource,
-  ) {}
+  constructor(private readonly deps: SimulationServiceDeps) {}
 
   async create(title: string | null, createdByUserId: string): Promise<SimulationDto> {
-    const simulation = await this.simulations.create(title, createdByUserId);
+    const simulation = await this.deps.simulations.create(title, createdByUserId);
     this.stopped.delete(simulation.id);
     return toSimulationDto(simulation);
   }
 
   async list(): Promise<SimulationSummaryDto[]> {
-    const simulations = await this.simulations.findAll();
+    const simulations = await this.deps.simulations.findAll();
     return simulations.map((simulation) => ({
       ...toSimulationDto(simulation),
       postCount: simulation.postCount,
@@ -157,7 +159,7 @@ export class SimulationService {
 
   async get(id: string): Promise<SimulationResponse> {
     const simulation = await this.requireSimulation(id);
-    const posts = await this.posts.listBySimulation(id);
+    const posts = await this.deps.posts.listBySimulation(id);
     return { simulation: toSimulationDto(simulation), posts };
   }
 
@@ -167,7 +169,7 @@ export class SimulationService {
     // would otherwise be allowed through (§8.2).
     assertNotGlobalSimulation(simulation);
     assertSimulationOwnerOrAdmin(simulation, actor);
-    return toSimulationDto(await this.simulations.updateTitle(id, title));
+    return toSimulationDto(await this.deps.simulations.updateTitle(id, title));
   }
 
   async stop(id: string, actor: SimulationActor): Promise<SimulationDto> {
@@ -175,7 +177,7 @@ export class SimulationService {
     assertNotGlobalSimulation(simulation);
     assertSimulationOwnerOrAdmin(simulation, actor);
     this.stopped.add(id);
-    const stoppedSimulation = await this.simulations.updateStatus(id, "stopped");
+    const stoppedSimulation = await this.deps.simulations.updateStatus(id, "stopped");
     return toSimulationDto(stoppedSimulation);
   }
 
@@ -184,7 +186,7 @@ export class SimulationService {
     assertNotGlobalSimulation(simulation);
     assertSimulationOwnerOrAdmin(simulation, actor);
     this.stopped.delete(id);
-    const resumedSimulation = await this.simulations.updateStatus(id, "active");
+    const resumedSimulation = await this.deps.simulations.updateStatus(id, "active");
     return toSimulationDto(resumedSimulation);
   }
 
@@ -201,7 +203,7 @@ export class SimulationService {
     await this.assertPostBelongsToSimulation(input.replyTo, input.simulationId);
     await this.assertPostBelongsToSimulation(input.quoteOf, input.simulationId);
 
-    const post = await this.posts.publish({
+    const post = await this.deps.posts.publish({
       simulationId: input.simulationId,
       authorId: input.authorId,
       content: input.content,
@@ -229,15 +231,15 @@ export class SimulationService {
     const budget = { remaining: MAX_POSTS_PER_SUBMISSION };
 
     try {
-      const all = await this.characters.findAll();
+      const all = await this.deps.characters.findAll();
 
       const { all: responders } = selectResponders({
         characters: all,
         mentionedHandles: triggerPost.mentions,
         explicitIds,
         excludeIds: [triggerPost.authorId],
-        minResponders: this.options.minResponders,
-        maxResponders: this.options.maxResponders,
+        minResponders: this.deps.options.minResponders,
+        maxResponders: this.deps.options.maxResponders,
       });
 
       await this.processTarget({
@@ -252,21 +254,21 @@ export class SimulationService {
         billingUserId: triggerPost.authorId,
       });
 
-      this.events.publish(triggerPost.simulationId, {
+      this.deps.events.publish(triggerPost.simulationId, {
         type: "generation.completed",
         simulationId: triggerPost.simulationId,
         triggerPostId: triggerPost.id,
         generatedPostIds: generatedIds,
       });
     } catch (error) {
-      this.logger.error(
+      this.deps.logger.error(
         { simulationId: triggerPost.simulationId, err: describe(error) },
         "simulation run failed",
       );
       // Internal only: the reason names the provider or model that failed, which
       // would say out loud that the author is an AI (§11.2). Subscribers learn
       // about failures through `response.finished` outcomes instead.
-      this.events.publish(triggerPost.simulationId, {
+      this.deps.events.publish(triggerPost.simulationId, {
         type: "generation.failed",
         simulationId: triggerPost.simulationId,
         reason: describe(error),
@@ -293,7 +295,7 @@ export class SimulationService {
 
     const results = await runWithConcurrency(
       slice,
-      this.options.maxConcurrentCharacters,
+      this.deps.options.maxConcurrentCharacters,
       (character) => this.processCharacter(character, target, allCharacters, billingUserId),
     );
 
@@ -303,7 +305,7 @@ export class SimulationService {
       }
     }
 
-    if (depth >= this.options.maxCascadeDepth) return;
+    if (depth >= this.deps.options.maxCascadeDepth) return;
 
     // Characters react to what the previous step produced. Done sequentially
     // per post but concurrently within each cascade step.
@@ -369,7 +371,7 @@ export class SimulationService {
       outcome = "failed";
       // The only place the reason exists. Publishing it would describe the
       // machinery behind the post (§11.2).
-      this.logger.warn(
+      this.deps.logger.warn(
         { simulationId, characterId: character.id, err: describe(error) },
         "character generation failed",
       );
@@ -405,7 +407,7 @@ export class SimulationService {
       threadPosts: thread.posts,
     });
 
-    const generated = await this.agents.generate({
+    const generated = await this.deps.agents.generate({
       character,
       target: thread.target,
       posts: thread.posts,
@@ -424,7 +426,7 @@ export class SimulationService {
 
     const { replyTo, quoteOf } = resolveActionTargets(action, thread.target);
 
-    const post = await this.posts.publish({
+    const post = await this.deps.posts.publish({
       simulationId,
       authorId: character.id,
       content: generated.content,
@@ -432,7 +434,7 @@ export class SimulationService {
       quoteOf,
     });
 
-    this.logger.info(
+    this.deps.logger.info(
       {
         simulationId,
         characterId: character.id,
@@ -456,12 +458,12 @@ export class SimulationService {
     target: Post,
     allCharacters: Character[],
   ): Promise<{ thread: ThreadContext; resolveHandle: (authorId: string) => string } | null> {
-    const thread = await this.threads.getCurrentThread(target.id);
+    const thread = await this.deps.threads.getCurrentThread(target.id);
     if (!thread) return null;
 
     // The transcript names users by handle too, so a character can react to
     // the person who wrote the post rather than to an opaque id.
-    const users = await this.posts.findUsersByIds(
+    const users = await this.deps.posts.findUsersByIds(
       [thread.target, ...thread.posts].map((post) => post.authorId),
     );
     const resolveHandle = buildHandleResolver(allCharacters, users);
@@ -480,9 +482,9 @@ export class SimulationService {
     context: { simulationId: string; characterId: string },
   ): Promise<void> {
     try {
-      await this.tokenUsage.record(billingUserId, usage);
+      await this.deps.tokenUsage.record(billingUserId, usage);
     } catch (error) {
-      this.logger.warn(
+      this.deps.logger.warn(
         { ...context, billingUserId, err: describe(error) },
         "failed to record token usage",
       );
@@ -504,11 +506,11 @@ export class SimulationService {
       threadRootId: target.threadRootId,
     };
 
-    this.events.publish(target.simulationId, { type: "response.started", ...shared });
+    this.deps.events.publish(target.simulationId, { type: "response.started", ...shared });
 
     return {
       finish: (outcome) => {
-        this.events.publish(target.simulationId, {
+        this.deps.events.publish(target.simulationId, {
           type: "response.finished",
           ...shared,
           outcome,
@@ -531,18 +533,18 @@ export class SimulationService {
     // This does not reopen the race that subscribing before hydrating closes: a
     // stream that opens after this check hydrates over REST afterwards, and the
     // post is committed by then, so it cannot be missed.
-    if (!this.events.hasSubscribers(post.simulationId)) return;
+    if (!this.deps.events.hasSubscribers(post.simulationId)) return;
 
-    this.events.publish(
+    this.deps.events.publish(
       post.simulationId,
-      await this.threadActivity.buildThreadActivity(post),
+      await this.deps.threadActivity.buildThreadActivity(post),
     );
   }
 
   // -- helpers --------------------------------------------------------------
 
   private async requireSimulation(id: string): Promise<Simulation> {
-    const simulation = await this.simulations.findById(id);
+    const simulation = await this.deps.simulations.findById(id);
     if (!simulation) throw new SimulationNotFoundError(id);
     return simulation;
   }
@@ -552,7 +554,7 @@ export class SimulationService {
     simulationId: string,
   ): Promise<void> {
     if (!postId) return;
-    const post = await this.posts.findById(postId);
+    const post = await this.deps.posts.findById(postId);
     if (!post || post.simulationId !== simulationId) {
       throw new PostNotFoundError(postId);
     }
