@@ -19,15 +19,6 @@ const taro: UserProfile = {
   description: "",
 };
 
-/** The pre-login singleton, which the seed backfilled with handle `you`. */
-const legacyUser: UserProfile = {
-  id: "you",
-  handle: "you",
-  displayName: "編集後のユーザー",
-  description: "プロフィール",
-  avatarUrl: "https://example.com/avatar.png",
-};
-
 function post(overrides: Partial<Post> = {}): Post {
   return {
     id: "post-1",
@@ -37,6 +28,8 @@ function post(overrides: Partial<Post> = {}): Post {
     mentions: [],
     replyTo: null,
     quoteOf: null,
+    threadRootId: "post-1",
+    threadActivityAt: new Date("2026-01-01T00:00:00Z"),
     createdAt: new Date("2026-01-01T00:00:00Z"),
     ...overrides,
   };
@@ -48,7 +41,6 @@ describe("toPostDto author resolution", () => {
 
     expect(dto.author).toEqual({
       id: "user-1",
-      kind: "user",
       handle: "hanako",
       displayName: "花子",
       avatarUrl: "https://example.com/hanako.png",
@@ -66,22 +58,6 @@ describe("toPostDto author resolution", () => {
     expect(first.author.displayName).not.toBe(second.author.displayName);
   });
 
-  it("still resolves posts written before login existed", () => {
-    const dto = toPostDto(
-      post({ authorId: "you" }),
-      new Map(),
-      null,
-      indexUsersById([legacyUser]),
-    );
-
-    expect(dto.author).toMatchObject({
-      id: "you",
-      kind: "user",
-      handle: "you",
-      displayName: "編集後のユーザー",
-    });
-  });
-
   it("prefers a character when the id is a character id", () => {
     const character = {
       id: "character-1",
@@ -96,13 +72,51 @@ describe("toPostDto author resolution", () => {
       indexUsersById([hanako]),
     );
 
-    expect(dto.author).toMatchObject({ kind: "character", handle: "architect" });
+    expect(dto.author).toMatchObject({ id: "character-1", handle: "architect" });
   });
 
   it("falls back to a placeholder for an author it cannot resolve", () => {
     const dto = toPostDto(post({ authorId: "gone" }), new Map(), null, new Map());
 
-    expect(dto.author).toMatchObject({ id: "gone", kind: "character", handle: "gone" });
+    expect(dto.author).toMatchObject({ id: "gone", handle: "gone" });
+  });
+
+  /**
+   * The point of the whole mapper: a person and a character come back
+   * indistinguishable, so nothing downstream can label one of them (§9.1, §25).
+   */
+  it("gives a user and a character byte-identical author keys", () => {
+    const character = {
+      id: "character-1",
+      handle: "architect",
+      displayName: "アーキテクト",
+      avatarUrl: "https://example.com/architect.png",
+    } as unknown as Character;
+
+    const userDto = toPostDto(post(), new Map(), null, indexUsersById([hanako]));
+    const characterDto = toPostDto(
+      post({ authorId: "character-1" }),
+      new Map([["character-1", character]]),
+      null,
+      new Map(),
+    );
+
+    expect(Object.keys(characterDto.author).sort()).toEqual(
+      Object.keys(userDto.author).sort(),
+    );
+    expect(Object.keys(userDto.author).sort()).toEqual([
+      "avatarUrl",
+      "displayName",
+      "handle",
+      "id",
+    ]);
+  });
+
+  it("keeps the author id off the post itself, so ownership reads from author.id (§9.1)", () => {
+    const dto = toPostDto(post(), new Map(), null, indexUsersById([hanako]));
+
+    expect(dto).not.toHaveProperty("authorId");
+    expect(dto.author.id).toBe("user-1");
   });
 
   it("includes a post image in the API DTO", () => {
