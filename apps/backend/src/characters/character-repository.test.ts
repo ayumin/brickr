@@ -163,7 +163,7 @@ describe("CharacterRepository hard deletion", () => {
     const { db, tx } = makeDb((args) => {
       if (args.where.authorId?.in) {
         calls.push("read-doomed");
-        return [{ id: "root-1", simulationId: "sim-1" }];
+        return [{ id: "root-1", simulationId: "sim-1", threadRootId: "root-1" }];
       }
       if (args.where.authorId?.notIn) {
         calls.push("read-orphans");

@@ -267,7 +267,9 @@ erDiagram
   実行され、対象Postを参照する他のReply/QuoteはSelf Relationの`onDelete: SetNull`に従います。
   他Accountの返信は巻き添え削除しないため、同一Transaction内で`threadRootId`を修復します。親を失った
   残存Postを新Rootにし、その子孫のRootを付け替え、新Rootの`threadActivityAt`とSimulationの
-  `lastActivityAt`を再計算します。孤児となった残存Postが存在しないRoot IDを指すことはありません。
+  `lastActivityAt`を再計算します。切り離された側が残存する元Rootの`threadActivityAt`も、残ったSubtreeから
+  再計算します。押し上げられた活動が別Threadへ移った後もFeed上位に留まらないためです。孤児となった
+  残存Postが存在しないRoot IDを指すことはありません。
 - ReplyとQuoteはPostのSelf Relationです。Quote専用テーブルやRepost Entityはありません。
 - `quotedPost`はDTO生成時に1階層だけ平坦化します。再帰的な巨大Payloadを防ぎます。
 - Avatarと投稿画像は現在Data URLとしてText列へ保存します。
