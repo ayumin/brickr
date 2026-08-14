@@ -5,7 +5,7 @@ import type { SimulationDto } from "@brickr/shared";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { Icon } from "../../components/Icon";
 import { Spinner } from "../../components/Spinner";
-import { handlePath } from "../../routes";
+import { handlePath, postPath } from "../../routes";
 import {
   api,
   ApiError,
@@ -137,7 +137,7 @@ export function RoomScreen({ roomId }: { roomId: string }) {
 
   const openPost = useCallback(
     (postId: string) => {
-      navigate(`/posts/${encodeURIComponent(postId)}`);
+      navigate(postPath(postId));
     },
     [navigate],
   );

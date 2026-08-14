@@ -4,7 +4,7 @@ import type { PostDto } from "@brickr/shared";
 
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { Spinner } from "../../components/Spinner";
-import { handlePath } from "../../routes";
+import { handlePath, postPath } from "../../routes";
 import {
   api,
   ApiError,
@@ -101,7 +101,7 @@ export function PostDetailScreen({ postId }: { postId: string }) {
   );
 
   const openPost = useCallback(
-    (id: string) => navigate(`/posts/${encodeURIComponent(id)}`),
+    (id: string) => navigate(postPath(id)),
     [navigate],
   );
 
