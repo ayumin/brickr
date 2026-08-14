@@ -70,16 +70,24 @@ model Simulation {
   id        String   @id @default(uuid())
   title     String?
   status    String   @default("active")
+  /// "global" | "room". Internal only, never a label on screen: the reserved
+  /// global row backs the unified feed (Brickr-ux-refine §8.1, §8.2).
+  scope     String   @default("room")
   /// Public to everyone, unlike Character ownership (§66.6). Null for simulations
-  /// created before login existed.
+  /// created before login existed, and for the reserved global row.
   createdByUserId String? @map("created_by_user_id")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
+  /// Newest post or reply anywhere in this simulation. Denormalised so the room
+  /// list can order by activity without aggregating posts (§8.1).
+  lastActivityAt DateTime @default(now()) @map("last_activity_at")
 
   posts         Post[]
   createdByUser UserProfile? @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
 
   @@index([createdByUserId])
+  @@index([scope, status, lastActivityAt])
+  @@index([createdByUserId, status, lastActivityAt])
   @@map("simulations")
 }
 
@@ -87,9 +95,9 @@ model Post {
   id           String @id @default(uuid())
   simulationId String @map("simulation_id")
 
-  /// Character id, or the literal "you" for posts written by the user.
+  /// Character id, or the id of the signed-in account that wrote the post.
   /// Deliberately not a foreign key: user posts and character posts share
-  /// one table, and the user is not a Character row.
+  /// one table, and a user is not a Character row.
   authorId String @map("author_id")
 
   content  String
@@ -100,6 +108,17 @@ model Post {
   quoteOf String? @map("quote_of")
 
   createdAt DateTime @default(now()) @map("created_at")
+
+  /// Root of the thread this post belongs to; a top-level post points at itself.
+  /// Denormalised on purpose (§8.3): recursing over `replyTo` cannot page 20
+  /// threads across every room at a usable speed. No Prisma self relation — the
+  /// value is kept correct by the publishing transaction and its tests.
+  threadRootId String @map("thread_root_id")
+
+  /// On a root: the newest activity anywhere in its thread, which is what the
+  /// feed orders by. On a reply: its own creation time. A quote repost starts a
+  /// new thread and never bumps the post it quotes.
+  threadActivityAt DateTime @map("thread_activity_at")
 
   simulation Simulation @relation(fields: [simulationId], references: [id], onDelete: Cascade)
 
@@ -112,12 +131,18 @@ model Post {
   @@index([simulationId, createdAt])
   @@index([replyTo])
   @@index([quoteOf])
+  /// Feed paging: roots (`replyTo = null`) ordered by thread activity, globally
+  /// and per room. The third index reads one thread's posts in order.
+  @@index([replyTo, threadActivityAt, id])
+  @@index([simulationId, replyTo, threadActivityAt, id])
+  @@index([threadRootId, createdAt, id])
   @@map("posts")
 }
 
 model UserProfile {
-  /// One row per account. The pre-login singleton (`authorId = "you"`) keeps its
-  /// id and is backfilled by the seed, so its credential columns stay nullable.
+  /// One row per account, created by signup or the admin bootstrap. The seeded
+  /// pre-login singleton is gone (§8.2), but the credential columns stay
+  /// nullable: tightening them is a separate change from this phase.
   id          String  @id
   displayName String  @map("display_name")
   description String  @default("")
