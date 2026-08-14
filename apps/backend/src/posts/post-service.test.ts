@@ -62,32 +62,38 @@ function harness(existing: Post[] = []) {
     },
   } as unknown as PostRepository;
 
+  const knownCharacters = () =>
+    Promise.resolve([
+      {
+        id: "architect-id",
+        handle: "architect",
+        displayName: "設計者",
+        description: "設計する",
+        rolePrompt: "設計",
+        tonePrompt: "簡潔",
+        interests: [],
+        activityLevel: 0.5,
+        responseProbability: 0.5,
+        replyProbability: 0.5,
+        quoteProbability: 0.5,
+        influence: 0.5,
+        modelProfileId: "test",
+      },
+    ]);
+
   const characters = {
-    findAll: () =>
-      Promise.resolve([
-        {
-          id: "architect-id",
-          handle: "architect",
-          displayName: "設計者",
-          description: "設計する",
-          rolePrompt: "設計",
-          tonePrompt: "簡潔",
-          interests: [],
-          activityLevel: 0.5,
-          responseProbability: 0.5,
-          replyProbability: 0.5,
-          quoteProbability: 0.5,
-          influence: 0.5,
-          modelProfileId: "test",
-        },
-      ]),
+    findAll: knownCharacters,
+    findAllIncludingDeleted: knownCharacters,
   } as unknown as CharacterRepository;
 
   const profiles = {
     listHandles: () => Promise.resolve([USER_HANDLE]),
+    // These tests have no user accounts: an unknown author falls back to its id,
+    // which is enough to tell the mapped posts apart.
+    findByIds: () => Promise.resolve([]),
   } as unknown as UserProfileRepository;
 
-  return { service: new PostService(posts, characters, profiles), created };
+  return { service: new PostService(posts, characters, profiles), created, reads };
 }
 
 describe("PostService.publish mentions", () => {
