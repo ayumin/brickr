@@ -7,15 +7,17 @@
 
 import { GoogleGenAI, type Content, type Part } from "@google/genai";
 import { env } from "../config/env.js";
-import {
-  LLMError,
-  type LLMAvailableModel,
-  type LLMGenerateRequest,
-  type LLMGenerateResult,
-  type LLMProvider,
+import { requireClient, toLLMError } from "./provider-http-error.js";
+import type {
+  LLMAvailableModel,
+  LLMGenerateRequest,
+  LLMGenerateResult,
+  LLMProvider,
 } from "./provider.js";
 
 const PROVIDER_ID = "gemini" as const;
+/** The GenAI SDK exposes the HTTP status as `status` or `code` depending on the path. */
+const STATUS_FIELDS = ["status", "code"] as const;
 
 type GeminiProviderOptions = {
   apiKey?: string;
@@ -39,10 +41,7 @@ export class GeminiProvider implements LLMProvider {
   }
 
   async listModels(signal?: AbortSignal): Promise<LLMAvailableModel[]> {
-    const client = this.client;
-    if (!client) {
-      throw new LLMError("gemini is not configured (missing API key)", PROVIDER_ID, false);
-    }
+    const client = requireClient(this.client, PROVIDER_ID);
 
     try {
       const page = await client.models.list({
@@ -60,15 +59,12 @@ export class GeminiProvider implements LLMProvider {
       }
       return models.sort((a, b) => a.id.localeCompare(b.id));
     } catch (error) {
-      throw toLLMError(error);
+      throw toLLMError(PROVIDER_ID, error, STATUS_FIELDS);
     }
   }
 
   async generate(request: LLMGenerateRequest): Promise<LLMGenerateResult> {
-    const client = this.client;
-    if (!client) {
-      throw new LLMError("gemini is not configured (missing API key)", PROVIDER_ID, false);
-    }
+    const client = requireClient(this.client, PROVIDER_ID);
 
     const contents: Content[] = request.messages.map(toGeminiContent);
 
@@ -107,7 +103,7 @@ export class GeminiProvider implements LLMProvider {
           : {}),
       };
     } catch (error) {
-      throw toLLMError(error);
+      throw toLLMError(PROVIDER_ID, error, STATUS_FIELDS);
     }
   }
 }
@@ -134,35 +130,3 @@ export function toGeminiContent(
   return { role: message.role === "assistant" ? "model" : "user", parts };
 }
 
-function toLLMError(error: unknown): LLMError {
-  if (error instanceof LLMError) return error;
-
-  const status = httpStatusOf(error);
-  return new LLMError(
-    `gemini request failed${status === undefined ? "" : ` (status ${status})`}: ${messageOf(error)}`,
-    PROVIDER_ID,
-    isRetryable(status, error),
-    { cause: error },
-  );
-}
-
-/** The GenAI SDK exposes the HTTP status as `status` or `code` depending on the path. */
-function httpStatusOf(error: unknown): number | undefined {
-  if (typeof error !== "object" || error === null) return undefined;
-  const candidate = error as { status?: unknown; code?: unknown };
-  if (typeof candidate.status === "number") return candidate.status;
-  if (typeof candidate.code === "number") return candidate.code;
-  return undefined;
-}
-
-function isRetryable(status: number | undefined, error: unknown): boolean {
-  if (status === undefined) {
-    return !(error instanceof Error && error.name === "AbortError");
-  }
-  if (status === 408 || status === 409 || status === 429) return true;
-  return status >= 500;
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}

@@ -163,4 +163,37 @@ describe("characterGenerationJsonSchema", () => {
     });
     expect(Object.keys(schema.properties.characters.properties)).toHaveLength(5);
   });
+
+  /** Derived from the Zod schema (§10 in the refactor plan), so it cannot drift from the parser's limits. */
+  it("carries the parser's length constraints and requires every field, including dialectPrompt", () => {
+    const schema = characterGenerationJsonSchema(1) as {
+      properties: {
+        characters: {
+          properties: {
+            character_1: {
+              additionalProperties: boolean;
+              required: string[];
+              properties: {
+                displayName: { maxLength: number };
+                interests: { minItems: number; maxItems: number };
+              };
+            };
+          };
+        };
+      };
+    };
+
+    const character = schema.properties.characters.properties.character_1;
+    expect(character.additionalProperties).toBe(false);
+    expect(character.required).toEqual([
+      "displayName",
+      "description",
+      "rolePrompt",
+      "tonePrompt",
+      "dialectPrompt",
+      "interests",
+    ]);
+    expect(character.properties.displayName.maxLength).toBe(80);
+    expect(character.properties.interests).toMatchObject({ minItems: 1, maxItems: 20 });
+  });
 });

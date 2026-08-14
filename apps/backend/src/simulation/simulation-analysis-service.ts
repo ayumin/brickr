@@ -120,19 +120,7 @@ export function parseSimulationSummary(text: string): SimulationContentSummaryDt
 }
 
 export function rankPosts(posts: PostDto[]): SimulationPostRankingDto[] {
-  const reactions = new Map<string, { replies: number; reposts: number }>();
-  for (const post of posts) {
-    if (post.replyTo) {
-      const current = reactions.get(post.replyTo) ?? { replies: 0, reposts: 0 };
-      current.replies += 1;
-      reactions.set(post.replyTo, current);
-    }
-    if (post.quoteOf) {
-      const current = reactions.get(post.quoteOf) ?? { replies: 0, reposts: 0 };
-      current.reposts += 1;
-      reactions.set(post.quoteOf, current);
-    }
-  }
+  const reactions = receivedReactionCounts(posts);
 
   return posts
     .map((post) => {
@@ -157,12 +145,7 @@ export function rankPosts(posts: PostDto[]): SimulationPostRankingDto[] {
 }
 
 export function rankAuthors(posts: PostDto[]): SimulationAuthorRankingDto[] {
-  const receivedByPost = new Map<string, number>();
-  for (const post of posts) {
-    for (const targetId of [post.replyTo, post.quoteOf]) {
-      if (targetId) receivedByPost.set(targetId, (receivedByPost.get(targetId) ?? 0) + 1);
-    }
-  }
+  const received = receivedReactionCounts(posts);
 
   const authors = new Map<string, SimulationAuthorRankingDto>();
   for (const post of posts) {
@@ -176,7 +159,8 @@ export function rankAuthors(posts: PostDto[]): SimulationAuthorRankingDto[] {
     current.postCount += 1;
     if (post.replyTo) current.replyCount += 1;
     if (post.quoteOf) current.repostCount += 1;
-    current.receivedReactionCount += receivedByPost.get(post.id) ?? 0;
+    const reaction = received.get(post.id);
+    current.receivedReactionCount += (reaction?.replies ?? 0) + (reaction?.reposts ?? 0);
     authors.set(post.author.id, current);
   }
 

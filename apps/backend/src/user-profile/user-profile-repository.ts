@@ -1,4 +1,5 @@
 import { isRecordNotFoundError, type Db } from "../persistence/prisma.js";
+import { optionalField } from "../persistence/repository-mapping.js";
 import type { SaveUserProfile, UserProfile } from "./user-profile.js";
 
 type UserProfileRow = {
@@ -32,7 +33,7 @@ function toUserProfile(row: UserProfileRow): UserProfile {
     handle: row.handle ?? toFallbackHandle(row.id),
     displayName: row.displayName,
     description: row.description,
-    ...(row.avatarUrl ? { avatarUrl: row.avatarUrl } : {}),
+    ...optionalField("avatarUrl", row.avatarUrl),
   };
 }
 

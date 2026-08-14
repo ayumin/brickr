@@ -1,8 +1,9 @@
 import { GLOBAL_SIMULATION_ID, type FeedThreadDto, type PostDto } from "@brickr/shared";
 import { describe, expect, it } from "vitest";
-import type { FeedRoom } from "../feed/feed-repository.js";
-import type { FeedReader } from "../feed/feed-service.js";
-import { toPublicEvent, type InternalSseEvent } from "./public-events.js";
+import type { InternalSseEvent } from "../simulation/public-events.js";
+import type { FeedRoom } from "./feed-repository.js";
+import type { FeedReader } from "./feed-service.js";
+import { toPublicEvent } from "./public-events.js";
 
 const ROOM: FeedRoom = {
   id: "room-1",

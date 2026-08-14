@@ -1,7 +1,9 @@
 import type { SimulationScope, SimulationStatus } from "@brickr/shared";
 import { Prisma, type Db } from "../persistence/prisma.js";
+import { optionalField } from "../persistence/repository-mapping.js";
 import { toPost, type PostRow } from "../posts/post-repository.js";
 import type { Post } from "../posts/post.js";
+import { toSimulationScope, toSimulationStatus } from "../simulation/simulation-repository.js";
 import type { FeedCursor } from "./feed-cursor.js";
 
 /**
@@ -92,11 +94,9 @@ export class FeedRepository {
       room: {
         id: row.simulation.id,
         title: row.simulation.title,
-        status: row.simulation.status as SimulationStatus,
-        scope: row.simulation.scope as SimulationScope,
-        ...(row.simulation.createdByUserId
-          ? { createdByUserId: row.simulation.createdByUserId }
-          : {}),
+        status: toSimulationStatus(row.simulation.status),
+        scope: toSimulationScope(row.simulation.scope),
+        ...optionalField("createdByUserId", row.simulation.createdByUserId),
       },
     }));
   }

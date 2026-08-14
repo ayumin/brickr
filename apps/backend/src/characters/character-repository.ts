@@ -1,6 +1,7 @@
 import { claimHandle, releaseHandles } from "../handles/handle-claim.js";
 import { repairThreads } from "../posts/thread-repair.js";
 import type { Db } from "../persistence/prisma.js";
+import { optionalField } from "../persistence/repository-mapping.js";
 import type { Character, SaveCharacter } from "./character.js";
 
 /**
@@ -37,7 +38,7 @@ function toCharacter(row: CharacterRow): Character {
     description: row.description,
     rolePrompt: row.rolePrompt,
     tonePrompt: row.tonePrompt,
-    ...(row.dialectPrompt ? { dialectPrompt: row.dialectPrompt } : {}),
+    ...optionalField("dialectPrompt", row.dialectPrompt),
     interests: row.interests,
     activityLevel: row.activityLevel,
     responseProbability: row.responseProbability,
@@ -45,9 +46,9 @@ function toCharacter(row: CharacterRow): Character {
     quoteProbability: row.quoteProbability,
     influence: row.influence,
     modelProfileId: row.modelProfileId,
-    ...(row.avatarUrl ? { avatarUrl: row.avatarUrl } : {}),
-    ...(row.deletedAt ? { deletedAt: row.deletedAt } : {}),
-    ...(row.createdByUserId ? { createdByUserId: row.createdByUserId } : {}),
+    ...optionalField("avatarUrl", row.avatarUrl),
+    ...optionalField("deletedAt", row.deletedAt),
+    ...optionalField("createdByUserId", row.createdByUserId),
   };
 }
 
