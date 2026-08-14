@@ -200,6 +200,7 @@ function FilterTab({
   return (
     <button
       type="button"
+      aria-pressed={active}
       onClick={onClick}
       className={`rounded-full px-3 py-1 text-xs font-medium transition ${
         active
