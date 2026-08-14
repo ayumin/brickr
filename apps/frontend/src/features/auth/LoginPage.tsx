@@ -44,7 +44,7 @@ export function LoginPage() {
         <div className="flex flex-col items-center gap-2 text-center">
           <BrandLogo className="h-10 w-10" />
           <div>
-            <h1 className="text-lg font-bold text-ink">{APP_FULL_NAME}</h1>
+            <h1 className="text-lg font-display font-bold text-ink">{APP_FULL_NAME}</h1>
             <p className="text-xs text-ink-faint">{APP_TAGLINE}</p>
           </div>
         </div>

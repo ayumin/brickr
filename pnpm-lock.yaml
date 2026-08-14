@@ -84,6 +84,9 @@ importers:
       '@brickr/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@fontsource/kiwi-maru':
+        specifier: ^5.3.0
+        version: 5.3.0
       bootstrap-icons:
         specifier: ^1.13.1
         version: 1.13.1
@@ -403,6 +406,9 @@ packages:
 
   '@fastify/swagger@9.8.1':
     resolution: {integrity: sha512-VpHMnqZTY8iBZYJE8WWkbKPrXIYWy2rDfIf5qLr6DzZSpQYZ+KxQVcJFiq/AMlvNwI4gCBd66++iUlxXXGT0IQ==}
+
+  '@fontsource/kiwi-maru@5.3.0':
+    resolution: {integrity: sha512-8zcSONeRZPzSWdkP+uoNoEVciJn985ZDB57zwRer9dGZ/1+/pnQYkyCz5OEbnoXvbFyVnA0Dx0r+lv6tu+wTGA==}
 
   '@google/genai@2.16.0':
     resolution: {integrity: sha512-K+1C1sqR0u7NJ5xpKJCQBws0QXpfuklo3WTNuUIMvtbQfNW2O5OohX0BYT2V+PXzsUzQEwGCXPWQxttLyGQ6xw==}
@@ -2192,6 +2198,8 @@ snapshots:
       yaml: 2.9.0
     transitivePeerDependencies:
       - supports-color
+
+  '@fontsource/kiwi-maru@5.3.0': {}
 
   '@google/genai@2.16.0(supports-color@7.2.0)':
     dependencies:

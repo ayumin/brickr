@@ -109,7 +109,7 @@ export function SignupPage() {
       <div className="w-full max-w-md space-y-6">
         <div className="flex flex-col items-center gap-2 text-center">
           <BrandLogo className="h-10 w-10" />
-          <h1 className="text-lg font-bold text-ink">{APP_FULL_NAME}に登録</h1>
+          <h1 className="text-lg font-display font-bold text-ink">{APP_FULL_NAME}に登録</h1>
         </div>
 
         <form

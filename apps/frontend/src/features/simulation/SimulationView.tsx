@@ -532,7 +532,7 @@ export function SimulationView({
           >
             <BrandLogo className="h-7 w-7" />
             <div className="min-w-0">
-              <h1 className="flex min-w-0 items-baseline gap-1 truncate text-base font-bold text-ink">
+              <h1 className="flex min-w-0 items-baseline gap-1 truncate text-base font-display font-bold text-ink">
                 <span>{APP_NAME}</span>
                 <span className="hidden truncate text-[11px] font-normal text-ink-faint sm:inline">
                   — {APP_TAGLINE}
