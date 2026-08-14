@@ -23,6 +23,7 @@ import {
 } from "../characters/character-service.js";
 import { DomainError } from "../domain-error.js";
 import { FeedCursorInvalidError } from "../feed/feed-cursor.js";
+import { ThreadRootNotFoundError } from "../feed/feed-service.js";
 import { LLMError, LLMTimeoutError } from "../llm/provider.js";
 import { ReplyTargetNotFoundError } from "../posts/post-repository.js";
 import {
@@ -69,6 +70,7 @@ const CASES: Array<{ error: Error; status: number; code: string }> = [
   { error: new SimulationStoppedError("sim-1"), status: 409, code: "simulation_stopped" },
   { error: new SimulationForbiddenError("sim-1"), status: 403, code: "forbidden" },
   { error: new PostNotFoundError("post-1"), status: 404, code: "not_found" },
+  { error: new ThreadRootNotFoundError("post-1"), status: 404, code: "not_found" },
   { error: new GlobalSimulationMutationError("sim-1"), status: 403, code: "forbidden" },
   { error: new ReplyTargetNotFoundError("post-1"), status: 404, code: "not_found" },
   { error: new FeedCursorInvalidError(), status: 400, code: "invalid_cursor" },

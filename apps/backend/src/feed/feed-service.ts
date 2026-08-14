@@ -5,6 +5,7 @@ import {
   type FeedThreadDto,
   type PostDto,
 } from "@brickr/shared";
+import { DomainError } from "../domain-error.js";
 import { optionalField } from "../persistence/repository-mapping.js";
 import type { PostService } from "../posts/post-service.js";
 import type { Post } from "../posts/post.js";
@@ -12,7 +13,6 @@ import { isGlobalSimulation } from "../simulation/simulation.js";
 import type { SimulationRepository } from "../simulation/simulation-repository.js";
 import {
   isSimulationOwnerOrAdmin,
-  PostNotFoundError,
   SimulationNotFoundError,
   type SimulationActor,
 } from "../simulation/simulation-service.js";
@@ -20,6 +20,22 @@ import type { ThreadActivityEvent } from "../simulation/public-events.js";
 import { toFeedCapabilities } from "./feed-capabilities.js";
 import { decodeFeedCursor, encodeFeedCursor } from "./feed-cursor.js";
 import type { FeedRepository, FeedRoom, FeedThreadRow } from "./feed-repository.js";
+
+/**
+ * A thread's root post could not be resolved — the id given is not a root, its
+ * simulation is gone, or its room is stopped and the reader is not its owner
+ * or an administrator. All four collapse to a 404, kept distinct from
+ * simulation-service's PostNotFoundError (a reply/quote target outside the
+ * current simulation) so the two unrelated meanings cannot be confused by an
+ * `instanceof` check.
+ */
+export class ThreadRootNotFoundError extends DomainError {
+  readonly httpStatus = 404;
+  readonly errorCode = "not_found" as const;
+  constructor(id: string) {
+    super(`thread root "${id}" not found`);
+  }
+}
 
 /**
  * Threads per page, fixed by the server (§9.4).
@@ -128,7 +144,7 @@ export class FeedService {
   async buildThreadActivity(post: Post): Promise<ThreadActivityEvent> {
     const root =
       post.threadRootId === post.id ? post : await this.posts.findById(post.threadRootId);
-    if (!root) throw new PostNotFoundError(post.threadRootId);
+    if (!root) throw new ThreadRootNotFoundError(post.threadRootId);
 
     const simulation = await this.simulations.findById(root.simulationId);
     if (!simulation) throw new SimulationNotFoundError(root.simulationId);
@@ -169,14 +185,14 @@ export class FeedService {
     reader: NonNullable<FeedReader>,
   ): Promise<PostDto[]> {
     const root = await this.posts.findById(threadRootId);
-    if (!root || root.replyTo !== null) throw new PostNotFoundError(threadRootId);
+    if (!root || root.replyTo !== null) throw new ThreadRootNotFoundError(threadRootId);
 
     const simulation = await this.simulations.findById(root.simulationId);
-    if (!simulation) throw new PostNotFoundError(threadRootId);
+    if (!simulation) throw new ThreadRootNotFoundError(threadRootId);
     // Same rule as the thread detail: a stopped room stays readable in full for
     // its creator and an administrator, and is a 404 for everyone else (§10.8).
     if (simulation.status === "stopped" && !isSimulationOwnerOrAdmin(simulation, reader)) {
-      throw new PostNotFoundError(threadRootId);
+      throw new ThreadRootNotFoundError(threadRootId);
     }
 
     return this.posts.toDtos(

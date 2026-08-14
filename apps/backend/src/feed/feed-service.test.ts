@@ -3,10 +3,10 @@ import { describe, expect, it, vi } from "vitest";
 import type { PostService } from "../posts/post-service.js";
 import type { Post } from "../posts/post.js";
 import type { SimulationRepository } from "../simulation/simulation-repository.js";
-import { PostNotFoundError, SimulationNotFoundError } from "../simulation/simulation-service.js";
+import { SimulationNotFoundError } from "../simulation/simulation-service.js";
 import type { Simulation } from "../simulation/simulation.js";
 import type { FeedRepository, FeedRoom, FeedThreadRow } from "./feed-repository.js";
-import { FeedService, FEED_PAGE_SIZE, THREAD_REPLIES_LIMIT } from "./feed-service.js";
+import { FeedService, FEED_PAGE_SIZE, THREAD_REPLIES_LIMIT, ThreadRootNotFoundError } from "./feed-service.js";
 
 /**
  * A stand-in for the feed repository that keeps posts in memory and applies the
@@ -570,13 +570,13 @@ describe("FeedService thread replies (§12.2, §10.8)", () => {
   it("refuses a post that is not a thread root", async () => {
     const { service } = makeHarness({ posts: [root, first] });
 
-    await expect(service.listThreadReplies("reply-1", READER)).rejects.toThrow(PostNotFoundError);
+    await expect(service.listThreadReplies("reply-1", READER)).rejects.toThrow(ThreadRootNotFoundError);
   });
 
   it("refuses an unknown thread", async () => {
     const { service } = makeHarness({ posts: [root] });
 
-    await expect(service.listThreadReplies("missing", READER)).rejects.toThrow(PostNotFoundError);
+    await expect(service.listThreadReplies("missing", READER)).rejects.toThrow(ThreadRootNotFoundError);
   });
 
   it("hides a stopped room's replies from everyone but its creator or an administrator", async () => {
@@ -593,7 +593,7 @@ describe("FeedService thread replies (§12.2, §10.8)", () => {
       rooms: [STOPPED_ROOM],
     });
 
-    await expect(service.listThreadReplies("root-9", READER)).rejects.toThrow(PostNotFoundError);
+    await expect(service.listThreadReplies("root-9", READER)).rejects.toThrow(ThreadRootNotFoundError);
     await expect(
       service.listThreadReplies("root-9", { id: "owner-1", isAdmin: false, handle: "owner" }),
     ).resolves.toHaveLength(1);
@@ -688,7 +688,7 @@ describe("FeedService.buildThreadActivity (§11.3)", () => {
     });
     const { service } = makeHarness({ posts: [orphan] });
 
-    await expect(service.buildThreadActivity(orphan)).rejects.toThrow(PostNotFoundError);
+    await expect(service.buildThreadActivity(orphan)).rejects.toThrow(ThreadRootNotFoundError);
   });
 
   it("refuses to describe a thread whose room is gone", async () => {
