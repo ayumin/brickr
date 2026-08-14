@@ -84,4 +84,41 @@ describe("EventHub (§11.4)", () => {
     expect(hub.subscriberCount("room-1")).toBe(2);
     expect(hub.feedSubscriberCount()).toBe(1);
   });
+
+  describe("hasSubscribers", () => {
+    it("is false when nothing is listening", () => {
+      const hub = new EventHub();
+
+      expect(hub.hasSubscribers("room-1")).toBe(false);
+    });
+
+    it("is true for the room being listened to, and false for the others", () => {
+      const hub = new EventHub();
+      hub.subscribe("room-1", vi.fn());
+
+      expect(hub.hasSubscribers("room-1")).toBe(true);
+      expect(hub.hasSubscribers("room-2")).toBe(false);
+    });
+
+    /** The feed spans every simulation, so one feed listener covers every room. */
+    it("is true for every room while the feed is listening", () => {
+      const hub = new EventHub();
+      hub.subscribeAll(vi.fn());
+
+      expect(hub.hasSubscribers("room-1")).toBe(true);
+      expect(hub.hasSubscribers("room-2")).toBe(true);
+    });
+
+    it("is false again after the last listener unsubscribes", () => {
+      const hub = new EventHub();
+      const unsubscribeRoom = hub.subscribe("room-1", vi.fn());
+      const unsubscribeFeed = hub.subscribeAll(vi.fn());
+
+      unsubscribeRoom();
+      expect(hub.hasSubscribers("room-1")).toBe(true);
+
+      unsubscribeFeed();
+      expect(hub.hasSubscribers("room-1")).toBe(false);
+    });
+  });
 });

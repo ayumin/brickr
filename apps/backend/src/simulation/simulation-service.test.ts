@@ -76,6 +76,8 @@ type Harness = {
   generationCalls: GenerateRequest[];
   threadSnapshots: Array<{ targetId: string; postIds: string[] }>;
   tokenUsageRecords: TokenUsageRecord[];
+  /** Ids of the posts the thread payload was assembled for, in order. */
+  threadActivityCalls: string[];
 };
 
 /**
@@ -217,9 +219,11 @@ function makeHarness(options: HarnessOptions): Harness {
    * (§11.3). Only the identity of the thread matters here; the DTO's contents are
    * fixed in `feed-service.test.ts`.
    */
+  const threadActivityCalls: string[] = [];
   const threadActivity = {
-    buildThreadActivity: (post: Post): Promise<ThreadActivityEvent> =>
-      Promise.resolve({
+    buildThreadActivity: (post: Post): Promise<ThreadActivityEvent> => {
+      threadActivityCalls.push(post.id);
+      return Promise.resolve({
         type: "thread.activity",
         simulationId: post.simulationId,
         room: {
@@ -243,7 +247,8 @@ function makeHarness(options: HarnessOptions): Harness {
             canLoadMoreReplies: false,
           },
         },
-      }),
+      });
+    },
   };
 
   const events = new EventHub();
@@ -266,7 +271,15 @@ function makeHarness(options: HarnessOptions): Harness {
     threadActivity,
   );
 
-  return { service, events, posts, generationCalls, threadSnapshots, tokenUsageRecords };
+  return {
+    service,
+    events,
+    posts,
+    generationCalls,
+    threadSnapshots,
+    tokenUsageRecords,
+    threadActivityCalls,
+  };
 }
 
 function knownMentions(content: string, characters: Character[]): string[] {
@@ -483,6 +496,57 @@ describe("SimulationService orchestration", () => {
       USER_AUTHOR_ID,
       alpha.id,
     ]);
+  });
+});
+
+/**
+ * The thread payload costs queries beyond the post, and one submission can
+ * cascade into many posts, so it is only assembled when a stream is open to
+ * receive it. `publish` would discard it otherwise.
+ *
+ * These cases use no characters on purpose: with generation out of the picture,
+ * the only payload in play is the user post's, and `submitUserPost` awaits that
+ * decision before returning — so there is nothing to wait on afterwards.
+ */
+describe("SimulationService thread events (§11.3)", () => {
+  const onlyUserPost = {
+    simulationId: SIMULATION.id,
+    authorId: USER_AUTHOR_ID,
+    content: "hello",
+    responderIds: [],
+  };
+
+  it("skips assembling the thread when neither stream is open", async () => {
+    const harness = makeHarness({ characters: [] });
+
+    await harness.service.submitUserPost(onlyUserPost);
+
+    expect(harness.threadActivityCalls).toEqual([]);
+    // The post itself is unaffected: only the event payload was skipped.
+    expect(harness.posts).toHaveLength(1);
+  });
+
+  it("assembles the thread for a room subscriber", async () => {
+    const harness = makeHarness({ characters: [] });
+    harness.events.subscribe(SIMULATION.id, vi.fn());
+
+    const post = await harness.service.submitUserPost(onlyUserPost);
+
+    expect(harness.threadActivityCalls).toEqual([post.id]);
+  });
+
+  /** The feed spans every room, so its listeners alone are reason enough to build. */
+  it("assembles the thread for a feed subscriber with no room stream open", async () => {
+    const harness = makeHarness({ characters: [] });
+    const feed = vi.fn();
+    harness.events.subscribeAll(feed);
+
+    const post = await harness.service.submitUserPost(onlyUserPost);
+
+    expect(harness.threadActivityCalls).toEqual([post.id]);
+    expect(feed).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "thread.activity" }),
+    );
   });
 });
 
