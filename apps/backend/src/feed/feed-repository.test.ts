@@ -170,8 +170,40 @@ describe("FeedRepository mine filter (§12.3)", () => {
     // A reply whose parent I wrote, and any post that mentions me.
     expect(lookups[0]?.where).toMatchObject({ replyToPost: { authorId: "reader-1" } });
     expect(lookups[1]?.where).toMatchObject({ mentions: { has: "hanako" } });
+    // The unified feed spans every simulation, so neither lookup is narrowed.
+    expect(lookups[0]?.where).not.toHaveProperty("simulationId");
+    expect(lookups[1]?.where).not.toHaveProperty("simulationId");
     // Three queries in total, whatever the page holds.
     expect(spies.post.findMany).toHaveBeenCalledTimes(3);
+  });
+
+  /**
+   * A thread never spans simulations (§10.5), so narrowing the lookups changes no
+   * result. It stops one room's filter from reading every reply and every mention
+   * in the database to build a list the outer query would discard anyway (§26).
+   */
+  it("narrows both lookups to the room when the caller asked for one", async () => {
+    const { db, calls } = makeDb({ threadIds: ["root-7"] });
+
+    await new FeedRepository(db).findThreadPage({
+      limit: 21,
+      simulationId: "room-1",
+      mine: { userId: "reader-1", handle: "hanako" },
+    });
+
+    const lookups = calls.filter((call) => call.distinct !== undefined);
+    expect(lookups[0]?.where).toMatchObject({
+      simulationId: "room-1",
+      replyToPost: { authorId: "reader-1" },
+    });
+    expect(lookups[1]?.where).toMatchObject({
+      simulationId: "room-1",
+      mentions: { has: "hanako" },
+    });
+    // The roots keep both of their own conditions.
+    const roots = calls.find((call) => call.include !== undefined);
+    expect(roots?.where).toMatchObject({ replyTo: null, simulationId: "room-1" });
+    expect(roots?.where).toHaveProperty("AND");
   });
 
   it("matches roots I wrote, roots mentioning me, and the threads it collected", async () => {
