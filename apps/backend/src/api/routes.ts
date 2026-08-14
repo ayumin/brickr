@@ -1,14 +1,4 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import {
-  AccountSuspendedError,
-  EmailTakenError,
-  HandleTakenError,
-  InvalidBirthdateError,
-  InvalidCredentialsError,
-  InviteCodeInvalidError,
-  UnderageSignupError,
-  UserNotFoundError,
-} from "../auth/auth-errors.js";
 import { requireAdmin, requireUser } from "../auth/auth-context.js";
 import type { IssuedSession } from "../auth/auth-service.js";
 import { toInviteCodeDto } from "../auth/invite-code.js";
@@ -21,26 +11,8 @@ import {
 import { toAuthUserDto, toUserManagementDto, type UserAccount } from "../auth/user-account.js";
 import { env } from "../config/env.js";
 import type { AppServices } from "../services.js";
-import { InvalidApplicationSettingError } from "../settings/runtime-settings.js";
-import { CharacterCsvError } from "../characters/character-csv.js";
-import {
-  CharacterForbiddenError,
-  CharacterGenerationError,
-  CharacterHandleConflictError,
-  CharacterNotFoundError,
-  ModelProfileNotFoundError,
-} from "../characters/character-service.js";
-import { FeedCursorInvalidError } from "../feed/feed-cursor.js";
 import type { FeedReader } from "../feed/feed-service.js";
-import { ReplyTargetNotFoundError } from "../posts/post-repository.js";
-import {
-  GlobalSimulationMutationError,
-  PostNotFoundError,
-  SimulationForbiddenError,
-  SimulationNotFoundError,
-  SimulationStoppedError,
-} from "../simulation/simulation-service.js";
-import { sendError } from "./errors.js";
+import { handleDomainError, sendError } from "./errors.js";
 import { registerEventsRoute } from "./events-route.js";
 import {
   bulkCreateCharactersSchema,
@@ -294,10 +266,7 @@ export async function registerRoutes(
     try {
       return await services.applicationSettings.update(body.data);
     } catch (error) {
-      if (error instanceof InvalidApplicationSettingError) {
-        return sendError(reply, 400, "invalid_setting", error.message);
-      }
-      throw error;
+      return handleDomainError(reply, error);
     }
   });
 
@@ -752,66 +721,3 @@ async function withSimulation<T>(
   }
 }
 
-function handleDomainError(reply: FastifyReply, error: unknown): FastifyReply {
-  if (error instanceof InvalidCredentialsError) {
-    return sendError(reply, 401, "invalid_credentials", error.message);
-  }
-  if (error instanceof AccountSuspendedError) {
-    return sendError(reply, 403, "account_suspended", error.message);
-  }
-  if (error instanceof InviteCodeInvalidError) {
-    return sendError(reply, 400, "invalid_invite_code", error.message);
-  }
-  if (error instanceof UnderageSignupError) {
-    return sendError(reply, 400, "underage", error.message);
-  }
-  if (error instanceof InvalidBirthdateError) {
-    return sendError(reply, 400, "invalid_birthdate", error.message);
-  }
-  if (error instanceof HandleTakenError) {
-    return sendError(reply, 409, "handle_conflict", error.message);
-  }
-  if (error instanceof EmailTakenError) {
-    return sendError(reply, 409, "email_conflict", error.message);
-  }
-  if (error instanceof UserNotFoundError) {
-    return sendError(reply, 404, "not_found", error.message);
-  }
-  if (error instanceof CharacterNotFoundError || error instanceof ModelProfileNotFoundError) {
-    return sendError(reply, 404, "not_found", error.message);
-  }
-  if (
-    error instanceof CharacterForbiddenError ||
-    error instanceof SimulationForbiddenError ||
-    // Managing the global feed as if it were a room: refused for everyone,
-    // admins included (§8.2).
-    error instanceof GlobalSimulationMutationError
-  ) {
-    return sendError(reply, 403, "forbidden", error.message);
-  }
-  if (error instanceof CharacterHandleConflictError) {
-    return sendError(reply, 409, "handle_conflict", error.message);
-  }
-  if (error instanceof CharacterGenerationError) {
-    return sendError(reply, 502, "character_generation_failed", error.message);
-  }
-  if (error instanceof CharacterCsvError) {
-    return sendError(reply, 400, "invalid_csv", error.message);
-  }
-  if (error instanceof SimulationNotFoundError) {
-    return sendError(reply, 404, "not_found", error.message);
-  }
-  if (error instanceof PostNotFoundError || error instanceof ReplyTargetNotFoundError) {
-    return sendError(reply, 404, "not_found", error.message);
-  }
-  if (error instanceof SimulationStoppedError) {
-    return sendError(reply, 409, "simulation_stopped", error.message);
-  }
-  // A cursor we did not issue, or one we can no longer read (§9.4). Answered
-  // rather than ignored: serving page one would look like a feed that silently
-  // lost the reader's place.
-  if (error instanceof FeedCursorInvalidError) {
-    return sendError(reply, 400, "invalid_cursor", error.message);
-  }
-  throw error;
-}
