@@ -989,6 +989,28 @@ export const openApiDocument: OpenAPIV3.Document = {
         },
       },
     },
+    "/api/posts/{threadRootId}/replies": {
+      get: {
+        operationId: "listThreadReplies",
+        security: sessionSecurity,
+        tags: ["Feed"],
+        summary: "List every reply in a thread",
+        description:
+          "All transitive replies of a thread root, oldest first — what the feed's two-reply preview " +
+          "leaves out. Requires a session, and answers 404 for a reply id, an unknown thread, or a " +
+          "stopped room the caller neither created nor administers.",
+        parameters: [pathParameter("threadRootId", "Thread root post ID")],
+        responses: {
+          "200": jsonResponse("Replies in the thread", {
+            type: "object",
+            required: ["posts"],
+            properties: { posts: { type: "array", items: ref("Post") } },
+          }),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          ...errorResponses,
+        },
+      },
+    },
     "/api/simulations/{id}/events": {
       get: {
         operationId: "streamSimulationEvents",

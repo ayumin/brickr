@@ -73,7 +73,9 @@ const sessionProtectedOperationIds = [
   "analyzeSimulation",
   "stopSimulation",
   "resumeSimulation",
+  "getSimulationFeed",
   "createPost",
+  "listThreadReplies",
 ];
 
 describe("OpenAPI documentation", () => {

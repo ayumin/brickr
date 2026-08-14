@@ -687,6 +687,28 @@ export async function registerRoutes(
     return { post: await services.posts.toDto(post) };
   });
 
+  /**
+   * The replies the feed left out (§12.2). Login required, like the thread detail
+   * it belongs to: the feed's own preview is all an anonymous reader gets (§10.8).
+   */
+  app.get("/api/posts/:threadRootId/replies", async (request, reply) => {
+    const user = requireUser(request, reply);
+    if (!user) return reply;
+
+    const params = threadRootParams.safeParse(request.params);
+    if (!params.success) {
+      return sendError(reply, 400, "invalid_params", "thread root id is invalid");
+    }
+
+    try {
+      return {
+        posts: await services.feed.listThreadReplies(params.data.threadRootId, toFeedReader(user)),
+      };
+    } catch (error) {
+      return handleDomainError(reply, error);
+    }
+  });
+
   // -- sse ------------------------------------------------------------------
 
   registerEventsRoute(app, services);
