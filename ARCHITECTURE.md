@@ -274,7 +274,7 @@ erDiagram
 - `quotedPost`はDTO生成時に1階層だけ平坦化します。再帰的な巨大Payloadを防ぎます。
 - Avatarと投稿画像は現在Data URLとしてText列へ保存します。
 
-「Post作成」「Root Postの`threadActivityAt`更新」「Simulationの`lastActivityAt`更新」は
+「ReplyのRoot ID解決」「Post作成」「Root Postの`threadActivityAt`更新」「Simulationの`lastActivityAt`更新」は
 `PostRepository.createWithThreadActivity`の単一Transactionで原子的に実行します。途中で失敗すると
 Feedの並び順が実際の投稿と食い違い、以後のPagingで重複・欠落が発生します。
 

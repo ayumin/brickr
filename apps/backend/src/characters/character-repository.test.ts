@@ -193,4 +193,36 @@ describe("CharacterRepository hard deletion", () => {
       data: { lastActivityAt: new Date("2026-08-01T00:00:00Z") },
     });
   });
+
+  /**
+   * The thread a deleted reply belonged to is only recorded on the reply itself,
+   * so its root has to be read before the delete as well — otherwise the root
+   * keeps the activity time the now-detached subtree earned it (§8.5).
+   */
+  it("reads the root of each deleted post, so a surviving root can be re-dated", async () => {
+    const { db, tx } = makeDb((args) => {
+      if (args.where.authorId?.in) {
+        return [{ id: "reply-1", simulationId: "sim-1", threadRootId: "root-1" }];
+      }
+      if (args.where.authorId?.notIn) return [{ id: "reply-2" }];
+      return [];
+    });
+
+    await new CharacterRepository(db).hardDeleteMany(["character-1"]);
+
+    expect(tx.post.findMany).toHaveBeenCalledWith({
+      where: { authorId: { in: ["character-1"] } },
+      select: { id: true, simulationId: true, threadRootId: true },
+    });
+    // The surviving root is walked for what is left of its thread, the deleted
+    // reply is not.
+    expect(tx.post.findMany).toHaveBeenCalledWith({
+      where: { replyTo: { in: ["root-1"] } },
+      select: { id: true },
+    });
+    expect(tx.post.findMany).not.toHaveBeenCalledWith({
+      where: { replyTo: { in: ["reply-1"] } },
+      select: { id: true },
+    });
+  });
 });
