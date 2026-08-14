@@ -64,8 +64,8 @@ export type FeedThreadActions = {
  * `capabilities` object.
  *
  * Rules (§9.3, §16.3, §27):
- * - Anonymous readers receive `NOTHING` capabilities from the server, so every
- *   action is false and no interactive element is emitted.
+ * - Anonymous readers receive every capability as `false` from the server, so
+ *   every action is false and no interactive element is emitted.
  * - A stopped room's thread arrives with `canReply`, `canQuote`, and
  *   `canOpenRoom` all false; the card renders the room name as plain text and
  *   hides the write actions.
