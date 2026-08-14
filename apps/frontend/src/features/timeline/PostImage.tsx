@@ -8,7 +8,7 @@
 export function PostImage({ src, alt = "投稿画像" }: { src: string; alt?: string }) {
   return (
     <div className="mt-3 aspect-video w-full overflow-hidden rounded-xl border border-line bg-surface-raised">
-      <img src={src} alt={alt} loading="lazy" className="h-full w-full object-contain" />
+      <img src={src} alt={alt} loading="lazy" className="h-full w-full object-cover" />
     </div>
   );
 }
