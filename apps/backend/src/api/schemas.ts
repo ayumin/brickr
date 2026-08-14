@@ -33,7 +33,8 @@ const imageDataUrl = z
   .string()
   .max(MAX_IMAGE_DATA_URL_LENGTH)
   .regex(/^data:image\/(?:png|jpeg|gif|webp);base64,[A-Za-z0-9+/]+={0,2}$/u)
-  .refine((value) => decodedImageSize(value) <= MAX_IMAGE_BYTES, "image exceeds 5 MiB");
+  .refine((value) => decodedImageSize(value) <= MAX_IMAGE_BYTES, "image exceeds 5 MiB")
+  .meta({ description: "Base64 PNG/JPEG/GIF/WebP data URL. Decoded image must not exceed 5 MiB." });
 
 const avatarDataUrl = z
   .string()
@@ -42,7 +43,8 @@ const avatarDataUrl = z
   .refine(
     (value) => decodedImageSize(value) <= MAX_AVATAR_IMAGE_BYTES,
     "avatar exceeds 1 MiB",
-  );
+  )
+  .meta({ description: "Base64 PNG/JPEG/WebP data URL. Decoded image must not exceed 1 MiB." });
 
 // Remote URLs already stored before avatar upload was introduced remain valid
 // for edits, while the UI only offers cropped image upload from now on.
@@ -79,6 +81,12 @@ export const createPostSchema = z
         message: "images are not allowed on replies or quotes",
       });
     }
+  })
+  .meta({
+    anyOf: [
+      { required: ["content"], properties: { content: { minLength: 1 } } },
+      { required: ["imageUrl"] },
+    ],
   });
 
 const probability = z.number().min(0).max(1);
@@ -134,7 +142,8 @@ export const updateApplicationSettingsSchema = z.object({
       z.enum(EDITABLE_APPLICATION_SETTING_NAMES),
       z.union([z.string().max(200), z.null()]),
     )
-    .refine((value) => Object.keys(value).length > 0, "at least one override is required"),
+    .refine((value) => Object.keys(value).length > 0, "at least one override is required")
+    .meta({ minProperties: 1 }),
 });
 
 export const idParams = z.object({ id });
@@ -192,6 +201,10 @@ export const signupSchema = z.object({
     .trim()
     .transform((value) => value.replace(/^@/u, ""))
     .pipe(z.string().regex(/^[A-Za-z0-9_]{1,15}$/u))
+    .meta({
+      pattern: "^[A-Za-z0-9_]{1,15}$",
+      description: "Accepts a leading @, which is stripped before storage.",
+    })
     .optional(),
 });
 
@@ -204,7 +217,11 @@ export const handleParams = z.object({
     .string()
     .trim()
     .transform((value) => value.replace(/^@/u, "").toLowerCase())
-    .pipe(z.string().regex(/^[a-z0-9_]{3,32}$/u)),
+    .pipe(z.string().regex(/^[a-z0-9_]{3,32}$/u))
+    .meta({
+      pattern: "^[a-z0-9_]{3,32}$",
+      description: "Accepts a display form such as @Architect and normalizes it.",
+    }),
 });
 
 export const loginSchema = z.object({
