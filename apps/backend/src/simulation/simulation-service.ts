@@ -510,6 +510,15 @@ export class SimulationService {
    * surfaces move at the same moment and describe the thread identically.
    */
   private async emitPostCreated(post: Post): Promise<void> {
+    // Assembling the thread costs queries beyond the post itself, and one
+    // submission can cascade into `MAX_POSTS_PER_SUBMISSION` of them. With no
+    // stream open, `publish` would discard the payload, so skip building it.
+    //
+    // This does not reopen the race that subscribing before hydrating closes: a
+    // stream that opens after this check hydrates over REST afterwards, and the
+    // post is committed by then, so it cannot be missed.
+    if (!this.events.hasSubscribers(post.simulationId)) return;
+
     this.events.publish(
       post.simulationId,
       await this.threadActivity.buildThreadActivity(post),

@@ -63,6 +63,17 @@ export class EventHub {
     return this.global.size;
   }
 
+  /**
+   * Whether a `publish` for this room would reach anyone.
+   *
+   * Lets a caller skip building a payload that `publish` would only discard. The
+   * feed's listeners count for every room, so this is false only when neither
+   * stream is open.
+   */
+  hasSubscribers(simulationId: string): boolean {
+    return this.subscriberCount(simulationId) > 0 || this.feedSubscriberCount() > 0;
+  }
+
   private deliver(listeners: Set<EventListener> | undefined, event: InternalSseEvent): void {
     if (!listeners) return;
     for (const listener of [...listeners]) {
