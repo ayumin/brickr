@@ -595,6 +595,21 @@ export const api = {
     return data.post;
   },
 
+  /**
+   * All replies the feed preview left out (§12.2). Login required.
+   *
+   * Returns every transitive reply under `threadRootId`, so the caller can
+   * replace the 2-reply preview with the full thread without a separate
+   * post-detail navigation.
+   */
+  async getThreadReplies(threadRootId: string, signal?: AbortSignal): Promise<PostDto[]> {
+    const data = await request<{ posts: PostDto[] }>(
+      `/api/posts/${encodeURIComponent(threadRootId)}/replies`,
+      signal ? { signal } : {},
+    );
+    return data.posts;
+  },
+
   async getUserManagement(
     query: { page?: number; search?: string } = {},
     signal?: AbortSignal,
