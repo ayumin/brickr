@@ -60,7 +60,7 @@ function harness(existing: Post[] = []) {
           displayName: "設計者",
           description: "設計する",
           rolePrompt: "設計",
-          tonePrompt: "简潔",
+          tonePrompt: "簡潔",
           interests: [],
           activityLevel: 0.5,
           responseProbability: 0.5,

@@ -42,6 +42,4 @@ export type NewPost = {
   mentions: string[];
   replyTo?: string | null;
   quoteOf?: string | null;
-  /** Own id for a top-level post or a quote repost, the parent's root for a reply. */
-  threadRootId: string;
 };
