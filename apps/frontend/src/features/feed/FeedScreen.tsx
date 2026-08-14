@@ -34,7 +34,7 @@ export function FeedScreen() {
     const controller = new AbortController();
     setState({ status: "loading" });
     api
-      .getFeed("all", controller.signal)
+      .getFeed("all", null, controller.signal)
       .then((page) => setState({ status: "ready", page }))
       .catch((cause: unknown) => {
         if (isAbortError(cause)) return;

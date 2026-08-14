@@ -463,15 +463,40 @@ export const api = {
   },
 
   /**
-   * The unified feed's first page, unauthenticated-friendly (§10.1). Only
+   * One page of the unified feed, unauthenticated-friendly (§10.1). Only
    * `filter: "mine"` needs a session - the backend 401s if one is missing.
    *
-   * Cursor pagination is Step 7's concern; this fetches page one only.
+   * `cursor` is the previous page's `nextCursor`, handed straight back: only the
+   * server encodes and decodes it (§9.4), so the ordering it describes can change
+   * without breaking a client that stored one.
    */
-  getFeed(filter: FeedFilter, signal?: AbortSignal): Promise<FeedPageDto> {
+  getFeed(
+    filter: FeedFilter,
+    cursor?: string | null,
+    signal?: AbortSignal,
+  ): Promise<FeedPageDto> {
     const query = new URLSearchParams({ filter });
+    if (cursor) query.set("cursor", cursor);
     return request<FeedPageDto>(
       `/api/feed?${query.toString()}`,
+      signal ? { signal } : {},
+    );
+  },
+
+  /**
+   * One page of a single room's feed (§10.2). Login required, and the reserved
+   * global row is not addressable here - the unified feed is what serves it.
+   */
+  getRoomFeed(
+    roomId: string,
+    filter: FeedFilter,
+    cursor?: string | null,
+    signal?: AbortSignal,
+  ): Promise<FeedPageDto> {
+    const query = new URLSearchParams({ filter });
+    if (cursor) query.set("cursor", cursor);
+    return request<FeedPageDto>(
+      `/api/simulations/${encodeURIComponent(roomId)}/feed?${query.toString()}`,
       signal ? { signal } : {},
     );
   },
@@ -546,16 +571,20 @@ export const api = {
     return data.posts;
   },
 
-  async createPost(
+  /**
+   * Both halves reach the caller: `post` for a flat timeline, `thread` for the
+   * feed's optimistic upsert (§13.4) - the same DTO shape a `feed.post-created`
+   * SSE event carries, so the two sources dedupe by root id for free.
+   */
+  createPost(
     simulationId: string,
     body: CreatePostRequest,
     signal?: AbortSignal,
-  ): Promise<PostDto> {
-    const data = await request<CreatePostResponse>(
+  ): Promise<CreatePostResponse> {
+    return request<CreatePostResponse>(
       `/api/simulations/${encodeURIComponent(simulationId)}/posts`,
       { method: "POST", body, ...(signal ? { signal } : {}) },
     );
-    return data.post;
   },
 
   async getPost(id: string, signal?: AbortSignal): Promise<PostDto> {
@@ -653,4 +682,14 @@ export const api = {
 /** URL of the SSE stream for one simulation. */
 export function simulationEventsUrl(simulationId: string): string {
   return `${API_BASE_URL}/api/simulations/${encodeURIComponent(simulationId)}/events`;
+}
+
+/**
+ * URL of the SSE stream behind the unified feed (§11.1).
+ *
+ * No id: this stream carries every simulation's public events, and it is the one
+ * events endpoint a signed-out visitor may open.
+ */
+export function feedEventsUrl(): string {
+  return `${API_BASE_URL}/api/feed/events`;
 }

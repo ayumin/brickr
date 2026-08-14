@@ -785,16 +785,21 @@ type FeedState = {
   connection: ConnectionState;
   activeResponses: Set<string>;
   generationWarning: boolean;
+  initialError: string | null;
+  loadMoreError: string | null;
 };
 ```
+
+`initialError` / `loadMoreError`：16.4が要求する「load moreのエラーは既存リストを保持したまま末尾で再試行できる」を満たすには、初期取得の失敗と追加取得の失敗を別々の状態として保持する必要がある。どちらもリロード（`initialLoadStarted` / `loadMoreStarted`）の開始時にクリアされ、専用のdismiss操作は持たない。
 
 動作：
 
 - initial pageは置換。
-- load moreはID dedupeして追加。
-- SSE thread upsertはbyId更新後、全loaded threadを `lastActivityAt DESC, id DESC`で再ソート。
+- load moreはroot IDでdedupeして末尾に追加するだけで、既存分の並びは再ソートしない（cursorページングの整合を壊さないため）。
+- SSE thread upsertはbyId更新後、全loaded threadを `lastActivityAt DESC, root ID DESC`で再ソートする（loadMoreとの非対称は意図的）。
+- `filter === "mine"`のときのSSE upsertは、byIdに既存のroot IDへの更新にのみ適用する。「mine」の該当判定（root自身／自分への返信／自分へのmention）はServer側ロジックであり、Frontendから未loadのthreadがmineに該当するか判定できないため、新規挿入はしない。
+- optimistic user postはPOST responseのthread DTOでupsertする。この経路は上記のmine制限を受けない（自分が今投稿したthreadは常に自分に関係するため）。SSE echoは同じroot IDでdedupeされる。
 - フィルター変更時はstateをresetして再取得。
-- optimistic user postはPOST responseのthread DTOでupsertする。SSE echoは同じroot IDでdedupe。
 
 ## 14. アプリケーションシェル
 

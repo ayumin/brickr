@@ -1046,14 +1046,18 @@ export const openApiDocument: OpenAPIV3.Document = {
         tags: ["Posts"],
         summary: "Create a user post and start AI responses",
         description:
-          "Images are accepted only on top-level posts. Replies and quotes cannot contain imageUrl.",
+          "Images are accepted only on top-level posts. Replies and quotes cannot contain imageUrl. " +
+          "The response carries the thread the post now belongs to as well as the post, in the same " +
+          "shape feed.post-created sends and keyed by the same thread.root.id, so a client can show " +
+          "its own post immediately and have the stream's echo update that entry rather than " +
+          "duplicate it (13.4).",
         parameters: [idParameter("Simulation ID")],
         requestBody: jsonBody(ref("CreatePost")),
         responses: {
-          "201": jsonResponse("Created post", {
+          "201": jsonResponse("Created post, with the thread it belongs to", {
             type: "object",
-            required: ["post"],
-            properties: { post: ref("Post") },
+            required: ["post", "thread"],
+            properties: { post: ref("Post"), thread: ref("FeedThread") },
           }),
           "401": { $ref: "#/components/responses/Unauthorized" },
           ...errorResponses,

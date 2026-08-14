@@ -45,7 +45,14 @@ export function registerPostRoutes(app: FastifyInstance, services: AppServices):
         quoteOf: body.quoteOf ?? null,
       });
 
-      return reply.status(201).send({ post: await services.posts.toDto(post) });
+      // The thread as well as the post (§13.4): the feed keys on `thread.root.id`,
+      // so the client can show its own post at once and let the stream's echo of
+      // it land on the same entry instead of a duplicate.
+      // `thread.root` is already the DTO for the just-created post, so reuse it
+      // directly rather than mapping the same post a second time via `toDto`.
+      const thread = await services.feed.buildThreadForReader(post, toFeedReader(user));
+
+      return reply.status(201).send({ post: thread.root, thread });
     });
   });
 

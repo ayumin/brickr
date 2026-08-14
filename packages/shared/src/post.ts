@@ -1,3 +1,4 @@
+import type { FeedThreadDto } from "./feed.js";
 import type { PublicAccountDto } from "./public-profile.js";
 
 /**
@@ -51,8 +52,21 @@ export type CreatePostRequest = {
   quoteOf?: string;
 };
 
+/**
+ * The created post, plus the thread it now belongs to (§13.4).
+ *
+ * `thread` exists so the feed can show your own post the moment it is accepted,
+ * without rebuilding what the server already knows. The alternative — deriving a
+ * thread from `post` on the client — would reimplement the reply preview, the
+ * reply count and `capabilities` a second time and drift from the feed (§11.3).
+ *
+ * It is the same shape `feed.post-created` carries, keyed by the same
+ * `thread.root.id`, so the stream's echo of this post updates the entry this
+ * response created instead of duplicating it.
+ */
 export type CreatePostResponse = {
   post: PostDto;
+  thread: FeedThreadDto;
 };
 
 export type PostsResponse = {

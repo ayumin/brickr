@@ -1,9 +1,38 @@
-import type { SseEvent } from "@brickr/shared";
+import type { FeedThreadDto, SseEvent } from "@brickr/shared";
 import { isGlobalSimulation } from "../simulation/simulation.js";
 import { isSimulationOwnerOrAdmin } from "../simulation/simulation-service.js";
 import type { InternalSseEvent } from "../simulation/public-events.js";
 import { toFeedCapabilities } from "./feed-capabilities.js";
+import type { FeedRoom } from "./feed-repository.js";
 import type { FeedReader } from "./feed-service.js";
+
+/**
+ * One thread, with `capabilities` answered for this reader.
+ *
+ * Shared by the event stream and by the create-post response so both describe the
+ * same thread the same way. Computing it twice is how the two would start
+ * disagreeing about whether a stopped room accepts a reply.
+ *
+ * Everything except `capabilities` is identical for everyone: the feed is a
+ * surface that looks the same for all readers (§10.1).
+ */
+export function withReaderCapabilities(
+  thread: FeedThreadDto,
+  room: FeedRoom,
+  reader: FeedReader,
+): FeedThreadDto {
+  return {
+    ...thread,
+    capabilities: toFeedCapabilities({
+      isSignedIn: reader !== null,
+      isFeedRoom: isGlobalSimulation(room),
+      isStoppedRoom: room.status === "stopped",
+      isRoomOwnerOrAdmin: reader !== null && isSimulationOwnerOrAdmin(room, reader),
+      replyCount: thread.replyCount,
+      previewedReplyCount: thread.latestReplies.length,
+    }),
+  };
+}
 
 /**
  * The one place an internal event becomes something a subscriber may see (§11.4).
@@ -27,17 +56,7 @@ export function toPublicEvent(event: InternalSseEvent, reader: FeedReader): SseE
     case "thread.activity":
       return {
         type: "feed.post-created",
-        thread: {
-          ...event.thread,
-          capabilities: toFeedCapabilities({
-            isSignedIn: reader !== null,
-            isFeedRoom: isGlobalSimulation(event.room),
-            isStoppedRoom: event.room.status === "stopped",
-            isRoomOwnerOrAdmin: reader !== null && isSimulationOwnerOrAdmin(event.room, reader),
-            replyCount: event.thread.replyCount,
-            previewedReplyCount: event.thread.latestReplies.length,
-          }),
-        },
+        thread: withReaderCapabilities(event.thread, event.room, reader),
       };
 
     case "response.started":
