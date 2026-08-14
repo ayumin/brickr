@@ -553,7 +553,7 @@ Stream:
   「応答を生成中」、`failed`は件名も理由も出さず「一部の応答を生成できませんでした」と集約します
 - `response.started`には必ず1件の`response.finished`が対応します（例外時・停止時も`finally`で送出）。
   対応が欠けるとUIに終わらないIndicatorが残るためです
-- 公開イベントへの変換は`simulation/public-events.ts`の1箇所だけで行い、未対応のEventは`null`として
+- 公開イベントへの変換は`feed/public-events.ts`の1箇所だけで行い、未対応のEventは`null`として
   破棄します。新しいEventを追加しても、明示的に写像するまで外部へ出ません
 - `capabilities`だけは購読者依存のため、Thread本体を1回組み立て、配信時に純粋関数で付け替えます
 - Postイベントは断片的なPostではなくThread全体を載せます。返信数・最新2件・`lastActivityAt`・
