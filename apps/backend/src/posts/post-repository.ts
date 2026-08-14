@@ -1,5 +1,5 @@
 import { DomainError } from "../domain-error.js";
-import type { Db, DbTransaction } from "../persistence/prisma.js";
+import { Prisma, type Db, type DbTransaction } from "../persistence/prisma.js";
 import type { NewPost, Post } from "./post.js";
 
 /**
@@ -128,43 +128,44 @@ export class PostRepository {
 
   /** All posts in a simulation, oldest first. */
   async findBySimulation(simulationId: string): Promise<Post[]> {
-    const rows = await this.db.post.findMany({
-      where: { simulationId },
-      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-    });
-    return rows.map(toPost);
+    return this.queryPosts({ simulationId }, "asc");
   }
 
   /** Most recent posts in a simulation, returned oldest first. */
   async findRecentBySimulation(simulationId: string, limit: number): Promise<Post[]> {
-    const rows = await this.db.post.findMany({
-      where: { simulationId },
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      take: limit,
-    });
-    return rows.reverse().map(toPost);
+    return this.queryPosts({ simulationId }, "desc", limit);
   }
 
   /** Direct replies to a post, oldest first. */
   async findReplies(postId: string): Promise<Post[]> {
-    const rows = await this.db.post.findMany({
-      where: { replyTo: postId },
-      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-    });
-    return rows.map(toPost);
+    return this.queryPosts({ replyTo: postId }, "asc");
   }
 
   /** Posts quoting a post, oldest first. */
   async findQuotes(postId: string): Promise<Post[]> {
-    const rows = await this.db.post.findMany({
-      where: { quoteOf: postId },
-      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-    });
-    return rows.map(toPost);
+    return this.queryPosts({ quoteOf: postId }, "asc");
   }
 
   async countBySimulation(simulationId: string): Promise<number> {
     return this.db.post.count({ where: { simulationId } });
+  }
+
+  /**
+   * `limit` also flips the sort to newest-first so the database can serve it
+   * with an index, then the result is reversed back to the oldest-first order
+   * every caller expects.
+   */
+  private async queryPosts(
+    where: Prisma.PostWhereInput,
+    order: "asc" | "desc",
+    limit?: number,
+  ): Promise<Post[]> {
+    const rows = await this.db.post.findMany({
+      where,
+      orderBy: [{ createdAt: order }, { id: order }],
+      ...(limit === undefined ? {} : { take: limit }),
+    });
+    return (limit === undefined ? rows : rows.reverse()).map(toPost);
   }
 }
 
