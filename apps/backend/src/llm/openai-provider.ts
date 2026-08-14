@@ -8,12 +8,12 @@
 import OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { env } from "../config/env.js";
-import {
-  LLMError,
-  type LLMAvailableModel,
-  type LLMGenerateRequest,
-  type LLMGenerateResult,
-  type LLMProvider,
+import { requireClient, toLLMError } from "./provider-http-error.js";
+import type {
+  LLMAvailableModel,
+  LLMGenerateRequest,
+  LLMGenerateResult,
+  LLMProvider,
 } from "./provider.js";
 
 const PROVIDER_ID = "openai" as const;
@@ -41,10 +41,7 @@ export class OpenAIProvider implements LLMProvider {
   }
 
   async listModels(signal?: AbortSignal): Promise<LLMAvailableModel[]> {
-    const client = this.client;
-    if (!client) {
-      throw new LLMError("openai is not configured (missing API key)", PROVIDER_ID, false);
-    }
+    const client = requireClient(this.client, PROVIDER_ID);
 
     try {
       const page = await client.models.list(signal ? { signal } : undefined);
@@ -56,15 +53,12 @@ export class OpenAIProvider implements LLMProvider {
       }
       return models.sort((a, b) => a.id.localeCompare(b.id));
     } catch (error) {
-      throw toLLMError(error);
+      throw toLLMError(PROVIDER_ID, "openai", error);
     }
   }
 
   async generate(request: LLMGenerateRequest): Promise<LLMGenerateResult> {
-    const client = this.client;
-    if (!client) {
-      throw new LLMError("openai is not configured (missing API key)", PROVIDER_ID, false);
-    }
+    const client = requireClient(this.client, PROVIDER_ID);
 
     const messages: ChatCompletionMessageParam[] = [
       { role: "system", content: request.systemPrompt },
@@ -115,7 +109,7 @@ export class OpenAIProvider implements LLMProvider {
           : {}),
       };
     } catch (error) {
-      throw toLLMError(error);
+      throw toLLMError(PROVIDER_ID, "openai", error);
     }
   }
 }
@@ -153,35 +147,4 @@ export function toOpenAIMessage(
       })),
     ],
   };
-}
-
-function toLLMError(error: unknown): LLMError {
-  if (error instanceof LLMError) return error;
-
-  const status = httpStatusOf(error);
-  return new LLMError(
-    `openai request failed${status === undefined ? "" : ` (status ${status})`}: ${messageOf(error)}`,
-    PROVIDER_ID,
-    isRetryable(status, error),
-    { cause: error },
-  );
-}
-
-function httpStatusOf(error: unknown): number | undefined {
-  if (typeof error !== "object" || error === null) return undefined;
-  const status = (error as { status?: unknown }).status;
-  return typeof status === "number" ? status : undefined;
-}
-
-/** 429 / 5xx / transport failures are worth one more shot; 4xx are not. */
-function isRetryable(status: number | undefined, error: unknown): boolean {
-  if (status === undefined) {
-    return !(error instanceof Error && error.name === "AbortError");
-  }
-  if (status === 408 || status === 409 || status === 429) return true;
-  return status >= 500;
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
