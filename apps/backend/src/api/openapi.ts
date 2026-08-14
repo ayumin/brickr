@@ -93,6 +93,7 @@ export const openApiDocument: OpenAPIV3.Document = {
     { name: "Models", description: "Available LLM provider/model profiles" },
     { name: "User", description: "Editable human user profile" },
     { name: "Simulations", description: "Simulation lifecycle" },
+    { name: "Feed", description: "Thread feed across every simulation, and per simulation" },
     { name: "Posts", description: "Timeline posts, replies and quotes" },
     { name: "Events", description: "Realtime simulation events" },
     { name: "Handles", description: "Handle namespace shared by users and characters" },

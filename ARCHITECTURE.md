@@ -156,6 +156,9 @@ Cookie Security、UI/JSONの配信を検証します。
 | `POST/PUT/DELETE` | `/api/characters...` | User / Owner/Admin | 作成・一括生成・import、更新・削除・復活 |
 | `GET/PUT` | `/api/user-profile` | User | 自分のProfile取得・更新 |
 | `GET` | `/api/user-profile/token-usage` | User | 自分の累積Token使用量 |
+| `GET` | `/api/feed` | Public | 全Simulation横断のThread Feed（未ログインは操作不可のcapabilities） |
+| `GET` | `/api/simulations/:id/feed` | User / Owner/Admin | 単一RoomのFeed。停止中は所有者・管理者以外へ404 |
+| `GET` | `/api/posts/:threadRootId/replies` | User / Owner/Admin | Threadの全返信（Feedのpreview 2件の残り） |
 | `GET` | `/api/simulations`, `/api/simulations/:id` | Public | 一覧・SimulationとPost履歴 |
 | `POST` | `/api/simulations` | User | Simulation作成 |
 | `PUT/POST` | `/api/simulations/:id`, `/stop`, `/resume` | Owner/Admin | 改名・停止・再開 |

@@ -21,7 +21,6 @@ import { z } from "zod";
 
 const id = z.string().trim().min(1).max(64);
 
-
 export const createSimulationSchema = z.object({
   title: z.string().trim().min(1).max(120).optional(),
 });

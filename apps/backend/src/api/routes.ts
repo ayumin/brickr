@@ -30,6 +30,8 @@ import {
   CharacterNotFoundError,
   ModelProfileNotFoundError,
 } from "../characters/character-service.js";
+import { FeedCursorInvalidError } from "../feed/feed-cursor.js";
+import type { FeedReader } from "../feed/feed-service.js";
 import { ReplyTargetNotFoundError } from "../posts/post-repository.js";
 import {
   GlobalSimulationMutationError,
