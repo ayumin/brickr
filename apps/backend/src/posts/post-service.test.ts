@@ -162,3 +162,41 @@ describe("PostService.publish thread information (§8.3)", () => {
     expect(created[0]?.replyTo).toBeNull();
   });
 });
+
+/**
+ * The batch mapper the feed maps a whole page with (§26): the lookups it performs
+ * must not grow with the number of posts, and a quote must resolve whether or not
+ * the quoted post happens to be in the same batch.
+ */
+describe("PostService.toDtos", () => {
+  it("resolves a quote from inside the batch without reading it again", async () => {
+    const quoted = makePost({ id: "quoted-1" });
+    const quoting = makePost({ id: "quoting-1", quoteOf: "quoted-1" });
+    const { service, reads } = harness([quoted, quoting]);
+
+    const dtos = await service.toDtos([quoted, quoting]);
+
+    expect(dtos[1]?.quotedPost?.id).toBe("quoted-1");
+    expect(reads.byIds).toEqual([[]]);
+  });
+
+  it("reads a quoted post that is not in the batch, once per page", async () => {
+    const outside = makePost({ id: "outside-1" });
+    const first = makePost({ id: "post-1", quoteOf: "outside-1" });
+    const second = makePost({ id: "post-2", quoteOf: "outside-1" });
+    const { service, reads } = harness([outside, first, second]);
+
+    const dtos = await service.toDtos([first, second]);
+
+    expect(dtos.map((dto) => dto.quotedPost?.id)).toEqual(["outside-1", "outside-1"]);
+    // Deduplicated: one lookup for the page, not one per quoting post.
+    expect(reads.byIds).toEqual([["outside-1"]]);
+  });
+
+  it("asks for nothing when there are no posts", async () => {
+    const { service, reads } = harness();
+
+    expect(await service.toDtos([])).toEqual([]);
+    expect(reads.byIds).toEqual([]);
+  });
+});
