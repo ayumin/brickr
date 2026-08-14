@@ -534,6 +534,31 @@ describe("access matrix (§24.2)", () => {
       expect(await ids(ADMIN)).toEqual(expect.arrayContaining([OWNED_CAST.id, SYSTEM_CAST.id]));
     });
 
+    /**
+     * The roster endpoint, asserted on its contents rather than only its guard.
+     *
+     * This case exists because the first version of this file checked
+     * `/api/characters` for 401/200 alone, and a later change widened it back to
+     * "every active character for any signed-in caller" without a single test
+     * failing. Since the feed is readable while signed in, that list is enough to
+     * mark every AI post in it — the leak `/api/handles/:handle` was removed for
+     * (§25), in bulk. A handle assertion is the one that would have caught it.
+     */
+    it("gives an ordinary caller no handle they do not already own", async () => {
+      const handles = async (actor: UserAccount) =>
+        (
+          (await get(actor, "/api/characters")).body as {
+            characters: Array<{ handle: string }>;
+          }
+        ).characters.map((c) => c.handle);
+
+      expect(await handles(NORMAL_USER)).toEqual([]);
+      expect(await handles(CHARACTER_OWNER)).toEqual([OWNED_CAST.handle]);
+      expect(await handles(ADMIN)).toEqual(
+        expect.arrayContaining([OWNED_CAST.handle, SYSTEM_CAST.handle]),
+      );
+    });
+
     it("labels creators for an admin only, with null for System-owned", async () => {
       const forAdmin = (
         (await get(ADMIN, "/api/characters/management")).body as {

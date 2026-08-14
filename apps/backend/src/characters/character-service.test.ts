@@ -495,10 +495,14 @@ describe("CharacterService ownership (CLAUDE.md §66.5)", () => {
 });
 
 /**
- * `listDtos` returns all active characters to every authenticated caller so
- * that the composer and character picker can populate @mention and responder
- * selection with the full cast (including system-seeded characters).
- * Ownership scoping belongs to the management endpoints only (§10.7).
+ * An ordinary caller sees only what they own (§10.7).
+ *
+ * A complete roster is a lookup table from handle to "this account is an AI",
+ * and the feed is readable while signed in, so anyone holding that list could
+ * mark every AI post in it (§25). Widening `listDtos` to populate a client-side
+ * cast picker reopens that, which is what these two cases exist to prevent:
+ * mentioning a seeded character needs no roster, because `@handle` is free text
+ * resolved server-side (§10.5).
  */
 describe("CharacterService list scope", () => {
   const someoneElses = () =>
@@ -506,20 +510,28 @@ describe("CharacterService list scope", () => {
   const systemOwned = () =>
     makeCharacter("character-system", { ...REQUEST, handle: "system_owned" }, null);
 
-  it("returns all active characters to any authenticated caller, including other users' and System-owned", async () => {
+  it("hides other users' and System-owned characters from an ordinary caller", async () => {
     const own = makeCharacter("character-own", { ...REQUEST, handle: "own" });
     const { service } = makeService([own, someoneElses(), systemOwned()]);
 
-    await expect(service.listDtos(OWNER)).resolves.toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ id: own.id }),
-        expect.objectContaining({ id: "character-other" }),
-        expect.objectContaining({ id: "character-system" }),
-      ]),
-    );
+    await expect(service.listDtos(OWNER)).resolves.toEqual([
+      expect.objectContaining({ id: own.id }),
+    ]);
     await expect(service.listManagementDtos(OWNER)).resolves.toEqual([
       expect.objectContaining({ id: own.id }),
     ]);
+  });
+
+  it("never leaks a handle an ordinary caller does not already own", async () => {
+    const own = makeCharacter("character-own", { ...REQUEST, handle: "own" });
+    const { service } = makeService([own, someoneElses(), systemOwned()]);
+
+    const handles = (await service.listDtos(OWNER)).map((character) => character.handle);
+
+    // The handle is the part that matters: it is what a feed post shows, so a
+    // handle in this list is a post identified as an AI's.
+    expect(handles).not.toContain("someone_elses");
+    expect(handles).not.toContain("system_owned");
   });
 
   it("shows an administrator every character, System-owned included", async () => {

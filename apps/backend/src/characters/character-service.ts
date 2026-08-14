@@ -93,16 +93,27 @@ export class CharacterService {
   }
 
   /**
-   * All active characters, for any authenticated caller.
+   * Characters this caller owns, or all of them for an administrator (§10.7).
    *
-   * This is the roster the composer and character picker use for @mention and
-   * responder selection. Every signed-in user needs the full cast to be able to
-   * mention or interact with system-seeded characters they did not create
-   * themselves. Ownership scoping belongs to the management endpoints
-   * (`listManagementDtos`, `findConfigDto`), not here.
+   * Never the whole table for an ordinary caller. A complete roster is a lookup
+   * table from handle to "this account is an AI", and the feed is readable while
+   * signed in, so anyone holding that list could mark every AI post in it. That
+   * is a more efficient version of exactly what removing
+   * `GET /api/handles/:handle` was for (§25), which is why the scope belongs here
+   * and not only on the management endpoints.
+   *
+   * **Do not widen this to serve a client-side cast picker.** Mentioning a
+   * seeded character never required the roster: `@handle` is free text (§10.5)
+   * and `PostService.publish` resolves it server-side through
+   * `resolveKnownMentions`, so a composer only needs the user to type the handle.
+   * The two features that did read a full roster — the `@` mention picker and
+   * client-chosen `responderIds` — are both being removed in phase 1 (§10.5,
+   * Step 8), and the startup fetch that populated it goes with them (Step 10).
    */
-  async listDtos(_actor: CharacterActor): Promise<CharacterDto[]> {
-    const all = await this.characters.findAll();
+  async listDtos(actor: CharacterActor): Promise<CharacterDto[]> {
+    const all = actor.isAdmin
+      ? await this.characters.findAll()
+      : await this.characters.findAllByCreatedByUserId(actor.id);
     return all.map(toCharacterDto);
   }
 
