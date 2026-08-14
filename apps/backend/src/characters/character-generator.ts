@@ -108,7 +108,6 @@ export class LLMCharacterPersonaGenerator implements CharacterPersonaGenerator {
 }
 
 const CHARACTER_GENERATION_SYSTEM_PROMPT = `
-[CHARACTER_BATCH_GENERATION]
 SNSシミュレーション用の架空の日本語キャラクターを設計してください。
 全員の立場、価値観、職業、年代、話し方、関心を明確に変えてください。
 実在人物や既存作品のキャラクターは作らないでください。
