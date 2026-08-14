@@ -558,6 +558,9 @@ Stream:
 - `capabilities`だけは購読者依存のため、Thread本体を1回組み立て、配信時に純粋関数で付け替えます
 - Postイベントは断片的なPostではなくThread全体を載せます。返信数・最新2件・`lastActivityAt`・
   `capabilities`をClientが再計算するとFeed生成ロジックの二重実装になり、必ずズレるためです（§11.3）
+- Thread本体の組み立てはPost自体より多くのQueryを要し、1回の投稿が最大24 Postまで連鎖するため、
+  購読者が1人もいない場合は組み立てずに打ち切ります（`EventHub.hasSubscribers`）。`publish`が
+  破棄するPayloadを作らないだけで、下記の購読先行順序があるため取りこぼしは発生しません
 
 FrontendはSSEを開始してからRESTで履歴を取得します。これにより履歴取得中に生成されたPostを
 取りこぼしません。ReducerはPost IDでREST結果とEventをmergeし、重複を除去します（`simulation-event-state.ts`）。
