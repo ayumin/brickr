@@ -1,4 +1,3 @@
-import { USER_HANDLE } from "@brickr/shared";
 import { isRecordNotFoundError, type Db } from "../persistence/prisma.js";
 import type { SaveUserProfile, UserProfile } from "./user-profile.js";
 
@@ -13,9 +12,11 @@ type UserProfileRow = {
 function toUserProfile(row: UserProfileRow): UserProfile {
   return {
     id: row.id,
-    // Only the pre-login row can lack a handle, and the seed backfills it to
-    // `you`. Falling back keeps an un-seeded database renderable.
-    handle: row.handle ?? USER_HANDLE,
+    // Every account gets its handle at signup (§66.1), and the seeded pre-login
+    // row that used to lack one is gone (§8.2). The column stays nullable, so
+    // this falls back to the id rather than inventing a handle somebody else
+    // could hold.
+    handle: row.handle ?? row.id,
     displayName: row.displayName,
     description: row.description,
     ...(row.avatarUrl ? { avatarUrl: row.avatarUrl } : {}),
