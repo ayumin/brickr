@@ -9,6 +9,7 @@ import type { AgentService } from "../agents/agent-service.js";
 import type { UserAccount } from "../auth/user-account.js";
 import type { CharacterRepository } from "../characters/character-repository.js";
 import type { Character } from "../characters/character.js";
+import { DomainError } from "../domain-error.js";
 import type { TokenUsageService } from "../llm/token-usage-service.js";
 import type { Post } from "../posts/post.js";
 import type { PostService } from "../posts/post-service.js";
@@ -62,32 +63,36 @@ export type ThreadActivitySource = {
   buildThreadActivity: (post: Post) => Promise<ThreadActivityEvent>;
 };
 
-export class SimulationNotFoundError extends Error {
+export class SimulationNotFoundError extends DomainError {
+  readonly httpStatus = 404;
+  readonly errorCode = "not_found" as const;
   constructor(id: string) {
     super(`simulation "${id}" not found`);
-    this.name = "SimulationNotFoundError";
   }
 }
 
-export class SimulationStoppedError extends Error {
+export class SimulationStoppedError extends DomainError {
+  readonly httpStatus = 409;
+  readonly errorCode = "simulation_stopped" as const;
   constructor(id: string) {
     super(`simulation "${id}" has been stopped`);
-    this.name = "SimulationStoppedError";
   }
 }
 
 /** Rename/stop/resume/analysis are limited to the creator or an admin (CLAUDE.md §66.6). */
-export class SimulationForbiddenError extends Error {
+export class SimulationForbiddenError extends DomainError {
+  readonly httpStatus = 403;
+  readonly errorCode = "forbidden" as const;
   constructor(id: string) {
     super(`not allowed to manage simulation "${id}"`);
-    this.name = "SimulationForbiddenError";
   }
 }
 
-export class PostNotFoundError extends Error {
+export class PostNotFoundError extends DomainError {
+  readonly httpStatus = 404;
+  readonly errorCode = "not_found" as const;
   constructor(id: string) {
     super(`post "${id}" not found`);
-    this.name = "PostNotFoundError";
   }
 }
 
@@ -98,10 +103,11 @@ export class PostNotFoundError extends Error {
  * Refused here rather than only in the UI, because a UI guard is bypassed by
  * calling the API directly.
  */
-export class GlobalSimulationMutationError extends Error {
+export class GlobalSimulationMutationError extends DomainError {
+  readonly httpStatus = 403;
+  readonly errorCode = "forbidden" as const;
   constructor(id: string) {
     super(`simulation "${id}" is the global feed and cannot be managed as a room`);
-    this.name = "GlobalSimulationMutationError";
   }
 }
 

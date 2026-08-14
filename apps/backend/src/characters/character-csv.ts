@@ -1,5 +1,6 @@
 import { isReservedHandle } from "@brickr/shared";
 import { z } from "zod";
+import { DomainError } from "../domain-error.js";
 import type { Character } from "./character.js";
 import type { ModelProfile } from "../model-profiles/model-profile.js";
 
@@ -175,9 +176,10 @@ function parseCsvRecords(source: string): string[][] {
   return records;
 }
 
-export class CharacterCsvError extends Error {
+export class CharacterCsvError extends DomainError {
+  readonly httpStatus = 400;
+  readonly errorCode = "invalid_csv" as const;
   constructor(message: string, options?: { cause?: unknown }) {
     super(message, options);
-    this.name = "CharacterCsvError";
   }
 }

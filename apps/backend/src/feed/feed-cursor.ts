@@ -1,3 +1,5 @@
+import { DomainError } from "../domain-error.js";
+
 /**
  * The opaque cursor the feed pages with (§9.4).
  *
@@ -17,10 +19,11 @@ export type FeedCursor = {
  * Answered as 400 rather than ignored: silently serving page one for a corrupt
  * cursor looks like a working feed that has quietly lost the reader's place.
  */
-export class FeedCursorInvalidError extends Error {
+export class FeedCursorInvalidError extends DomainError {
+  readonly httpStatus = 400;
+  readonly errorCode = "invalid_cursor" as const;
   constructor() {
     super("cursor is invalid");
-    this.name = "FeedCursorInvalidError";
   }
 }
 

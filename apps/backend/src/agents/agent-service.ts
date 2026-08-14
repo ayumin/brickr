@@ -17,8 +17,14 @@ const MAX_OUTPUT_TOKENS = 400;
  * This is a seed/configuration mistake, not a provider failure, so it is
  * deliberately NOT an `LLMError` — reporting it as one would attribute a config
  * bug to whichever provider happened to be named, and make it look retryable.
+ *
+ * Also deliberately not a `DomainError`: unlike `characters/character-service.js`'s
+ * `ModelProfileNotFoundError` (a 404 for an API request naming an unknown id),
+ * this is a config bug discovered mid-generation and stays a plain `Error`
+ * that answers 500 — the distinct name avoids the two being confused at an
+ * `instanceof` check.
  */
-export class ModelProfileNotFoundError extends Error {
+export class CharacterModelProfileMissingError extends Error {
   constructor(
     readonly modelProfileId: string,
     readonly characterId: string,
@@ -26,7 +32,7 @@ export class ModelProfileNotFoundError extends Error {
     super(
       `character "${characterId}" references unknown model profile "${modelProfileId}"`,
     );
-    this.name = "ModelProfileNotFoundError";
+    this.name = "CharacterModelProfileMissingError";
   }
 }
 
@@ -66,7 +72,7 @@ export class AgentService {
   async generate(request: GenerateRequest): Promise<GeneratedPost> {
     const profile = await this.modelProfiles.findById(request.character.modelProfileId);
     if (!profile) {
-      throw new ModelProfileNotFoundError(
+      throw new CharacterModelProfileMissingError(
         request.character.modelProfileId,
         request.character.id,
       );

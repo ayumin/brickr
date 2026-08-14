@@ -1,3 +1,4 @@
+import { DomainError } from "../domain-error.js";
 import type { Db, DbTransaction } from "../persistence/prisma.js";
 import type { NewPost, Post } from "./post.js";
 
@@ -41,10 +42,11 @@ export function toPost(row: PostRow): Post {
  * publishing, so this only fires if it disappeared in between — in which case the
  * thread information would be a guess, and inventing a root is worse than failing.
  */
-export class ReplyTargetNotFoundError extends Error {
+export class ReplyTargetNotFoundError extends DomainError {
+  readonly httpStatus = 404;
+  readonly errorCode = "not_found" as const;
   constructor(id: string) {
     super(`reply target "${id}" not found`);
-    this.name = "ReplyTargetNotFoundError";
   }
 }
 

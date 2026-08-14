@@ -7,7 +7,7 @@ import type { ModelProfile } from "../model-profiles/model-profile.js";
 import type { ModelProfileRepository } from "../model-profiles/model-profile-repository.js";
 import type { Post } from "../posts/post.js";
 import type { ResponseAction } from "../simulation/simulation.js";
-import { AgentService, ModelProfileNotFoundError } from "./agent-service.js";
+import { AgentService, CharacterModelProfileMissingError } from "./agent-service.js";
 
 type ClientCall = { providerId: ProviderId; request: LLMGenerateRequest };
 
@@ -202,7 +202,7 @@ describe("AgentService.generate", () => {
       expect(second?.request.systemPrompt).toBe(first?.request.systemPrompt);
     });
 
-    it("throws ModelProfileNotFoundError when the model profile does not exist", async () => {
+    it("throws CharacterModelProfileMissingError when the model profile does not exist", async () => {
       const { client, calls } = makeFakeClient(() => "本文です。");
       const { repository } = makeFakeModelProfiles([OPENAI_PROFILE]);
 
@@ -211,7 +211,7 @@ describe("AgentService.generate", () => {
       );
 
       // A config mistake must not masquerade as a (retryable) provider failure.
-      await expect(promise).rejects.toBeInstanceOf(ModelProfileNotFoundError);
+      await expect(promise).rejects.toBeInstanceOf(CharacterModelProfileMissingError);
       await expect(promise).rejects.not.toBeInstanceOf(LLMError);
       await expect(promise).rejects.toThrow(/missing-profile/u);
       expect(calls).toHaveLength(0);
