@@ -282,7 +282,8 @@ export function selectFeedReplyPreview(thread: FeedThreadDto): FeedReplyPreviewE
 
   return thread.latestReplies.map((post) => ({
     post,
-    replyToHandle: post.replyTo === null ? null : (handleById.get(post.replyTo) ?? null),
+    replyToHandle:
+      post.replyTo === null || post.replyTo === post.id ? null : (handleById.get(post.replyTo) ?? null),
   }));
 }
 
