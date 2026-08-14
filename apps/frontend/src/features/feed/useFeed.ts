@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { FeedFilter, FeedPageDto, FeedThreadDto } from "@brickr/shared";
 
 import { api, isAbortError, toErrorMessage } from "../../services/api-client";
@@ -47,7 +47,16 @@ export function useFeed(scope: FeedScope, filter: FeedFilter, enabled: boolean =
   const [reloadToken, setReloadToken] = useState(0);
   const roomId = scope.kind === "room" ? scope.roomId : null;
 
+  // Tracks the room/filter pair that is currently "active". Updated in the
+  // same effect that resets state so that any in-flight loadMore request
+  // dispatched against the previous scope can detect it is stale.
+  const loadMoreScopeRef = useRef<{ roomId: string | null; filter: FeedFilter }>({
+    roomId,
+    filter,
+  });
+
   useEffect(() => {
+    loadMoreScopeRef.current = { roomId, filter };
     dispatch({ kind: "reset" });
   }, [roomId, filter]);
 
@@ -83,10 +92,21 @@ export function useFeed(scope: FeedScope, filter: FeedFilter, enabled: boolean =
   const loadMore = useCallback(() => {
     if (!enabled || state.nextCursor === null || state.loadingMore) return;
     dispatch({ kind: "loadMoreStarted" });
-    fetchPage(scope, filter, state.nextCursor, new AbortController().signal)
-      .then((page) => dispatch({ kind: "loadMoreLoaded", page }))
+    // Snapshot the scope at the moment the request is fired so we can detect
+    // a stale response if roomId/filter changes before the promise settles.
+    const requestedRoomId = roomId;
+    const requestedFilter = filter;
+    const controller = new AbortController();
+    fetchPage(scope, filter, state.nextCursor, controller.signal)
+      .then((page) => {
+        const current = loadMoreScopeRef.current;
+        if (current.roomId !== requestedRoomId || current.filter !== requestedFilter) return;
+        dispatch({ kind: "loadMoreLoaded", page });
+      })
       .catch((cause: unknown) => {
         if (isAbortError(cause)) return;
+        const current = loadMoreScopeRef.current;
+        if (current.roomId !== requestedRoomId || current.filter !== requestedFilter) return;
         dispatch({ kind: "loadMoreFailed", message: toErrorMessage(cause) });
       });
   }, [roomId, filter, state.nextCursor, state.loadingMore, enabled]);
