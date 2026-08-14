@@ -899,7 +899,7 @@ export function SimulationView({
               allPosts={events.posts}
               characters={characters}
               userProfile={userProfile}
-              thinking={events.thinking}
+              activities={events.activities}
               loading={events.loading}
               canPost={canPost}
               emptyTitle="まだ投稿やメンションがありません"
