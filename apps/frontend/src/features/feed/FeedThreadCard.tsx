@@ -16,8 +16,6 @@ export type FeedThreadCardProps = {
   onOpenThread?: (postId: string) => void;
   onReply?: (post: PostDto) => void;
   onRepost?: (post: PostDto) => void;
-  /** Fired with the thread's root id when there are more replies than shown here. */
-  onShowMoreReplies?: (threadRootId: string) => void;
 };
 
 /**
@@ -28,8 +26,9 @@ export type FeedThreadCardProps = {
  * thread still renders normally here, it just arrives with every capability
  * turned off.
  *
- * `data-thread-id` is read by the scroll-anchor logic Step 7-3 adds — not
- * used here, but the root element every thread needs it on is this one.
+ * `data-thread-id` is read by `FeedThreadList`'s scroll-anchor correction
+ * (§12.4) — not used here, but the root element every thread needs it on is
+ * this one.
  */
 export function FeedThreadCard({
   thread,
@@ -40,7 +39,6 @@ export function FeedThreadCard({
   onOpenThread,
   onReply,
   onRepost,
-  onShowMoreReplies,
 }: FeedThreadCardProps) {
   const { root, room } = thread;
   const actions = selectFeedThreadActions(thread.capabilities);
@@ -77,7 +75,6 @@ export function FeedThreadCard({
         {...(onOpenAuthor ? { onOpenAuthor } : {})}
         {...(onOpenHandle ? { onOpenHandle } : {})}
         {...(onOpenThread ? { onOpenThread } : {})}
-        {...(onShowMoreReplies ? { onShowMoreReplies } : {})}
       />
     </div>
   );
