@@ -32,7 +32,7 @@ export function FeedScreen() {
     setFilter(next);
   }, []);
 
-  const feed = useFeed({ kind: "global" }, filter);
+  const feed = useFeed(GLOBAL_FEED_TARGET, filter);
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col">
