@@ -10,9 +10,9 @@ import type {
 } from "@brickr/shared";
 import { randomUUID } from "node:crypto";
 import { DomainError } from "../domain-error.js";
-import { LLMError, LLMTimeoutError } from "../llm/provider.js";
 import type { ModelProfileRepository } from "../model-profiles/model-profile-repository.js";
 import type { ModelProfile } from "../model-profiles/model-profile.js";
+import { CharacterBulkCreationJobs } from "./character-bulk-creation-job.js";
 import type { CharacterRepository } from "./character-repository.js";
 import type { Character, SaveCharacter } from "./character.js";
 import {
@@ -26,11 +26,7 @@ import {
   toCharacterManagementDto,
   type CharacterActor,
 } from "./character-dto.js";
-import {
-  CharacterGenerationError,
-  CharacterPersonaParseError,
-  type CharacterPersonaGenerator,
-} from "./character-generator.js";
+import { CharacterGenerationError, type CharacterPersonaGenerator } from "./character-generator.js";
 import { CHARACTER_SEEDS } from "./character-seeds.js";
 import { DEMO_AVATAR_COUNT, demoAvatarDataUrl } from "./demo-avatar.js";
 
@@ -68,7 +64,7 @@ export class ModelProfileNotFoundError extends DomainError {
 }
 
 export class CharacterService {
-  private readonly bulkCreationJobs = new Map<string, CharacterBulkCreationJobDto>();
+  private readonly bulkCreationJobs: CharacterBulkCreationJobs;
   /** Seed avatars occupy the start of the pool; generated characters continue after them. */
   private nextDemoAvatarIndex = CHARACTER_SEEDS.length % DEMO_AVATAR_COUNT;
 
@@ -77,7 +73,15 @@ export class CharacterService {
     private readonly modelProfiles: ModelProfileRepository,
     private readonly personaGenerator: CharacterPersonaGenerator,
     private readonly random: () => number = Math.random,
-  ) {}
+  ) {
+    // Assigned here, not as a field initializer: under this project's
+    // `target: ES2022` (useDefineForClassFields defaults to true), a field
+    // initializer runs before constructor parameter properties are assigned,
+    // so `this.createMany` would close over an as-yet-uninitialized `this`.
+    this.bulkCreationJobs = new CharacterBulkCreationJobs((count, userId, onProgress) =>
+      this.createMany(count, userId, onProgress),
+    );
+  }
 
   async listDtos(): Promise<CharacterDto[]> {
     const all = await this.characters.findAll();
@@ -258,55 +262,11 @@ export class CharacterService {
   }
 
   startCreateMany(count: number, createdByUserId: string): CharacterBulkCreationJobDto {
-    const id = randomUUID();
-    const job: CharacterBulkCreationJobDto = {
-      id,
-      status: "generating",
-      completed: 0,
-      total: count,
-      createdCount: 0,
-    };
-    this.bulkCreationJobs.set(id, job);
-    this.pruneBulkCreationJobs();
-
-    void this.createMany(count, createdByUserId, (completed) => {
-      this.bulkCreationJobs.set(id, {
-        ...job,
-        status: completed >= count ? "saving" : "generating",
-        completed,
-      });
-    })
-      .then((created) => {
-        this.bulkCreationJobs.set(id, {
-          ...job,
-          status: "completed",
-          completed: count,
-          createdCount: created.length,
-        });
-      })
-      .catch((error: unknown) => {
-        const current = this.bulkCreationJobs.get(id) ?? job;
-        this.bulkCreationJobs.set(id, {
-          ...current,
-          status: "failed",
-          error: characterGenerationFailureMessage(error),
-        });
-      });
-
-    return job;
+    return this.bulkCreationJobs.start(count, createdByUserId);
   }
 
   findBulkCreationJob(id: string): CharacterBulkCreationJobDto | null {
-    return this.bulkCreationJobs.get(id) ?? null;
-  }
-
-  private pruneBulkCreationJobs(): void {
-    const maximumJobs = 100;
-    while (this.bulkCreationJobs.size > maximumJobs) {
-      const oldestId = this.bulkCreationJobs.keys().next().value as string | undefined;
-      if (!oldestId) return;
-      this.bulkCreationJobs.delete(oldestId);
-    }
+    return this.bulkCreationJobs.find(id);
   }
 
   private reserveDemoAvatars(count: number): number {
@@ -393,26 +353,6 @@ export class CharacterService {
 
 function randomProbability(random: () => number): number {
   return Math.round(Math.min(1, Math.max(0, random())) * 100) / 100;
-}
-
-function characterGenerationFailureMessage(error: unknown): string {
-  const cause = error instanceof CharacterGenerationError ? error.cause : error;
-  if (cause instanceof LLMTimeoutError) {
-    return `LLMの応答がタイムアウトしました: ${safeErrorDetail(cause.message)}`;
-  }
-  if (cause instanceof LLMError) {
-    return `LLM APIの呼び出しに失敗しました: ${safeErrorDetail(cause.message)}`;
-  }
-  if (cause instanceof CharacterPersonaParseError) return cause.message;
-  if (cause instanceof Error) {
-    return `キャラクター生成処理でエラーが発生しました: ${safeErrorDetail(cause.message)}`;
-  }
-  return "LLMによるキャラクター生成に失敗しました。";
-}
-
-function safeErrorDetail(message: string): string {
-  const normalized = message.replace(/\s+/gu, " ").trim();
-  return Array.from(normalized).slice(0, 240).join("");
 }
 
 function toSaveCharacter(input: SaveCharacterRequest): SaveCharacter {
