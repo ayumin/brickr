@@ -52,14 +52,43 @@ describe("LLMProviderRegistry.listAvailableModels", () => {
   });
 });
 
+describe("LLMProviderRegistry.preferred", () => {
+  it("returns openai when openai and gemini are both available", () => {
+    const registry = new LLMProviderRegistry([
+      fakeProvider("gemini", []),
+      fakeProvider("openai", []),
+    ]);
+    expect(registry.preferred()?.id).toBe("openai");
+  });
+
+  it("skips an unavailable provider and returns the next in order", () => {
+    const registry = new LLMProviderRegistry([
+      fakeProvider("openai", [], undefined, { available: false }),
+      fakeProvider("anthropic", []),
+    ]);
+    expect(registry.preferred()?.id).toBe("anthropic");
+  });
+
+  it("returns null when only the mock is registered", () => {
+    const registry = new LLMProviderRegistry([fakeProvider("mock", [])]);
+    expect(registry.preferred()).toBeNull();
+  });
+
+  it("returns null for an empty registry", () => {
+    const registry = new LLMProviderRegistry([]);
+    expect(registry.preferred()).toBeNull();
+  });
+});
+
 function fakeProvider(
   id: ProviderId,
   models: string[],
   failure?: Error,
+  options?: { available?: boolean },
 ): LLMProvider {
   return {
     id,
-    available: true,
+    available: options?.available ?? true,
     defaultModel: models[0] ?? "test",
     listModels: () =>
       failure

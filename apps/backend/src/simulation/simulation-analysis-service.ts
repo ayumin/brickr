@@ -64,12 +64,9 @@ export class SimulationAnalysisService {
   private async summarize(posts: PostDto[]): Promise<SimulationContentSummaryDto> {
     if (posts.length === 0) return emptySummary();
 
-    const providerId = this.providers
-      .availableIds()
-      .find((id) => id === "openai" || id === "anthropic" || id === "gemini");
-    if (!providerId) return fallbackSummary(posts);
+    const provider = this.providers.preferred();
+    if (!provider) return fallbackSummary(posts);
 
-    const provider = this.providers.get(providerId);
     const received = receivedReactionCounts(posts);
     const transcript = posts
       .slice(-SUMMARY_POST_LIMIT)
@@ -84,7 +81,7 @@ export class SimulationAnalysisService {
       .join("\n");
 
     try {
-      const result = await this.llm.generate(providerId, {
+      const result = await this.llm.generate(provider.id, {
         model: provider.defaultModel,
         systemPrompt:
           "あなたはSNS上の会話を中立的に分析する編集者です。投稿内容と各投稿が獲得した返信・リポスト数だけを根拠に、シミュレーション全体を4つの観点で日本語分析してください。反響の大小は提示された数値を比較し、事実を足さないでください。JSON以外は返さないでください。",
