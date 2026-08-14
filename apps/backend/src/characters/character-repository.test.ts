@@ -39,7 +39,9 @@ type PostFindManyArgs = {
  * number of queries the repair walk makes does not silently rewire the test.
  */
 function makeDb(
-  postFindMany: (args: PostFindManyArgs) => Array<{ id: string; simulationId?: string }> = () => [],
+  postFindMany: (
+    args: PostFindManyArgs,
+  ) => Array<{ id: string; simulationId?: string; threadRootId?: string }> = () => [],
 ) {
   const tx = {
     post: {

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { CharacterRepository } from "../characters/character-repository.js";
 import type { UserProfileRepository } from "../user-profile/user-profile-repository.js";
 import type { PostRepository } from "./post-repository.js";
-import { PostService, ReplyTargetNotFoundError } from "./post-service.js";
+import { PostService } from "./post-service.js";
 import type { NewPost, Post } from "./post.js";
 
 const AUTHOR_ID = "11111111-1111-4111-8111-111111111111";
@@ -23,7 +23,12 @@ function makePost(overrides: Partial<Post> & { id: string }): Post {
   };
 }
 
-/** Records what the service asked to persist, and serves the posts it looks up. */
+/**
+ * Records what the service asked to persist, and serves the posts it looks up.
+ *
+ * The thread root is resolved by the repository inside its write transaction
+ * (§8.4), so this stand-in derives it the same way the real one does.
+ */
 function harness(existing: Post[] = []) {
   const byId = new Map(existing.map((post) => [post.id, post]));
   const created: NewPost[] = [];
@@ -31,10 +36,12 @@ function harness(existing: Post[] = []) {
   const posts = {
     createWithThreadActivity(input: NewPost): Promise<Post> {
       created.push(input);
+      const parent = input.replyTo ? byId.get(input.replyTo) : undefined;
       return Promise.resolve({
         ...input,
         replyTo: input.replyTo ?? null,
         quoteOf: input.quoteOf ?? null,
+        threadRootId: parent?.threadRootId ?? input.id,
         threadActivityAt: new Date("2026-08-11T00:00:00Z"),
         createdAt: new Date("2026-08-11T00:00:00Z"),
       });
@@ -53,7 +60,7 @@ function harness(existing: Post[] = []) {
           displayName: "設計者",
           description: "設計する",
           rolePrompt: "設計",
-          tonePrompt: "簡潔",
+          tonePrompt: "简潔",
           interests: [],
           activityLevel: 0.5,
           responseProbability: 0.5,
@@ -86,8 +93,13 @@ describe("PostService.publish mentions", () => {
   });
 });
 
+/**
+ * What the service owns is the id and the reply/quote intent it hands over. The
+ * root itself is derived in the write transaction, and is fixed by
+ * `post-repository.test.ts` (§8.3, §8.4).
+ */
 describe("PostService.publish thread information (§8.3)", () => {
-  it("makes a top-level post its own thread root", async () => {
+  it("mints the post id before the insert, so a new thread can be its own root", async () => {
     const { service, created } = harness();
 
     const post = await service.publish({
@@ -101,36 +113,23 @@ describe("PostService.publish thread information (§8.3)", () => {
     expect(post.replyTo).toBeNull();
   });
 
-  it("gives a reply the root of the post it answers", async () => {
+  it("passes the reply target on instead of resolving its root itself", async () => {
     const root = makePost({ id: "root-1" });
     const { service, created } = harness([root]);
 
-    await service.publish({
+    const reply = await service.publish({
       simulationId: "sim-1",
       authorId: AUTHOR_ID,
       content: "返信",
       replyTo: root.id,
     });
 
-    expect(created[0]?.threadRootId).toBe("root-1");
+    expect(created[0]?.replyTo).toBe("root-1");
+    expect(created[0]).not.toHaveProperty("threadRootId");
+    expect(reply.threadRootId).toBe("root-1");
   });
 
-  it("keeps the same root however deep the reply chain runs", async () => {
-    const root = makePost({ id: "root-1" });
-    const reply = makePost({ id: "reply-1", replyTo: "root-1", threadRootId: "root-1" });
-    const { service, created } = harness([root, reply]);
-
-    await service.publish({
-      simulationId: "sim-1",
-      authorId: AUTHOR_ID,
-      content: "返信への返信",
-      replyTo: reply.id,
-    });
-
-    expect(created[0]?.threadRootId).toBe("root-1");
-  });
-
-  it("starts a new thread for a quote repost instead of joining the quoted one", async () => {
+  it("keeps a quote repost a top-level post rather than a reply", async () => {
     const quoted = makePost({ id: "root-1" });
     const { service, created } = harness([quoted]);
 
@@ -144,19 +143,5 @@ describe("PostService.publish thread information (§8.3)", () => {
     expect(post.threadRootId).toBe(post.id);
     expect(created[0]?.quoteOf).toBe("root-1");
     expect(created[0]?.replyTo).toBeNull();
-  });
-
-  it("refuses a reply whose parent is gone rather than inventing a root", async () => {
-    const { service, created } = harness();
-
-    await expect(
-      service.publish({
-        simulationId: "sim-1",
-        authorId: AUTHOR_ID,
-        content: "消えた投稿への返信",
-        replyTo: "missing",
-      }),
-    ).rejects.toThrow(ReplyTargetNotFoundError);
-    expect(created).toEqual([]);
   });
 });

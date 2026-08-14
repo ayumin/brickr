@@ -248,8 +248,9 @@ erDiagram
   投稿の自分判定は`post.author.id`で行います。
 - `Post.threadRootId`と`Post.threadActivityAt`は統合Feedのための非正規化値です。`replyTo`の再帰探索では
   全Simulation横断の20スレッドPagingが実用速度になりません。Top-level PostはID生成後に自身をRootとして
-  記録し、ReplyはParentのRootを継承してRootの`threadActivityAt`を更新します。Quote Postは独立Rootのため
-  引用元の順位を変えません。
+  記録し、ReplyはParentのRootを継承してRootの`threadActivityAt`を更新します。ParentのRootは書き込み
+  Transaction内で読み取るため、Serviceが先に読んだ古いRootを書き込むことはありません。Quote Postは
+  独立Rootのため引用元の順位を変えません。
 - `Simulation.scope`は内部専用です。`scope = "global"`の予約Simulation（固定ID）が統合Feedの投稿先で、
   Room一覧には出さず、改名・停止・再開・分析をService層で拒否します。`lastActivityAt`はRoom一覧の
   活動順並びに使います。
