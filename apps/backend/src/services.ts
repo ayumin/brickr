@@ -9,6 +9,8 @@ import { env } from "./config/env.js";
 import { CharacterRepository } from "./characters/character-repository.js";
 import { LLMCharacterPersonaGenerator } from "./characters/character-generator.js";
 import { CharacterService } from "./characters/character-service.js";
+import { FeedRepository } from "./feed/feed-repository.js";
+import { FeedService } from "./feed/feed-service.js";
 import { HandleRepository } from "./handles/handle-repository.js";
 import { HandleService } from "./handles/handle-service.js";
 import { LLMClient } from "./llm/llm-client.js";
@@ -43,6 +45,7 @@ export type AppServices = {
   modelProfiles: ModelProfileService;
   userProfile: UserProfileService;
   posts: PostService;
+  feed: FeedService;
   simulations: SimulationService;
   simulationAnalysis: SimulationAnalysisService;
   events: EventHub;
@@ -149,6 +152,7 @@ export async function buildServices(db: Db, logger: SimulationLogger): Promise<A
     modelProfiles,
     userProfile: new UserProfileService(userProfileRepository),
     posts: postService,
+    feed: new FeedService(new FeedRepository(db), postService, simulationRepository),
     simulations,
     simulationAnalysis,
     events,

@@ -33,13 +33,16 @@ const expectedPaths = [
   "/api/model-profiles",
   "/api/user-profile",
   "/api/user-profile/token-usage",
+  "/api/feed",
   "/api/simulations",
   "/api/simulations/{id}",
   "/api/simulations/{id}/analysis",
+  "/api/simulations/{id}/feed",
   "/api/simulations/{id}/stop",
   "/api/simulations/{id}/resume",
   "/api/simulations/{id}/posts",
   "/api/posts/{id}",
+  "/api/posts/{threadRootId}/replies",
   "/api/simulations/{id}/events",
 ];
 
@@ -70,7 +73,9 @@ const sessionProtectedOperationIds = [
   "analyzeSimulation",
   "stopSimulation",
   "resumeSimulation",
+  "getSimulationFeed",
   "createPost",
+  "listThreadReplies",
 ];
 
 describe("OpenAPI documentation", () => {

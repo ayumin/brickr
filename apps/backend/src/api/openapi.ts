@@ -25,13 +25,41 @@ const jsonResponse = (
   content: { "application/json": { schema } },
 });
 
-const idParameter = (description: string): OpenAPIV3.ParameterObject => ({
-  name: "id",
+const pathParameter = (
+  name: string,
+  description: string,
+): OpenAPIV3.ParameterObject => ({
+  name,
   in: "path",
   required: true,
   description,
   schema: { type: "string", minLength: 1, maxLength: 64 },
 });
+
+const idParameter = (description: string): OpenAPIV3.ParameterObject =>
+  pathParameter("id", description);
+
+/**
+ * Paging is server-owned (§9.4): the page size is fixed and the cursor is opaque,
+ * so only `filter` and a previously issued cursor are accepted.
+ */
+const feedParameters: OpenAPIV3.ParameterObject[] = [
+  {
+    name: "filter",
+    in: "query",
+    required: false,
+    description:
+      "`all` (default) or `mine` — threads whose root is yours, that reply to a post of yours, or that mention your handle. `mine` requires a session.",
+    schema: { type: "string", enum: ["all", "mine"], default: "all" },
+  },
+  {
+    name: "cursor",
+    in: "query",
+    required: false,
+    description: "Opaque cursor returned as `nextCursor` by the previous page.",
+    schema: { type: "string", maxLength: 512 },
+  },
+];
 
 const errorResponses = {
   "400": { $ref: "#/components/responses/BadRequest" },
@@ -65,6 +93,7 @@ export const openApiDocument: OpenAPIV3.Document = {
     { name: "Models", description: "Available LLM provider/model profiles" },
     { name: "User", description: "Editable human user profile" },
     { name: "Simulations", description: "Simulation lifecycle" },
+    { name: "Feed", description: "Thread feed across every simulation, and per simulation" },
     { name: "Posts", description: "Timeline posts, replies and quotes" },
     { name: "Events", description: "Realtime simulation events" },
     { name: "Handles", description: "Handle namespace shared by users and characters" },
@@ -873,6 +902,43 @@ export const openApiDocument: OpenAPIV3.Document = {
         },
       },
     },
+    "/api/feed": {
+      get: {
+        operationId: "getFeed",
+        tags: ["Feed"],
+        summary: "Read the unified feed",
+        description:
+          "Threads from every simulation, including the reserved global one, ordered by last activity. " +
+          "Readable without a session: an anonymous reader gets the same posts and capabilities that " +
+          "permit nothing. Posts from stopped rooms remain listed, but nobody may reply to or quote them. " +
+          "`filter=mine` requires a session and answers 401 without one.",
+        parameters: feedParameters,
+        responses: {
+          "200": jsonResponse("One page of threads", ref("FeedPage")),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          ...errorResponses,
+        },
+      },
+    },
+    "/api/simulations/{id}/feed": {
+      get: {
+        operationId: "getSimulationFeed",
+        security: sessionSecurity,
+        tags: ["Feed"],
+        summary: "Read one simulation's feed",
+        description:
+          "Same ordering, paging and reply previews as the unified feed, restricted to one simulation. " +
+          "The reserved global simulation is not available here — use `/api/feed`. A stopped simulation " +
+          "answers 404 unless the caller created it or is an administrator, so the endpoint cannot be " +
+          "used to discover it.",
+        parameters: [idParameter("Simulation ID"), ...feedParameters],
+        responses: {
+          "200": jsonResponse("One page of threads", ref("FeedPage")),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          ...errorResponses,
+        },
+      },
+    },
     "/api/simulations/{id}/posts": {
       get: {
         operationId: "listSimulationPosts",
@@ -920,6 +986,28 @@ export const openApiDocument: OpenAPIV3.Document = {
             required: ["post"],
             properties: { post: ref("Post") },
           }),
+          ...errorResponses,
+        },
+      },
+    },
+    "/api/posts/{threadRootId}/replies": {
+      get: {
+        operationId: "listThreadReplies",
+        security: sessionSecurity,
+        tags: ["Feed"],
+        summary: "List every reply in a thread",
+        description:
+          "All transitive replies of a thread root, oldest first — what the feed's two-reply preview " +
+          "leaves out. Requires a session, and answers 404 for a reply id, an unknown thread, or a " +
+          "stopped room the caller neither created nor administers.",
+        parameters: [pathParameter("threadRootId", "Thread root post ID")],
+        responses: {
+          "200": jsonResponse("Replies in the thread", {
+            type: "object",
+            required: ["posts"],
+            properties: { posts: { type: "array", items: ref("Post") } },
+          }),
+          "401": { $ref: "#/components/responses/Unauthorized" },
           ...errorResponses,
         },
       },
@@ -1543,6 +1631,82 @@ export const openApiDocument: OpenAPIV3.Document = {
           quoteOf: { type: "string", nullable: true },
           quotedPost: { allOf: [ref("QuotedPost")], nullable: true },
           createdAt: { type: "string", format: "date-time" },
+        },
+      },
+      FeedRoomRef: {
+        type: "object",
+        required: ["id", "title", "isFeed"],
+        description:
+          "The simulation a thread belongs to. `isFeed` marks the reserved global one, shown as the " +
+          "feed rather than as a room. Whether it is stopped is expressed only through capabilities.",
+        properties: {
+          id: { type: "string" },
+          title: { type: "string" },
+          isFeed: { type: "boolean" },
+        },
+      },
+      FeedCapabilities: {
+        type: "object",
+        required: [
+          "canOpenAuthor",
+          "canOpenRoom",
+          "canOpenThread",
+          "canReply",
+          "canQuote",
+          "canLoadMoreReplies",
+        ],
+        description:
+          "What the caller may do with this thread. Decided per thread by the server; clients must not " +
+          "infer it from a status field or from whether a session exists. Everything is false for an " +
+          "anonymous reader.",
+        properties: {
+          canOpenAuthor: { type: "boolean" },
+          canOpenRoom: { type: "boolean" },
+          canOpenThread: { type: "boolean" },
+          canReply: { type: "boolean" },
+          canQuote: { type: "boolean" },
+          canLoadMoreReplies: { type: "boolean" },
+        },
+      },
+      FeedThread: {
+        type: "object",
+        required: [
+          "root",
+          "room",
+          "latestReplies",
+          "replyCount",
+          "lastActivityAt",
+          "capabilities",
+        ],
+        properties: {
+          root: ref("Post"),
+          room: ref("FeedRoomRef"),
+          latestReplies: {
+            type: "array",
+            maxItems: 2,
+            description: "The newest two replies, ordered oldest first.",
+            items: ref("Post"),
+          },
+          replyCount: {
+            type: "integer",
+            description: "Every transitive reply, including those not previewed.",
+          },
+          lastActivityAt: { type: "string", format: "date-time" },
+          capabilities: ref("FeedCapabilities"),
+        },
+      },
+      FeedPage: {
+        type: "object",
+        required: ["threads", "nextCursor"],
+        properties: {
+          threads: { type: "array", maxItems: 20, items: ref("FeedThread") },
+          nextCursor: {
+            type: "string",
+            nullable: true,
+            description:
+              "Opaque cursor for the next page, or null at the end of the feed. Pass it back unchanged " +
+              "as `cursor`; an unrecognised value answers 400.",
+          },
         },
       },
       CreatePost: {

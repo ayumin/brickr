@@ -2,6 +2,12 @@ import { PrismaClient, type Prisma } from "@prisma/client";
 
 export const prisma = new PrismaClient();
 
+/**
+ * Re-exported so `@prisma/client` keeps being imported in exactly one place.
+ * Repositories need it for `Prisma.sql` and for typed `where` fragments.
+ */
+export { Prisma } from "@prisma/client";
+
 export type Db = PrismaClient;
 
 /**

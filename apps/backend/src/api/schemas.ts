@@ -1,5 +1,6 @@
 import {
   EDITABLE_APPLICATION_SETTING_NAMES,
+  FEED_FILTERS,
   MAX_PASSWORD_LENGTH,
   MIN_PASSWORD_LENGTH,
   MAX_AVATAR_DATA_URL_LENGTH,
@@ -137,6 +138,21 @@ export const updateApplicationSettingsSchema = z.object({
 });
 
 export const idParams = z.object({ id });
+
+export const threadRootParams = z.object({ threadRootId: id });
+
+/**
+ * `GET /api/feed` and `GET /api/simulations/:id/feed` (§9.4, §10.1).
+ *
+ * The page size is not accepted here: it is fixed server-side so a client cannot
+ * ask for a page that makes the feed slow. The cursor is passed through as an
+ * opaque string — only the feed service knows how to read it, and an unreadable
+ * one answers 400 from there rather than being validated into a different shape.
+ */
+export const feedQuerySchema = z.object({
+  filter: z.enum(FEED_FILTERS).optional(),
+  cursor: z.string().trim().min(1).max(512).optional(),
+});
 
 // -- auth ------------------------------------------------------------------
 

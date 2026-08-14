@@ -156,6 +156,9 @@ Cookie Security、UI/JSONの配信を検証します。
 | `POST/PUT/DELETE` | `/api/characters...` | User / Owner/Admin | 作成・一括生成・import、更新・削除・復活 |
 | `GET/PUT` | `/api/user-profile` | User | 自分のProfile取得・更新 |
 | `GET` | `/api/user-profile/token-usage` | User | 自分の累積Token使用量 |
+| `GET` | `/api/feed` | Public | 全Simulation横断のThread Feed（未ログインは操作不可のcapabilities） |
+| `GET` | `/api/simulations/:id/feed` | User / Owner/Admin | 単一RoomのFeed。停止中は所有者・管理者以外へ404 |
+| `GET` | `/api/posts/:threadRootId/replies` | User / Owner/Admin | Threadの全返信（Feedのpreview 2件の残り） |
 | `GET` | `/api/simulations`, `/api/simulations/:id` | Public | 一覧・SimulationとPost履歴 |
 | `POST` | `/api/simulations` | User | Simulation作成 |
 | `PUT/POST` | `/api/simulations/:id`, `/stop`, `/resume` | Owner/Admin | 改名・停止・再開 |
@@ -312,6 +315,34 @@ Session Cookieは`HttpOnly`、`SameSite=Lax`、`Path=/`で、HTTPS運用時は
 `SESSION_COOKIE_SECURE=true`により`Secure`を追加します。CORSはcredentialを許可し、FrontendのRESTと
 EventSourceは同じCookieを利用します。AdminはUser停止・再開、一時Password発行、InviteCode管理、
 Application Settings参照/変更を行えます。停止Userは既存Sessionを解決できず、新規Loginも拒否されます。
+
+### 5.5 Feedの読み取り
+
+`FeedService`が統合Feed・Room Feed・Thread返信全件を提供し、`FeedRepository`が読み取りを担います。
+Serviceは「順序・Paging・どのThreadが読者に関係するか・読者が何をできるか」を持ち、Repositoryは
+「その行をどう取るか」だけを持ちます。
+
+Pagingのcursorは `(threadActivityAt, postId)` をBase64URL JSONで包んだ不透明値です。Post IDを第2キーに
+入れる理由は、同一ミリ秒の返信が複数着信したときにPage境界が曖昧になり、次Pageで重複または欠落が
+起きるためです。encode/decodeはServer専用で、読めないcursorは400 `invalid_cursor`として返します。
+Page sizeは固定20で、次Pageの有無は21件目を読むことで判定します。
+
+1 Pageの取得は、Thread数に比例しないクエリ数で完結させます（Rootごとの個別クエリを発行しない）。
+
+- Root Post 1クエリ（`replyTo IS NULL`、`threadActivityAt DESC, id DESC`、所属Simulationを同時取得）
+- 返信数のgroupBy 1クエリ
+- 各Root最新2返信を1クエリ。Group内上位N件はPrismaで表現できないため、ここだけ型付き`$queryRaw`で
+  window function（`row_number()`）を使います。列はDomain名へaliasし、Post mapperを共有します
+- `自分あて` filterは追加2クエリ（自分のPostへの返信があるThread、自分をmentionしたThread）。
+  `threadRootId`はRelationを持たない非正規化列なので、Thread単位の条件はID集合として合成します。
+  Room Feedではこの2クエリも当該Roomへ絞ります。ThreadはSimulationを跨がないため結果は変わらず、
+  1 Roomの絞り込みで全Simulationの返信とmentionを読むことを避けられます
+- Root・preview返信・引用元・authorはまとめてDTO化します（`PostService.toDtos`）
+
+公開値は`capabilities`だけで表現し、`status`をFeed DTOへ含めません。未ログインは全capability false、
+停止中Room由来のThreadは全員が返信・引用・Room遷移不可で、Thread詳細と残り返信の取得だけ所有者・
+管理者に許可します。Global Simulation由来のThreadは`isFeed = true`で「フィード」として表示し、
+Room画面を持たないため`canOpenRoom`は常にfalseです。
 
 ## 6. 投稿生成フロー
 

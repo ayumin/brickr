@@ -32,8 +32,19 @@ function makePost(overrides: Partial<Post> & { id: string }): Post {
 function harness(existing: Post[] = []) {
   const byId = new Map(existing.map((post) => [post.id, post]));
   const created: NewPost[] = [];
+  /** Which id batches were read, so a lookup per post would show up as a failure. */
+  const reads: { byIds: string[][] } = { byIds: [] };
 
   const posts = {
+    findManyByIds(ids: string[]): Promise<Post[]> {
+      reads.byIds.push(ids);
+      return Promise.resolve(
+        ids.flatMap((id) => {
+          const post = byId.get(id);
+          return post ? [post] : [];
+        }),
+      );
+    },
     createWithThreadActivity(input: NewPost): Promise<Post> {
       created.push(input);
       const parent = input.replyTo ? byId.get(input.replyTo) : undefined;
@@ -51,32 +62,38 @@ function harness(existing: Post[] = []) {
     },
   } as unknown as PostRepository;
 
+  const knownCharacters = () =>
+    Promise.resolve([
+      {
+        id: "architect-id",
+        handle: "architect",
+        displayName: "設計者",
+        description: "設計する",
+        rolePrompt: "設計",
+        tonePrompt: "簡潔",
+        interests: [],
+        activityLevel: 0.5,
+        responseProbability: 0.5,
+        replyProbability: 0.5,
+        quoteProbability: 0.5,
+        influence: 0.5,
+        modelProfileId: "test",
+      },
+    ]);
+
   const characters = {
-    findAll: () =>
-      Promise.resolve([
-        {
-          id: "architect-id",
-          handle: "architect",
-          displayName: "設計者",
-          description: "設計する",
-          rolePrompt: "設計",
-          tonePrompt: "簡潔",
-          interests: [],
-          activityLevel: 0.5,
-          responseProbability: 0.5,
-          replyProbability: 0.5,
-          quoteProbability: 0.5,
-          influence: 0.5,
-          modelProfileId: "test",
-        },
-      ]),
+    findAll: knownCharacters,
+    findAllIncludingDeleted: knownCharacters,
   } as unknown as CharacterRepository;
 
   const profiles = {
     listHandles: () => Promise.resolve([USER_HANDLE]),
+    // These tests have no user accounts: an unknown author falls back to its id,
+    // which is enough to tell the mapped posts apart.
+    findByIds: () => Promise.resolve([]),
   } as unknown as UserProfileRepository;
 
-  return { service: new PostService(posts, characters, profiles), created };
+  return { service: new PostService(posts, characters, profiles), created, reads };
 }
 
 describe("PostService.publish mentions", () => {
@@ -143,5 +160,43 @@ describe("PostService.publish thread information (§8.3)", () => {
     expect(post.threadRootId).toBe(post.id);
     expect(created[0]?.quoteOf).toBe("root-1");
     expect(created[0]?.replyTo).toBeNull();
+  });
+});
+
+/**
+ * The batch mapper the feed maps a whole page with (§26): the lookups it performs
+ * must not grow with the number of posts, and a quote must resolve whether or not
+ * the quoted post happens to be in the same batch.
+ */
+describe("PostService.toDtos", () => {
+  it("resolves a quote from inside the batch without reading it again", async () => {
+    const quoted = makePost({ id: "quoted-1" });
+    const quoting = makePost({ id: "quoting-1", quoteOf: "quoted-1" });
+    const { service, reads } = harness([quoted, quoting]);
+
+    const dtos = await service.toDtos([quoted, quoting]);
+
+    expect(dtos[1]?.quotedPost?.id).toBe("quoted-1");
+    expect(reads.byIds).toEqual([[]]);
+  });
+
+  it("reads a quoted post that is not in the batch, once per page", async () => {
+    const outside = makePost({ id: "outside-1" });
+    const first = makePost({ id: "post-1", quoteOf: "outside-1" });
+    const second = makePost({ id: "post-2", quoteOf: "outside-1" });
+    const { service, reads } = harness([outside, first, second]);
+
+    const dtos = await service.toDtos([first, second]);
+
+    expect(dtos.map((dto) => dto.quotedPost?.id)).toEqual(["outside-1", "outside-1"]);
+    // Deduplicated: one lookup for the page, not one per quoting post.
+    expect(reads.byIds).toEqual([["outside-1"]]);
+  });
+
+  it("asks for nothing when there are no posts", async () => {
+    const { service, reads } = harness();
+
+    expect(await service.toDtos([])).toEqual([]);
+    expect(reads.byIds).toEqual([]);
   });
 });

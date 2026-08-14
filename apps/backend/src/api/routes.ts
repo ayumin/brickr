@@ -18,7 +18,7 @@ import {
   serializeSessionCookie,
   type SessionCookieOptions,
 } from "../auth/session-cookie.js";
-import { toAuthUserDto, toUserManagementDto } from "../auth/user-account.js";
+import { toAuthUserDto, toUserManagementDto, type UserAccount } from "../auth/user-account.js";
 import { env } from "../config/env.js";
 import type { AppServices } from "../services.js";
 import { InvalidApplicationSettingError } from "../settings/runtime-settings.js";
@@ -30,6 +30,8 @@ import {
   CharacterNotFoundError,
   ModelProfileNotFoundError,
 } from "../characters/character-service.js";
+import { FeedCursorInvalidError } from "../feed/feed-cursor.js";
+import type { FeedReader } from "../feed/feed-service.js";
 import { ReplyTargetNotFoundError } from "../posts/post-repository.js";
 import {
   GlobalSimulationMutationError,
@@ -47,6 +49,7 @@ import {
   createPostSchema,
   createSimulationSchema,
   deleteCharacterQuerySchema,
+  feedQuerySchema,
   handleParams,
   idParams,
   importCharactersCsvSchema,
@@ -54,6 +57,7 @@ import {
   signupSchema,
   saveCharacterSchema,
   saveUserProfileSchema,
+  threadRootParams,
   updateApplicationSettingsSchema,
   updateSimulationSchema,
   userManagementQuerySchema,
@@ -587,6 +591,55 @@ export async function registerRoutes(
     }));
   });
 
+  // -- feed -----------------------------------------------------------------
+
+  /**
+   * Public on purpose (§10.1): a visitor without an account reads the same posts
+   * and gets `capabilities` that permit nothing. `filter=mine` is the exception —
+   * there is no "mine" without a session, so it answers 401 rather than silently
+   * falling back to `all`, which would show a stranger's feed as if it were theirs.
+   */
+  app.get("/api/feed", async (request, reply) => {
+    const query = feedQuerySchema.safeParse(request.query);
+    if (!query.success) {
+      return sendError(reply, 400, "invalid_query", "feed query is invalid", query.error.issues);
+    }
+
+    const filter = query.data.filter ?? "all";
+    if (filter === "mine" && !request.currentUser) {
+      return sendError(reply, 401, "unauthenticated", "sign in to see threads about you");
+    }
+
+    try {
+      return await services.feed.getUnifiedFeed({
+        reader: request.currentUser ? toFeedReader(request.currentUser) : null,
+        filter,
+        ...(query.data.cursor ? { cursor: query.data.cursor } : {}),
+      });
+    } catch (error) {
+      return handleDomainError(reply, error);
+    }
+  });
+
+  /** Login required, and a room the caller may not read answers 404 (§10.2, §10.4). */
+  app.get("/api/simulations/:id/feed", async (request, reply) => {
+    const user = requireUser(request, reply);
+    if (!user) return reply;
+
+    const query = feedQuerySchema.safeParse(request.query);
+    if (!query.success) {
+      return sendError(reply, 400, "invalid_query", "feed query is invalid", query.error.issues);
+    }
+
+    return withSimulation(request, reply, async (id) =>
+      services.feed.getRoomFeed(id, {
+        reader: toFeedReader(user),
+        filter: query.data.filter ?? "all",
+        ...(query.data.cursor ? { cursor: query.data.cursor } : {}),
+      }),
+    );
+  });
+
   // -- posts ----------------------------------------------------------------
 
   app.get("/api/simulations/:id/posts", async (request, reply) =>
@@ -638,6 +691,28 @@ export async function registerRoutes(
     return { post: await services.posts.toDto(post) };
   });
 
+  /**
+   * The replies the feed left out (§12.2). Login required, like the thread detail
+   * it belongs to: the feed's own preview is all an anonymous reader gets (§10.8).
+   */
+  app.get("/api/posts/:threadRootId/replies", async (request, reply) => {
+    const user = requireUser(request, reply);
+    if (!user) return reply;
+
+    const params = threadRootParams.safeParse(request.params);
+    if (!params.success) {
+      return sendError(reply, 400, "invalid_params", "thread root id is invalid");
+    }
+
+    try {
+      return {
+        posts: await services.feed.listThreadReplies(params.data.threadRootId, toFeedReader(user)),
+      };
+    } catch (error) {
+      return handleDomainError(reply, error);
+    }
+  });
+
   // -- sse ------------------------------------------------------------------
 
   registerEventsRoute(app, services);
@@ -649,6 +724,14 @@ function replyWithSession(
   options: SessionCookieOptions,
 ): FastifyReply {
   return reply.header("set-cookie", serializeSessionCookie(issued.token, options));
+}
+
+/**
+ * The signed-in reader as the feed sees them: an id, an admin flag and a handle,
+ * the last one because `filter=mine` matches mentions by handle (§12.3).
+ */
+function toFeedReader(user: UserAccount): NonNullable<FeedReader> {
+  return { id: user.id, isAdmin: user.isAdmin, handle: user.handle };
 }
 
 /** Shared param parsing + domain-error mapping for simulation-scoped routes. */
@@ -723,6 +806,12 @@ function handleDomainError(reply: FastifyReply, error: unknown): FastifyReply {
   }
   if (error instanceof SimulationStoppedError) {
     return sendError(reply, 409, "simulation_stopped", error.message);
+  }
+  // A cursor we did not issue, or one we can no longer read (§9.4). Answered
+  // rather than ignored: serving page one would look like a feed that silently
+  // lost the reader's place.
+  if (error instanceof FeedCursorInvalidError) {
+    return sendError(reply, 400, "invalid_cursor", error.message);
   }
   throw error;
 }

@@ -67,14 +67,41 @@ export class PostService {
   }
 
   async listBySimulation(simulationId: string): Promise<PostDto[]> {
-    const posts = await this.posts.findBySimulation(simulationId);
-    // Only the authors present in this page are loaded, rather than every
-    // account in the database.
-    const [characters, users] = await Promise.all([
+    return this.toDtos(await this.posts.findBySimulation(simulationId));
+  }
+
+  /**
+   * Maps a batch of posts with a fixed number of lookups, however many posts they
+   * are and however many rooms they come from. That is what lets the feed map a
+   * whole page without a query per thread (§26).
+   *
+   * Quoted posts are resolved against the batch first and only then read from the
+   * database, so quoting inside the same page costs nothing extra.
+   */
+  async toDtos(posts: Post[]): Promise<PostDto[]> {
+    if (posts.length === 0) return [];
+
+    const present = new Set(posts.map((post) => post.id));
+    const missingQuoted = [
+      ...new Set(
+        posts.flatMap((post) =>
+          post.quoteOf !== null && !present.has(post.quoteOf) ? [post.quoteOf] : [],
+        ),
+      ),
+    ];
+
+    const [characters, quoted] = await Promise.all([
       this.characters.findAllIncludingDeleted(),
-      this.userProfiles.findByIds(posts.map((post) => post.authorId)),
+      this.posts.findManyByIds(missingQuoted),
     ]);
-    return toPostDtos(posts, indexById(characters), indexUsersById(users));
+    // Only the authors these posts actually have are loaded, rather than every
+    // account in the database.
+    const users = await this.userProfiles.findByIds([
+      ...posts.map((post) => post.authorId),
+      ...quoted.map((post) => post.authorId),
+    ]);
+
+    return toPostDtos(posts, indexById(characters), indexUsersById(users), quoted);
   }
 
   /** Maps one post, loading its quoted post if it has one. */
