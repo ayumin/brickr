@@ -8,6 +8,7 @@ import {
   countReposts,
   flattenReplies,
   selectAuthorTimeline,
+  selectRoomTimeline,
   selectSeparateDetailReferenceId,
   selectReposts,
   selectUserTimeline,
@@ -291,6 +292,23 @@ describe("selectSeparateDetailReferenceId", () => {
     };
 
     expect(selectSeparateDetailReferenceId(quote)).toBe("original");
+  });
+});
+
+describe("selectRoomTimeline", () => {
+  it("keeps every thread starter regardless of author, newest first", () => {
+    const posts = [
+      makePost("root-1", 1),
+      makePost("reply-1", 2, { replyTo: "root-1" }),
+      makePost("root-2", 3, { author: userAuthor }),
+      makePost("repost-1", 4, { quoteOf: "root-1" }),
+    ];
+
+    expect(ids(selectRoomTimeline(posts))).toEqual(["repost-1", "root-2", "root-1"]);
+  });
+
+  it("returns an empty array for a room with no posts", () => {
+    expect(selectRoomTimeline([])).toEqual([]);
   });
 });
 
