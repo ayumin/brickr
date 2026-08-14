@@ -111,7 +111,7 @@ export class FeedService {
     simulationId: string,
     request: FeedPageRequest & { reader: NonNullable<FeedReader> },
   ): Promise<FeedPageDto> {
-    await this.assertRoomReadable(simulationId, request.reader);
+    await this.assertRoomFeedReadable(simulationId, request.reader);
     return this.buildPage(request, { simulationId });
   }
 
@@ -121,7 +121,7 @@ export class FeedService {
    * Shared with the room event stream (§11.1), so a subscription can never observe
    * a room the equivalent request would refuse.
    */
-  async assertRoomReadable(
+  async assertRoomFeedReadable(
     simulationId: string,
     reader: NonNullable<FeedReader>,
   ): Promise<void> {
