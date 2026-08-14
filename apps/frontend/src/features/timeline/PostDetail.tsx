@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { CharacterDto, PostDto, UserProfileDto } from "@brickr/shared";
+import type { CharacterDto, FeedThreadDto, PostDto, UserProfileDto } from "@brickr/shared";
 
 import type { ResponseActivity } from "../../types";
 import { PostCard } from "./PostCard";
@@ -19,7 +19,7 @@ export type PostDetailProps = {
   canPost: boolean;
   onOpenAuthor: (authorId: string) => void;
   onOpenPost: (postId: string) => void;
-  onPosted: (post: PostDto) => void;
+  onPosted: (post: PostDto, thread: FeedThreadDto) => void;
 };
 
 export function PostDetail({

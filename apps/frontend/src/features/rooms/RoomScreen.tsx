@@ -205,8 +205,8 @@ export function RoomScreen({ roomId }: { roomId: string }) {
             userProfile={userProfile.profile}
             disabled={isStopped}
             {...(isStopped ? { disabledReason: "このルームは停止しています。" } : {})}
-            onPosted={(post) => {
-              events.addLocalPost(post);
+            onPosted={(post, thread) => {
+              events.addLocalPost(post, thread);
               setComposerOpen(false);
             }}
             onCancel={() => setComposerOpen(false)}

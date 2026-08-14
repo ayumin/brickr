@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { GLOBAL_SIMULATION_ID, type FeedFilter, type FeedThreadDto } from "@brickr/shared";
+import { GLOBAL_SIMULATION_ID, type FeedFilter, type FeedThreadDto, type PostDto } from "@brickr/shared";
 
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { Spinner } from "../../components/Spinner";
@@ -8,6 +8,7 @@ import { useAuth } from "../auth/AuthContext";
 import { Composer } from "../composer/Composer";
 import { PostCard } from "../timeline/PostCard";
 import { useUserProfile } from "../../hooks/useUserProfile";
+import { api, isAbortError, toErrorMessage } from "../../services/api-client";
 import { postPath, roomPath } from "../../routes";
 import { readFeedFilter, writeFeedFilter } from "../rooms/feed-filter-storage";
 import { useFeed } from "./useFeed";
@@ -29,10 +30,10 @@ export function FeedScreen() {
 
   const feed = useFeed(GLOBAL_FEED_SCOPE, filter);
 
-  const handleFilterChange = (next: FeedFilter) => {
+  const handleFilterChange = useCallback((next: FeedFilter) => {
     writeFeedFilter(next);
     setFilter(next);
-  };
+  }, []);
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col">
@@ -84,24 +85,12 @@ export function FeedScreen() {
             simulationId={GLOBAL_SIMULATION_ID}
             characters={[]}
             userProfile={userProfile.profile}
-            onPosted={(post) => {
-              // Build a minimal thread and insert it immediately so the user
-              // sees their post before the SSE echo arrives (§9.2).
-              feed.upsertThread({
-                root: post,
-                room: { id: GLOBAL_SIMULATION_ID, title: "フィード", isFeed: true },
-                latestReplies: [],
-                replyCount: 0,
-                lastActivityAt: post.createdAt,
-                capabilities: {
-                  canOpenAuthor: true,
-                  canOpenRoom: false,
-                  canOpenThread: true,
-                  canReply: true,
-                  canQuote: true,
-                  canLoadMoreReplies: false,
-                },
-              });
+            onPosted={(_post, thread) => {
+              // Insert the new thread immediately from the CreatePostResponse,
+              // preserving any additional pages the user had already loaded via
+              // "さらに読み込む". The SSE echo will arrive shortly and upsert
+              // the same thread again, which is a no-op.
+              feed.upsertThread(thread);
             }}
           />
         </div>
@@ -216,6 +205,12 @@ function FilterTab({
   );
 }
 
+type RepliesState =
+  | { status: "collapsed" }
+  | { status: "loading" }
+  | { status: "error"; message: string }
+  | { status: "expanded"; posts: PostDto[] };
+
 function FeedThreadRow({
   thread,
   currentUserId,
@@ -227,6 +222,36 @@ function FeedThreadRow({
   const onExpand = thread.capabilities.canOpenThread
     ? (postId: string) => navigate(postPath(postId))
     : undefined;
+
+  const hiddenReplyCount = thread.replyCount - thread.latestReplies.length;
+  const canLoadMore = thread.capabilities.canLoadMoreReplies && hiddenReplyCount > 0;
+
+  const [repliesState, setRepliesState] = useState<RepliesState>({ status: "collapsed" });
+
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort();
+    };
+  }, []);
+
+  const loadAllReplies = useCallback(() => {
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    setRepliesState({ status: "loading" });
+    api
+      .getThreadReplies(thread.root.id, controller.signal)
+      .then((posts) => setRepliesState({ status: "expanded", posts }))
+      .catch((cause: unknown) => {
+        if (isAbortError(cause)) return;
+        setRepliesState({ status: "error", message: toErrorMessage(cause) });
+      });
+  }, [thread.root.id]);
+
+  const visibleReplies =
+    repliesState.status === "expanded" ? repliesState.posts : thread.latestReplies;
 
   return (
     <div>
@@ -245,9 +270,32 @@ function FeedThreadRow({
         showQuotedPost
         {...(onExpand ? { onExpand } : {})}
       />
-      {thread.latestReplies.map((reply) => (
+      {visibleReplies.map((reply) => (
         <PostCard key={reply.id} post={reply} currentUserId={currentUserId} dense />
       ))}
+
+      {/* 残りN件を表示 */}
+      {canLoadMore && repliesState.status === "collapsed" ? (
+        <button
+          type="button"
+          onClick={loadAllReplies}
+          className="w-full border-b border-line px-4 py-2 text-left text-xs text-accent transition hover:bg-surface-hover/60"
+        >
+          残り{hiddenReplyCount}件を表示
+        </button>
+      ) : repliesState.status === "loading" ? (
+        <div className="flex justify-center border-b border-line py-2">
+          <Spinner size="sm" />
+        </div>
+      ) : repliesState.status === "error" ? (
+        <div className="border-b border-line px-4 py-2">
+          <ErrorBanner
+            message="返信を取得できませんでした"
+            detail={repliesState.message}
+            onRetry={loadAllReplies}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }
