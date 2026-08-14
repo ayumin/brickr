@@ -5,7 +5,7 @@ import type {
   SimulationResponse,
   SimulationSummaryDto,
 } from "@brickr/shared";
-import type { AgentService } from "../agents/agent-service.js";
+import type { AgentService, GeneratedPost } from "../agents/agent-service.js";
 import type { UserAccount } from "../auth/user-account.js";
 import type { CharacterRepository } from "../characters/character-repository.js";
 import type { Character } from "../characters/character.js";
@@ -13,7 +13,7 @@ import { DomainError } from "../domain-error.js";
 import type { TokenUsageService } from "../llm/token-usage-service.js";
 import type { Post } from "../posts/post.js";
 import type { PostService } from "../posts/post-service.js";
-import type { ThreadService } from "../posts/thread-service.js";
+import type { ThreadContext, ThreadService } from "../posts/thread-service.js";
 import { resolveActionTargets, selectAction } from "./action-selector.js";
 import { runWithConcurrency } from "./concurrency.js";
 import type { EventHub } from "./event-hub.js";
@@ -341,8 +341,8 @@ export class SimulationService {
   }
 
   /**
-   * One character's turn: read the thread as it stands *now*, pick an action,
-   * generate, persist, publish.
+   * One character's turn, from "did it stay quiet" to "the SSE activity is
+   * closed" — the lifecycle boundary around `generateAndPublish`.
    *
    * Returns the post it produced, or null if it stayed quiet or failed.
    */
@@ -362,72 +362,8 @@ export class SimulationService {
     let outcome: ResponseOutcome = "skipped";
 
     try {
-      // Context is read immediately before the LLM call (CLAUDE.md §32).
-      const thread = await this.threads.getCurrentThread(target.id);
-      if (!thread) {
-        return null;
-      }
-
-      const action = selectAction({
-        character,
-        target: thread.target,
-        threadPosts: thread.posts,
-      });
-
-      // The transcript names users by handle too, so a character can react to
-      // the person who wrote the post rather than to an opaque id.
-      const users = await this.posts.findUsersByIds(
-        [thread.target, ...thread.posts].map((post) => post.authorId),
-      );
-      const handleOf = buildHandleResolver(allCharacters, users);
-
-      const generated = await this.agents.generate({
-        character,
-        target: thread.target,
-        posts: thread.posts,
-        action,
-        resolveHandle: handleOf,
-      });
-
-      if (this.stopped.has(simulationId)) return null;
-
-      // Recorded even if publishing fails below: the tokens were already
-      // spent. A tracking hiccup is logged, not surfaced as a failed response —
-      // it must never turn a successful generation into a failed outcome.
-      if (generated.usage) {
-        try {
-          await this.tokenUsage.record(billingUserId, generated.usage);
-        } catch (error) {
-          this.logger.warn(
-            { simulationId, characterId: character.id, billingUserId, err: describe(error) },
-            "failed to record token usage",
-          );
-        }
-      }
-
-      const { replyTo, quoteOf } = resolveActionTargets(action, thread.target);
-
-      const post = await this.posts.publish({
-        simulationId,
-        authorId: character.id,
-        content: generated.content,
-        replyTo,
-        quoteOf,
-      });
-
-      this.logger.info(
-        {
-          simulationId,
-          characterId: character.id,
-          action,
-          providerId: generated.providerId,
-          model: generated.model,
-        },
-        "character posted",
-      );
-
-      await this.emitPostCreated(post);
-      outcome = "posted";
+      const post = await this.generateAndPublish(character, target, allCharacters, billingUserId);
+      outcome = post ? "posted" : "skipped";
       return post;
     } catch (error) {
       outcome = "failed";
@@ -443,6 +379,113 @@ export class SimulationService {
       // generation throws or the simulation was stopped mid-flight. An unanswered
       // start would leave the UI showing a response that never arrives.
       activity.finish(outcome);
+    }
+  }
+
+  /**
+   * Picks an action, generates, persists and publishes. Returns null if the
+   * thread disappeared or the simulation was stopped mid-flight — both are
+   * "stayed quiet", not a failure, so the caller must not treat them as one.
+   */
+  private async generateAndPublish(
+    character: Character,
+    target: Post,
+    allCharacters: Character[],
+    billingUserId: string,
+  ): Promise<Post | null> {
+    const simulationId = target.simulationId;
+
+    const context = await this.loadGenerationContext(target, allCharacters);
+    if (!context) return null;
+    const { thread, resolveHandle } = context;
+
+    const action = selectAction({
+      character,
+      target: thread.target,
+      threadPosts: thread.posts,
+    });
+
+    const generated = await this.agents.generate({
+      character,
+      target: thread.target,
+      posts: thread.posts,
+      action,
+      resolveHandle,
+    });
+
+    if (this.stopped.has(simulationId)) return null;
+
+    if (generated.usage) {
+      await this.recordUsage(billingUserId, generated.usage, {
+        simulationId,
+        characterId: character.id,
+      });
+    }
+
+    const { replyTo, quoteOf } = resolveActionTargets(action, thread.target);
+
+    const post = await this.posts.publish({
+      simulationId,
+      authorId: character.id,
+      content: generated.content,
+      replyTo,
+      quoteOf,
+    });
+
+    this.logger.info(
+      {
+        simulationId,
+        characterId: character.id,
+        action,
+        providerId: generated.providerId,
+        model: generated.model,
+      },
+      "character posted",
+    );
+
+    await this.emitPostCreated(post);
+    return post;
+  }
+
+  /**
+   * Thread and handle context, read fresh immediately before the LLM call
+   * (CLAUDE.md §32). Returns null when the target has disappeared from the
+   * thread since this character's turn started.
+   */
+  private async loadGenerationContext(
+    target: Post,
+    allCharacters: Character[],
+  ): Promise<{ thread: ThreadContext; resolveHandle: (authorId: string) => string } | null> {
+    const thread = await this.threads.getCurrentThread(target.id);
+    if (!thread) return null;
+
+    // The transcript names users by handle too, so a character can react to
+    // the person who wrote the post rather than to an opaque id.
+    const users = await this.posts.findUsersByIds(
+      [thread.target, ...thread.posts].map((post) => post.authorId),
+    );
+    const resolveHandle = buildHandleResolver(allCharacters, users);
+
+    return { thread, resolveHandle };
+  }
+
+  /**
+   * Recorded even if publishing fails below: the tokens were already spent. A
+   * tracking hiccup is logged, not surfaced as a failed response — it must
+   * never turn a successful generation into a failed outcome.
+   */
+  private async recordUsage(
+    billingUserId: string,
+    usage: NonNullable<GeneratedPost["usage"]>,
+    context: { simulationId: string; characterId: string },
+  ): Promise<void> {
+    try {
+      await this.tokenUsage.record(billingUserId, usage);
+    } catch (error) {
+      this.logger.warn(
+        { ...context, billingUserId, err: describe(error) },
+        "failed to record token usage",
+      );
     }
   }
 
