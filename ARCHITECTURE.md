@@ -334,7 +334,9 @@ Page sizeは固定20で、次Pageの有無は21件目を読むことで判定し
 - 各Root最新2返信を1クエリ。Group内上位N件はPrismaで表現できないため、ここだけ型付き`$queryRaw`で
   window function（`row_number()`）を使います。列はDomain名へaliasし、Post mapperを共有します
 - `自分あて` filterは追加2クエリ（自分のPostへの返信があるThread、自分をmentionしたThread）。
-  `threadRootId`はRelationを持たない非正規化列なので、Thread単位の条件はID集合として合成します
+  `threadRootId`はRelationを持たない非正規化列なので、Thread単位の条件はID集合として合成します。
+  Room Feedではこの2クエリも当該Roomへ絞ります。ThreadはSimulationを跨がないため結果は変わらず、
+  1 Roomの絞り込みで全Simulationの返信とmentionを読むことを避けられます
 - Root・preview返信・引用元・authorはまとめてDTO化します（`PostService.toDtos`）
 
 公開値は`capabilities`だけで表現し、`status`をFeed DTOへ含めません。未ログインは全capability false、

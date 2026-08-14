@@ -71,7 +71,9 @@ export class FeedRepository {
     const conditions: Prisma.PostWhereInput[] = [];
 
     if (query.cursor) conditions.push(afterCursor(query.cursor));
-    if (query.mine) conditions.push(await this.concerningUser(query.mine));
+    if (query.mine) {
+      conditions.push(await this.concerningUser(query.mine, query.simulationId));
+    }
 
     const rows = await this.db.post.findMany({
       where: {
