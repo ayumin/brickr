@@ -10,6 +10,7 @@ export * from "./constants.js";
 export * from "./character.js";
 export * from "./public-profile.js";
 export * from "./post.js";
+export * from "./feed.js";
 export * from "./simulation.js";
 export * from "./events.js";
 export * from "./errors.js";
