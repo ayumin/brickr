@@ -310,6 +310,14 @@ export function SimulationView({
         return handleResolution.authorId === userProfile.id
           ? { kind: "home" }
           : { kind: "timeline", authorId: handleResolution.authorId };
+      // The new `/rooms`, `/cast`, `/settings/*` routes (Issue #48) are not
+      // reachable through this component - it is being split apart into
+      // AppShell/RoomScreen/RoomListScreen/CastManagementScreen/SettingsShell,
+      // which is where these are actually handled. This case only exists so
+      // the exhaustive switch above keeps compiling during that split; it is
+      // deleted along with the rest of this file once the split is complete.
+      default:
+        return { kind: "not-found" };
     }
   }, [route, handleResolution, userProfile.id, isAdmin]);
 

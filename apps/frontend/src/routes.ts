@@ -41,6 +41,41 @@ export function usersManagementPath(): string {
   return "/admin/users";
 }
 
+export function roomListPath(): string {
+  return "/rooms";
+}
+
+export function roomPath(roomId: string): string {
+  return `/rooms/${encodeURIComponent(roomId)}`;
+}
+
+export function roomAnalysisPath(roomId: string): string {
+  return `/rooms/${encodeURIComponent(roomId)}/analysis`;
+}
+
+export function castPath(): string {
+  return "/cast";
+}
+
+export const SETTINGS_SECTIONS = [
+  "profile",
+  "appearance",
+  "usage",
+  "runtime",
+  "users",
+  "invites",
+] as const;
+
+export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
+
+export function settingsPath(section: SettingsSection): string {
+  return `/settings/${section}`;
+}
+
+export function isSettingsSection(value: string): value is SettingsSection {
+  return (SETTINGS_SECTIONS as readonly string[]).includes(value);
+}
+
 export type RouteMatch =
   | { kind: "home" }
   | { kind: "characters" }
@@ -49,6 +84,11 @@ export type RouteMatch =
   | { kind: "post"; postId: string }
   | { kind: "users-management" }
   | { kind: "handle"; handle: string }
+  | { kind: "rooms" }
+  | { kind: "room"; roomId: string }
+  | { kind: "room-analysis"; roomId: string }
+  | { kind: "cast" }
+  | { kind: "settings"; section: SettingsSection }
   | { kind: "not-found" };
 
 /**
@@ -70,15 +110,36 @@ export function matchRoute(pathname: string): RouteMatch {
   if (matchPath({ path: usersManagementPath(), end: true }, pathname)) {
     return { kind: "users-management" };
   }
+  if (matchPath({ path: roomListPath(), end: true }, pathname)) {
+    return { kind: "rooms" };
+  }
+  if (matchPath({ path: castPath(), end: true }, pathname)) {
+    return { kind: "cast" };
+  }
 
   const analysis = matchPath({ path: "/simulations/:id/analysis", end: true }, pathname);
   if (analysis?.params.id) {
     return { kind: "simulation-analysis", simulationId: analysis.params.id };
   }
 
+  const roomAnalysis = matchPath({ path: "/rooms/:id/analysis", end: true }, pathname);
+  if (roomAnalysis?.params.id) {
+    return { kind: "room-analysis", roomId: roomAnalysis.params.id };
+  }
+
+  const room = matchPath({ path: "/rooms/:id", end: true }, pathname);
+  if (room?.params.id) {
+    return { kind: "room", roomId: room.params.id };
+  }
+
   const post = matchPath({ path: "/posts/:id", end: true }, pathname);
   if (post?.params.id) {
     return { kind: "post", postId: post.params.id };
+  }
+
+  const settings = matchPath({ path: "/settings/:section", end: true }, pathname);
+  if (settings?.params.section && isSettingsSection(settings.params.section)) {
+    return { kind: "settings", section: settings.params.section };
   }
 
   const handle = matchPath({ path: "/:handle", end: true }, pathname);

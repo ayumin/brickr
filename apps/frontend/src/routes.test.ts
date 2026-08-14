@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  castPath,
   characterListPath,
   handlePath,
   matchRoute,
   postPath,
+  roomAnalysisPath,
+  roomListPath,
+  roomPath,
+  settingsPath,
   simulationAnalysisPath,
   simulationListPath,
   usersManagementPath,
@@ -74,6 +79,39 @@ describe("matchRoute", () => {
   it("reports an unmatched multi-segment path as not-found", () => {
     expect(matchRoute("/foo/bar/baz")).toEqual({ kind: "not-found" });
   });
+
+  it("matches the new rooms/cast list routes", () => {
+    expect(matchRoute("/rooms")).toEqual({ kind: "rooms" });
+    expect(matchRoute("/cast")).toEqual({ kind: "cast" });
+  });
+
+  it("matches an individual room and its analysis route", () => {
+    expect(matchRoute("/rooms/room-1")).toEqual({ kind: "room", roomId: "room-1" });
+    expect(matchRoute("/rooms/room-1/analysis")).toEqual({
+      kind: "room-analysis",
+      roomId: "room-1",
+    });
+  });
+
+  it("matches every settings section and rejects an unknown one", () => {
+    expect(matchRoute("/settings/profile")).toEqual({ kind: "settings", section: "profile" });
+    expect(matchRoute("/settings/appearance")).toEqual({
+      kind: "settings",
+      section: "appearance",
+    });
+    expect(matchRoute("/settings/usage")).toEqual({ kind: "settings", section: "usage" });
+    expect(matchRoute("/settings/runtime")).toEqual({ kind: "settings", section: "runtime" });
+    expect(matchRoute("/settings/users")).toEqual({ kind: "settings", section: "users" });
+    expect(matchRoute("/settings/invites")).toEqual({ kind: "settings", section: "invites" });
+    expect(matchRoute("/settings/bogus")).toEqual({ kind: "not-found" });
+    expect(matchRoute("/settings")).toEqual({ kind: "not-found" });
+  });
+
+  it("rejects the new top-level routes as handles", () => {
+    expect(matchRoute("/rooms")).not.toEqual({ kind: "handle", handle: "rooms" });
+    expect(matchRoute("/cast")).not.toEqual({ kind: "handle", handle: "cast" });
+    expect(matchRoute("/settings")).not.toEqual({ kind: "handle", handle: "settings" });
+  });
 });
 
 describe("path builders", () => {
@@ -84,10 +122,17 @@ describe("path builders", () => {
     expect(postPath("post-1")).toBe("/posts/post-1");
     expect(handlePath("architect")).toBe("/architect");
     expect(usersManagementPath()).toBe("/admin/users");
+    expect(roomListPath()).toBe("/rooms");
+    expect(roomPath("room-1")).toBe("/rooms/room-1");
+    expect(roomAnalysisPath("room-1")).toBe("/rooms/room-1/analysis");
+    expect(castPath()).toBe("/cast");
+    expect(settingsPath("profile")).toBe("/settings/profile");
   });
 
   it("percent-encode ids and handles that need it", () => {
     expect(postPath("post 1")).toBe("/posts/post%201");
     expect(handlePath("weird/handle")).toBe("/weird%2Fhandle");
+    expect(roomPath("room 1")).toBe("/rooms/room%201");
+    expect(roomAnalysisPath("room 1")).toBe("/rooms/room%201/analysis");
   });
 });
