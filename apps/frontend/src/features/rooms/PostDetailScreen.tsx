@@ -74,7 +74,7 @@ export function PostDetailScreen({ postId }: { postId: string }) {
   // Whether the room is stopped, fetched separately from the post itself:
   // a stopped room's post detail still opens for its creator/admin (§10.8),
   // but posting/replying/quoting stays refused for everyone regardless (§19.3).
-  const [canPost, setCanPost] = useState(true);
+  const [canPost, setCanPost] = useState(false);
   useEffect(() => {
     if (simulationId === null) return;
     const controller = new AbortController();
