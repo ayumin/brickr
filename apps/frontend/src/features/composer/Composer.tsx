@@ -112,7 +112,7 @@ export function Composer({
     };
 
     try {
-      const post = await api.createPost(simulationId, request);
+      const { post } = await api.createPost(simulationId, request);
       // Show the user's own post immediately; SSE brings the characters later.
       onPosted(post);
       setContent("");

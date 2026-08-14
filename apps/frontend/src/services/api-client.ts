@@ -571,16 +571,20 @@ export const api = {
     return data.posts;
   },
 
-  async createPost(
+  /**
+   * Both halves reach the caller: `post` for a flat timeline, `thread` for the
+   * feed's optimistic upsert (§13.4) - the same DTO shape a `feed.post-created`
+   * SSE event carries, so the two sources dedupe by root id for free.
+   */
+  createPost(
     simulationId: string,
     body: CreatePostRequest,
     signal?: AbortSignal,
-  ): Promise<PostDto> {
-    const data = await request<CreatePostResponse>(
+  ): Promise<CreatePostResponse> {
+    return request<CreatePostResponse>(
       `/api/simulations/${encodeURIComponent(simulationId)}/posts`,
       { method: "POST", body, ...(signal ? { signal } : {}) },
     );
-    return data.post;
   },
 
   async getPost(id: string, signal?: AbortSignal): Promise<PostDto> {
@@ -678,4 +682,14 @@ export const api = {
 /** URL of the SSE stream for one simulation. */
 export function simulationEventsUrl(simulationId: string): string {
   return `${API_BASE_URL}/api/simulations/${encodeURIComponent(simulationId)}/events`;
+}
+
+/**
+ * URL of the SSE stream behind the unified feed (§11.1).
+ *
+ * No id: this stream carries every simulation's public events, and it is the one
+ * events endpoint a signed-out visitor may open.
+ */
+export function feedEventsUrl(): string {
+  return `${API_BASE_URL}/api/feed/events`;
 }

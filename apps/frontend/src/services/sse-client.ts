@@ -8,7 +8,7 @@
 import { SSE_EVENT_TYPES } from "@brickr/shared";
 import type { SseEvent, SseEventType } from "@brickr/shared";
 
-import { simulationEventsUrl } from "./api-client";
+import { feedEventsUrl, simulationEventsUrl } from "./api-client";
 
 export type SseHandlers = {
   onEvent: (event: SseEvent) => void;
@@ -39,16 +39,11 @@ function parseSseEvent(type: SseEventType, data: string): SseEvent | null {
   } as unknown as SseEvent;
 }
 
-export function subscribeToSimulationEvents(
-  simulationId: string,
-  handlers: SseHandlers,
-): SseSubscription {
+function subscribe(url: string, handlers: SseHandlers): SseSubscription {
   // The events endpoint authenticates with the same session cookie
   // (CLAUDE.md §66.11); EventSource does not send cookies cross-origin
   // (:5173 vs :3000 in dev) unless explicitly told to.
-  const source = new EventSource(simulationEventsUrl(simulationId), {
-    withCredentials: true,
-  });
+  const source = new EventSource(url, { withCredentials: true });
 
   const onOpen = (): void => {
     handlers.onOpen?.();
@@ -96,4 +91,16 @@ export function subscribeToSimulationEvents(
       source.close();
     },
   };
+}
+
+export function subscribeToSimulationEvents(
+  simulationId: string,
+  handlers: SseHandlers,
+): SseSubscription {
+  return subscribe(simulationEventsUrl(simulationId), handlers);
+}
+
+/** Subscribes to the unified feed's stream — every room's public events, anonymised (§11.2). */
+export function subscribeToFeedEvents(handlers: SseHandlers): SseSubscription {
+  return subscribe(feedEventsUrl(), handlers);
 }
