@@ -49,7 +49,6 @@ export function messageOf(error: unknown): string {
  */
 export function toLLMError(
   providerId: ProviderId,
-  prefix: string,
   error: unknown,
   statusFields?: readonly string[],
 ): LLMError {
@@ -57,7 +56,7 @@ export function toLLMError(
 
   const status = httpStatusOf(error, statusFields);
   return new LLMError(
-    `${prefix} request failed${status === undefined ? "" : ` (status ${status})`}: ${messageOf(error)}`,
+    `${providerId} request failed${status === undefined ? "" : ` (status ${status})`}: ${messageOf(error)}`,
     providerId,
     isRetryableStatus(status, error),
     { cause: error },

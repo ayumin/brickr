@@ -53,7 +53,7 @@ export class OpenAIProvider implements LLMProvider {
       }
       return models.sort((a, b) => a.id.localeCompare(b.id));
     } catch (error) {
-      throw toLLMError(PROVIDER_ID, "openai", error);
+      throw toLLMError(PROVIDER_ID, error);
     }
   }
 
@@ -109,7 +109,7 @@ export class OpenAIProvider implements LLMProvider {
           : {}),
       };
     } catch (error) {
-      throw toLLMError(PROVIDER_ID, "openai", error);
+      throw toLLMError(PROVIDER_ID, error);
     }
   }
 }

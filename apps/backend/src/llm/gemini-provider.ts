@@ -59,7 +59,7 @@ export class GeminiProvider implements LLMProvider {
       }
       return models.sort((a, b) => a.id.localeCompare(b.id));
     } catch (error) {
-      throw toLLMError(PROVIDER_ID, "gemini", error, STATUS_FIELDS);
+      throw toLLMError(PROVIDER_ID, error, STATUS_FIELDS);
     }
   }
 
@@ -103,7 +103,7 @@ export class GeminiProvider implements LLMProvider {
           : {}),
       };
     } catch (error) {
-      throw toLLMError(PROVIDER_ID, "gemini", error, STATUS_FIELDS);
+      throw toLLMError(PROVIDER_ID, error, STATUS_FIELDS);
     }
   }
 }

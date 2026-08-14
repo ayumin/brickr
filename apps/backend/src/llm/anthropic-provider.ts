@@ -59,7 +59,7 @@ export class AnthropicProvider implements LLMProvider {
       }
       return models;
     } catch (error) {
-      throw toLLMError(PROVIDER_ID, "anthropic", error);
+      throw toLLMError(PROVIDER_ID, error);
     }
   }
 
@@ -110,7 +110,7 @@ export class AnthropicProvider implements LLMProvider {
         },
       };
     } catch (error) {
-      throw toLLMError(PROVIDER_ID, "anthropic", error);
+      throw toLLMError(PROVIDER_ID, error);
     }
   }
 }

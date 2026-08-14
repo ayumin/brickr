@@ -59,12 +59,12 @@ describe("messageOf", () => {
 describe("toLLMError", () => {
   it("passes an existing LLMError through unchanged, preserving its retryable flag", () => {
     const original = new LLMError("already normalized", "openai", true);
-    expect(toLLMError("openai", "openai", original)).toBe(original);
+    expect(toLLMError("openai", original)).toBe(original);
   });
 
   it("builds a message with the provider prefix and status when present", () => {
     const sdkError = Object.assign(new Error("rate limited"), { status: 429 });
-    const error = toLLMError("openai", "openai", sdkError);
+    const error = toLLMError("openai", sdkError);
     expect(error).toBeInstanceOf(LLMError);
     expect(error.message).toBe("openai request failed (status 429): rate limited");
     expect(error.providerId).toBe("openai");
@@ -73,12 +73,12 @@ describe("toLLMError", () => {
   });
 
   it("omits the status clause when no status is found", () => {
-    const error = toLLMError("anthropic", "anthropic", new Error("network down"));
+    const error = toLLMError("anthropic", new Error("network down"));
     expect(error.message).toBe("anthropic request failed: network down");
   });
 
   it("checks the extra status fields passed in for a provider like Gemini", () => {
-    const error = toLLMError("gemini", "gemini", { code: 503 }, ["status", "code"]);
+    const error = toLLMError("gemini", { code: 503 }, ["status", "code"]);
     expect(error.message).toContain("(status 503)");
   });
 });
