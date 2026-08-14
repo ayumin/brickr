@@ -4,6 +4,7 @@ import type { FeedThreadDto, PostDto } from "@brickr/shared";
 import { PostCard } from "../timeline/PostCard";
 import { roomPath } from "../../routes";
 import { ReplyPreview } from "./ReplyPreview";
+import { selectFeedThreadActions } from "./feed-actions";
 
 export type FeedThreadCardProps = {
   thread: FeedThreadDto;
@@ -41,13 +42,13 @@ export function FeedThreadCard({
   onRepost,
   onShowMoreReplies,
 }: FeedThreadCardProps) {
-  const { root, room, capabilities } = thread;
-  const canOpenAuthor = capabilities.canOpenAuthor;
+  const { root, room } = thread;
+  const actions = selectFeedThreadActions(thread.capabilities);
 
   return (
     <div data-thread-id={root.id}>
       <div className="px-4 pt-2.5 text-xs text-ink-faint">
-        {capabilities.canOpenRoom ? (
+        {actions.root.canOpenRoom ? (
           <Link to={roomPath(root.simulationId)} className="hover:underline">
             {room.title}
           </Link>
@@ -61,16 +62,17 @@ export function FeedThreadCard({
         currentUserId={currentUserId}
         replyCount={thread.replyCount}
         {...(knownHandles ? { knownHandles } : {})}
-        {...(canOpenAuthor && onOpenAuthor ? { onOpenAuthor } : {})}
-        {...(canOpenAuthor && onOpenHandle ? { onOpenHandle } : {})}
-        {...(capabilities.canOpenThread && onOpenThread ? { onExpand: onOpenThread } : {})}
-        {...(capabilities.canReply && onReply ? { onReply: () => onReply(root) } : {})}
-        {...(capabilities.canQuote && onRepost ? { onRepost: () => onRepost(root) } : {})}
+        {...(actions.root.canOpenAuthor && onOpenAuthor ? { onOpenAuthor } : {})}
+        {...(actions.root.canOpenAuthor && onOpenHandle ? { onOpenHandle } : {})}
+        {...(actions.root.canOpenThread && onOpenThread ? { onExpand: onOpenThread } : {})}
+        {...(actions.root.canReply && onReply ? { onReply: () => onReply(root) } : {})}
+        {...(actions.root.canQuote && onRepost ? { onRepost: () => onRepost(root) } : {})}
       />
 
       <ReplyPreview
         thread={thread}
         currentUserId={currentUserId}
+        actions={actions}
         {...(knownHandles ? { knownHandles } : {})}
         {...(onOpenAuthor ? { onOpenAuthor } : {})}
         {...(onOpenHandle ? { onOpenHandle } : {})}

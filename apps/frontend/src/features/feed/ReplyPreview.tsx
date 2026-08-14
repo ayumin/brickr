@@ -3,6 +3,7 @@ import type { FeedThreadDto } from "@brickr/shared";
 import { Icon } from "../../components/Icon";
 import { PostCard } from "../timeline/PostCard";
 import { selectFeedReplyOverflowCount, selectFeedReplyPreview } from "../timeline/thread-utils";
+import { selectFeedThreadActions, type FeedThreadActions } from "./feed-actions";
 
 export type ReplyPreviewProps = {
   thread: FeedThreadDto;
@@ -14,6 +15,12 @@ export type ReplyPreviewProps = {
   onOpenThread?: (postId: string) => void;
   /** Fired with the thread's root id when there are more replies than shown here. */
   onShowMoreReplies?: (threadRootId: string) => void;
+  /**
+   * Pre-computed actions from the parent `FeedThreadCard`. When absent the
+   * component derives them itself so `ReplyPreview` can still be used
+   * standalone (e.g. in tests or future contexts).
+   */
+  actions?: FeedThreadActions;
 };
 
 /**
@@ -27,6 +34,10 @@ export type ReplyPreviewProps = {
  *
  * Fetching the rest is Step 7-4's job (`GET /api/posts/:threadRootId/replies`)
  * — `onShowMoreReplies` only reports the intent.
+ *
+ * Every interactive affordance is gated by `actions` (derived from
+ * `capabilities`) — never inferred from a status field or from whether a
+ * session exists (§9.3, §16.3, §27).
  */
 export function ReplyPreview({
   thread,
@@ -36,14 +47,15 @@ export function ReplyPreview({
   onOpenHandle,
   onOpenThread,
   onShowMoreReplies,
+  actions: actionsProp,
 }: ReplyPreviewProps) {
   const preview = selectFeedReplyPreview(thread);
   const overflow = selectFeedReplyOverflowCount(thread);
 
-  // Anonymous readers get every capability as `false` (§10.1), including
-  // `canOpenAuthor` — profile/thread navigation always requires a session,
-  // regardless of this thread's own room being stopped or not.
-  const canOpenAuthor = thread.capabilities.canOpenAuthor;
+  // Use pre-computed actions when provided by the parent (avoids recomputing
+  // the same capabilities mapping twice per render), or derive them here when
+  // used standalone.
+  const actions = actionsProp ?? selectFeedThreadActions(thread.capabilities);
 
   if (preview.length === 0) {
     return null;
@@ -59,13 +71,13 @@ export function ReplyPreview({
           currentUserId={currentUserId}
           replyToHandle={replyToHandle}
           {...(knownHandles ? { knownHandles } : {})}
-          {...(canOpenAuthor && onOpenAuthor ? { onOpenAuthor } : {})}
-          {...(canOpenAuthor && onOpenHandle ? { onOpenHandle } : {})}
-          {...(thread.capabilities.canOpenThread && onOpenThread ? { onExpand: onOpenThread } : {})}
+          {...(actions.replies.canOpenAuthor && onOpenAuthor ? { onOpenAuthor } : {})}
+          {...(actions.replies.canOpenAuthor && onOpenHandle ? { onOpenHandle } : {})}
+          {...(actions.replies.canOpenThread && onOpenThread ? { onExpand: onOpenThread } : {})}
         />
       ))}
 
-      {thread.capabilities.canLoadMoreReplies && overflow > 0 && onShowMoreReplies ? (
+      {actions.showMoreReplies && overflow > 0 && onShowMoreReplies ? (
         <button
           type="button"
           onClick={() => onShowMoreReplies(thread.root.id)}
