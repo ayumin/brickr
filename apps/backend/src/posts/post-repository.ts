@@ -1,7 +1,12 @@
 import type { Db, DbTransaction } from "../persistence/prisma.js";
 import type { NewPost, Post } from "./post.js";
 
-type PostRow = {
+/**
+ * Also used by the feed repository, which reads posts through its own queries but
+ * must produce the identical domain object — its raw rows are aliased to these
+ * exact names so both sides share one mapper.
+ */
+export type PostRow = {
   id: string;
   simulationId: string;
   authorId: string;
