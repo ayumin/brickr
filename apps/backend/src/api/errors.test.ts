@@ -14,10 +14,9 @@ import {
   UserNotFoundError,
 } from "../auth/auth-errors.js";
 import { CharacterCsvError } from "../characters/character-csv.js";
-import { CharacterPersonaParseError } from "../characters/character-generator.js";
+import { CharacterGenerationError, CharacterPersonaParseError } from "../characters/character-generator.js";
 import {
   CharacterForbiddenError,
-  CharacterGenerationError,
   CharacterHandleConflictError,
   CharacterNotFoundError,
   ModelProfileNotFoundError,
