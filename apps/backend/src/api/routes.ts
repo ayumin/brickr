@@ -57,6 +57,7 @@ import {
   signupSchema,
   saveCharacterSchema,
   saveUserProfileSchema,
+  threadRootParams,
   updateApplicationSettingsSchema,
   updateSimulationSchema,
   userManagementQuerySchema,
