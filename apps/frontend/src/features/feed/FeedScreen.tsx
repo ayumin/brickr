@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { GLOBAL_SIMULATION_ID, type FeedPageDto, type FeedThreadDto } from "@brickr/shared";
 
 import { ErrorBanner } from "../../components/ErrorBanner";
@@ -9,7 +9,7 @@ import { Composer } from "../composer/Composer";
 import { PostCard } from "../timeline/PostCard";
 import { useUserProfile } from "../../hooks/useUserProfile";
 import { api, isAbortError, toErrorMessage } from "../../services/api-client";
-import { roomPath } from "../../routes";
+import { postPath, roomPath } from "../../routes";
 
 type LoadState =
   | { status: "loading" }
@@ -99,6 +99,11 @@ function FeedThreadRow({
   thread: FeedThreadDto;
   currentUserId: string | undefined;
 }) {
+  const navigate = useNavigate();
+  const onExpand = thread.capabilities.canOpenThread
+    ? (postId: string) => navigate(postPath(postId))
+    : undefined;
+
   return (
     <div>
       <div className="px-4 pt-2.5 text-xs text-ink-faint">
@@ -110,7 +115,12 @@ function FeedThreadRow({
           <span>{thread.room.title}</span>
         )}
       </div>
-      <PostCard post={thread.root} currentUserId={currentUserId} showQuotedPost />
+      <PostCard
+        post={thread.root}
+        currentUserId={currentUserId}
+        showQuotedPost
+        {...(onExpand ? { onExpand } : {})}
+      />
       {thread.latestReplies.map((reply) => (
         <PostCard key={reply.id} post={reply} currentUserId={currentUserId} dense />
       ))}

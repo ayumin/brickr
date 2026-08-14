@@ -36,6 +36,7 @@ import type {
   ModelProfileDto,
   ModelProfilesResponse,
   PostDto,
+  PostsPageResponse,
   PostsResponse,
   PublicProfileDto,
   PublicProfileResponse,
@@ -403,6 +404,19 @@ export const api = {
       signal ? { signal } : {},
     );
     return data.profile;
+  },
+
+  /** This account's posts across every room the caller may see, oldest page last (§10.6, §21). */
+  getProfilePosts(
+    handle: string,
+    cursor?: string,
+    signal?: AbortSignal,
+  ): Promise<PostsPageResponse> {
+    const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
+    return request<PostsPageResponse>(
+      `/api/profiles/${encodeURIComponent(handle)}/posts${query}`,
+      signal ? { signal } : {},
+    );
   },
 
   async getModelProfiles(signal?: AbortSignal): Promise<ModelProfileDto[]> {
