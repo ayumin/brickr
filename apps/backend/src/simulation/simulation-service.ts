@@ -16,6 +16,7 @@ import type { ThreadService } from "../posts/thread-service.js";
 import { resolveActionTargets, selectAction } from "./action-selector.js";
 import { runWithConcurrency } from "./concurrency.js";
 import type { EventHub } from "./event-hub.js";
+import type { ThreadActivityEvent } from "./public-events.js";
 import { selectResponders, shouldRespond } from "./responder-selector.js";
 import type { UserProfile } from "../user-profile/user-profile.js";
 import type { SimulationRepository } from "./simulation-repository.js";

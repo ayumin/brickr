@@ -158,7 +158,7 @@ export async function buildServices(db: Db, logger: SimulationLogger): Promise<A
     modelProfiles,
     userProfile: new UserProfileService(userProfileRepository),
     posts: postService,
-    feed: new FeedService(new FeedRepository(db), postService, simulationRepository),
+    feed,
     simulations,
     simulationAnalysis,
     events,
