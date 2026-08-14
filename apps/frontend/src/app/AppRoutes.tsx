@@ -1,7 +1,6 @@
 import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
-import { HANDLE_PATTERN, isReservedHandle } from "@brickr/shared";
 
-import { castPath, roomListPath } from "../routes";
+import { castPath, normalizeHandleParam, roomListPath } from "../routes";
 import { CastManagementScreen } from "../features/cast/CastManagementScreen";
 import { RoomListScreen } from "../features/rooms/RoomListScreen";
 import { PostDetailScreen } from "../features/rooms/PostDetailScreen";
@@ -22,17 +21,10 @@ function RoomAnalysisRoute() {
   return <SimulationAnalysis simulationId={roomId} />;
 }
 
-const HANDLE_REGEXP = new RegExp(HANDLE_PATTERN);
-
 function HandleRoute() {
   const { handle: raw } = useParams<{ handle: string }>();
-  // Same normalization as routes.ts's old matchRoute and the backend's
-  // handleParams schema: a leading `@` and mixed case are both what a user
-  // actually copies out of a timeline.
-  const handle = raw?.replace(/^@/u, "").toLowerCase();
-  if (!handle || !HANDLE_REGEXP.test(handle) || isReservedHandle(handle)) {
-    return <NotFoundScreen />;
-  }
+  const handle = normalizeHandleParam(raw);
+  if (!handle) return <NotFoundScreen />;
   return <PublicProfileScreen handle={handle} />;
 }
 
