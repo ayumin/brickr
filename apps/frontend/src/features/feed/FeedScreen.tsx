@@ -12,6 +12,9 @@ import { postPath, roomPath } from "../../routes";
 import { readFeedFilter, writeFeedFilter } from "../rooms/feed-filter-storage";
 import { useFeed } from "./useFeed";
 
+/** Stable module-level reference for the global feed scope. */
+const GLOBAL_FEED_SCOPE = { kind: "global" } as const;
+
 /**
  * The unified feed (§5.1, §5.2, §16.1, §16.4).
  *
@@ -24,7 +27,7 @@ export function FeedScreen() {
   const userProfile = useUserProfile();
   const [filter, setFilter] = useState<FeedFilter>(readFeedFilter);
 
-  const feed = useFeed({ kind: "global" }, filter);
+  const feed = useFeed(GLOBAL_FEED_SCOPE, filter);
 
   const handleFilterChange = (next: FeedFilter) => {
     writeFeedFilter(next);
