@@ -10,33 +10,27 @@ import { AuthProvider } from "./features/auth/AuthContext";
 import { LoginPage } from "./features/auth/LoginPage";
 import { SignupPage } from "./features/auth/SignupPage";
 import { ApiError, api, isAbortError, isUnauthorizedError, toErrorMessage } from "./services/api-client";
+import { STORAGE_KEYS, clearStored, readStored, writeStored } from "./services/local-storage";
 import { applyTheme, readPreferredTheme, type Theme } from "./services/theme";
 import { SimulationView } from "./features/simulation/SimulationView";
 import { useCharacters } from "./hooks/useCharacters";
 import { useUserProfile } from "./hooks/useUserProfile";
 import type { LoadPhase } from "./types";
 
-const SIMULATION_STORAGE_KEY = "brickr.simulationId";
-
+/**
+ * The room to restore on the next visit (§7.1).
+ *
+ * The key and the blocked-storage handling both live in `local-storage.ts` now, so
+ * this is the meaning of the value and nothing else: absent means "no room to
+ * restore", which is the unified feed.
+ */
 function readStoredSimulationId(): string | null {
-  try {
-    return window.localStorage.getItem(SIMULATION_STORAGE_KEY);
-  } catch {
-    // Private mode / blocked storage: just start a fresh simulation.
-    return null;
-  }
+  return readStored(STORAGE_KEYS.selectedSimulationId);
 }
 
 function storeSimulationId(id: string | null): void {
-  try {
-    if (id === null) {
-      window.localStorage.removeItem(SIMULATION_STORAGE_KEY);
-    } else {
-      window.localStorage.setItem(SIMULATION_STORAGE_KEY, id);
-    }
-  } catch {
-    // Non-fatal: the simulation still works, it just won't survive a reload.
-  }
+  if (id === null) clearStored(STORAGE_KEYS.selectedSimulationId);
+  else writeStored(STORAGE_KEYS.selectedSimulationId, id);
 }
 
 function defaultTitle(): string {
@@ -233,7 +227,7 @@ function SimulationBootstrap() {
       <div className="flex min-h-dvh flex-col items-center justify-center gap-4 px-6 text-center">
         <BrandLogo className="h-16 w-16" />
         <div>
-          <p className="font-bold text-ink">{APP_NAME}</p>
+          <p className="font-display font-bold text-ink">{APP_NAME}</p>
           <p className="text-xs text-ink-faint">{APP_TAGLINE}</p>
         </div>
         <Spinner size="lg" />
@@ -248,7 +242,7 @@ function SimulationBootstrap() {
     return (
       <div className="flex min-h-dvh items-center justify-center px-6">
         <div className="w-full max-w-md space-y-4">
-          <h1 className="flex items-center justify-center gap-2 text-center text-lg font-bold text-ink">
+          <h1 className="flex items-center justify-center gap-2 text-center text-lg font-display font-bold text-ink">
             <BrandLogo className="h-7 w-7" />
             {APP_FULL_NAME}
           </h1>

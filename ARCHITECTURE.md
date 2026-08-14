@@ -633,8 +633,20 @@ Thread専用APIやFrontend専用Thread Storeはありません。REST/SSEで得�
 
 ### 9.4 表示とTheme
 
-色は`index.css`のSemantic Tokenで定義し、8種類のThemeが同じComponentへ値を提供します。
-Bootstrap Iconsは`Icon.tsx`で名前を型付けします。AvatarはBrowser側Canvasで正方形へCropし、
+色は`index.css`のSemantic Tokenで定義し、Brickr Dark / Light の2Themeが同じComponentへ値を
+提供します。Componentへhexを直接書きません。hexが混ざると片方のThemeでだけ壊れ、原因箇所の
+特定に画面全体の目視が必要になるためです。テキストに使う色はcanvas / surface / surface-raised /
+surface-hoverの4階層すべてでWCAG AA（4.5:1）を満たすことを実測し、プロトタイプ値のうち4つは
+調整しています（各値の実測比は`index.css`のコメントに記載）。
+
+Themeは`data-theme`属性で切り替え、`color-scheme`も同時に設定します。後者を省くとForm Controlと
+Scrollbarだけ前のThemeのままになります。選択値はLocalStorage、初期値はOSの`prefers-color-scheme`で、
+DBには保存しません（端末ごとの見た目の好みであり、未ログインでも適用する必要があるため）。
+認識できない保存値はOS設定へfallbackします。
+
+見出し系の表示にはKiwi Maruをセルフホストで使い（`@fontsource/kiwi-maru`の日本語subset・weight 500
+のみ、`font-display: swap`）、本文・Form・Tableは日本語System Font Stackのままです。Google Fontsへの
+runtime requestは行いません。Bootstrap Iconsは`Icon.tsx`で名前を型付けします。AvatarはBrowser側Canvasで正方形へCropし、
 正規化したData URLだけをBackendへ送信します。
 
 Timelineと右Character Panelは100件ずつ追加表示し、Character管理テーブルは100件ごとの

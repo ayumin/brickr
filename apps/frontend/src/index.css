@@ -1,118 +1,174 @@
 @import "bootstrap-icons/font/bootstrap-icons.css";
+/*
+ * Kiwi Maru, self-hosted (§15.3).
+ *
+ * Served from our own origin, never requested from Google at runtime: the font
+ * arrives as a build dependency and Vite emits it into dist/assets, exactly as
+ * bootstrap-icons already does. A runtime Google Fonts request would add an
+ * external connection and a render delay to every visit, and hand every
+ * visitor's IP to a third party.
+ *
+ * One file on purpose: the japanese subset at weight 500. The upstream package
+ * also ships latin/latin-ext/cyrillic and weights 300/400, plus a 123-file
+ * range-sliced build; taking all of it is the "large pile of font assets" §15.3
+ * warns against. Room names and titles are Japanese, so the japanese subset is
+ * the one that matters, and one display weight is enough for brand/title use.
+ *
+ * The cost is honest: this file is ~1.5 MB, cached after the first visit and
+ * loaded with `font-display: swap` (declared upstream), so text is readable in
+ * the fallback face immediately and never blocks a paint. If that ever needs to
+ * come down, the range-sliced build ("@fontsource/kiwi-maru/500.css") fetches
+ * only the slices a page actually uses.
+ */
+@import "@fontsource/kiwi-maru/japanese-500.css";
 @import "tailwindcss";
 
 /*
  * Tailwind CSS v4: no tailwind.config.js, no @tailwind directives.
  * Design tokens live here and generate utilities (bg-canvas, border-line, ...).
+ *
+ * TOKENS ARE SEMANTIC, AND COMPONENTS MUST NOT CONTAIN HEX (§15.1)
+ *
+ * Every name below says what a colour is *for* — a raised surface, a faint ink —
+ * never what it looks like. That is what lets one component serve both themes: a
+ * hex inside a component is correct in at most one of them, and the failure shows
+ * up as "this screen is unreadable in light mode", found by eye, screen by screen.
+ *
+ * The values here are the dark theme's, because Tailwind needs literals at build
+ * time to generate utilities. `html[data-theme=...]` below reassigns the same
+ * custom properties, so switching themes is a variable swap and nothing more.
+ *
+ * CONTRAST
+ *
+ * Every colour used as text clears WCAG AA (4.5:1) against all four surface
+ * levels it can sit on — canvas, surface, surface-raised and surface-hover. The
+ * prototype was a design study rather than a contrast-checked palette (§15.1
+ * expects adjustment), so four values are nudged from it; each is marked with its
+ * measured ratio and the prototype value it replaces. Surface, line and *-soft
+ * tokens are backgrounds and borders, so they are not held to a text ratio.
  */
 @theme {
-  --color-canvas: #08090b;
-  --color-surface: #0e1014;
-  --color-surface-raised: #14171d;
-  --color-surface-hover: #171b22;
-  --color-line: #23262d;
-  --color-line-strong: #333842;
+  --color-canvas: #100f13;
+  --color-surface: #17161b;
+  --color-surface-raised: #1f1e25;
+  --color-surface-hover: #242229;
+  --color-line: #2c2a33;
+  --color-line-strong: #3e3b47;
 
-  --color-ink: #e9ebef;
-  --color-ink-muted: #8c95a3;
-  --color-ink-faint: #616a78;
+  --color-ink: #eeebf2;
+  --color-ink-muted: #a8a4b2;
+  --color-ink-faint: #8f8a9c;
 
-  --color-accent: #58a6ff;
-  --color-accent-strong: #1f7aeb;
-  --color-accent-soft: #10243d;
+  --color-accent: #d86a42;
+  --color-accent-strong: #b8501f;
+  --color-accent-soft: #2b1712;
 
-  --color-flame: #ff7a45;
-  --color-danger: #f6685e;
-  --color-warn: #e3b341;
+  --color-live: #6fae7f;
+  --color-danger: #e0665c;
+  --color-warn: #e0a34a;
 
   --font-sans:
     "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Noto Sans JP",
     "Yu Gothic UI", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  /*
+   * Display face for the brand name, screen titles, room names and major section
+   * headings only (§15.3). Body copy, forms and tables keep --font-sans: a
+   * rounded display face at paragraph length costs readability and makes line
+   * length harder to control.
+   *
+   * Kiwi Maru leads the stack; the system faces behind it are what shows while the
+   * font loads and on the glyphs it does not carry.
+   */
+  --font-display: "Kiwi Maru", var(--font-sans);
 }
 
+/*
+ * The safe area a fixed bottom bar has to clear on a notched phone (§14.2).
+ *
+ * Read once into a variable so components refer to a token instead of repeating
+ * an env() call, and so it resolves to 0px on every browser that has no notch.
+ */
+:root {
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/*
+ * BRICKR DARK — the default, and what `html` alone gets so the first paint is
+ * never unstyled.
+ *
+ * Measured against canvas #100f13 / surface #17161b / raised #1f1e25 / hover
+ * #242229:
+ *   ink        #eeebf2  14.01-16.19  AA
+ *   ink-muted  #a8a4b2   6.78-7.84   AA
+ *   ink-faint  #8f8a9c   4.70-5.71   AA
+ *   accent     #d86a42   4.54-5.51   AA  (prototype #d4643c fell to 4.26 on hover)
+ *   live       #6fae7f   6.02-7.31   AA
+ *   danger     #e0665c   4.66-5.66   AA
+ *
+ * accent-strong #b8501f is 3.31-3.82 here: it is the pressed/hover *fill* for an
+ * accent surface, not a text colour, and white on it clears AA. Do not use it as
+ * text on a dark surface.
+ */
 html,
-html[data-theme="x-dark"] {
+html[data-theme="brickr-dark"] {
   color-scheme: dark;
   background-color: var(--color-canvas);
 
-  --color-canvas: #000000;
-  --color-surface: #000000;
-  --color-surface-raised: #16181c;
-  --color-surface-hover: #080808;
-  --color-line: #2f3336;
-  --color-line-strong: #536471;
-  --color-ink: #e7e9ea;
-  --color-ink-muted: #71767b;
-  --color-ink-faint: #536471;
-  --color-accent: #1d9bf0;
-  --color-accent-strong: #1a8cd8;
-  --color-accent-soft: #0b2233;
-  --color-flame: #f97316;
-  --color-danger: #f4212e;
-  --color-warn: #ffd400;
+  --color-canvas: #100f13;
+  --color-surface: #17161b;
+  --color-surface-raised: #1f1e25;
+  --color-surface-hover: #242229;
+  --color-line: #2c2a33;
+  --color-line-strong: #3e3b47;
+  --color-ink: #eeebf2;
+  --color-ink-muted: #a8a4b2;
+  --color-ink-faint: #8f8a9c;
+  --color-accent: #d86a42;
+  --color-accent-strong: #b8501f;
+  --color-accent-soft: #2b1712;
+  --color-live: #6fae7f;
+  --color-danger: #e0665c;
+  --color-warn: #e0a34a;
 }
 
-html[data-theme="x-light"] {
+/*
+ * BRICKR LIGHT
+ *
+ * Measured against canvas #f7f5f3 / surface #ffffff / raised #f1eeeb / hover
+ * #ebe7e3:
+ *   ink           #1b1a1e  14.98-17.31  AA
+ *   ink-muted     #565162   6.21-7.64   AA
+ *   ink-faint     #6b6673   4.52-5.57   AA  (prototype #6f6a78 fell to 4.26 on hover)
+ *   accent        #a9461f   4.76-5.86   AA
+ *   accent-strong #8d3817   6.30-7.75   AA
+ *   live          #3a7449   4.52-5.56   AA  (prototype #3f7f52 fell to 3.91 on hover)
+ *   danger        #b93427   4.76-5.86   AA  (prototype #c0392b fell to 4.42 on hover)
+ */
+html[data-theme="brickr-light"] {
   color-scheme: light;
-  --color-canvas: #ffffff;
+
+  --color-canvas: #f7f5f3;
   --color-surface: #ffffff;
-  --color-surface-raised: #f7f9f9;
-  --color-surface-hover: #eff3f4;
-  --color-line: #eff3f4;
-  --color-line-strong: #cfd9de;
-  --color-ink: #0f1419;
-  --color-ink-muted: #536471;
-  --color-ink-faint: #8b98a5;
-  --color-accent: #1d9bf0;
-  --color-accent-strong: #1a8cd8;
-  --color-accent-soft: #e8f5fd;
-  --color-flame: #d95724;
-  --color-danger: #f4212e;
-  --color-warn: #8a6d00;
+  --color-surface-raised: #f1eeeb;
+  --color-surface-hover: #ebe7e3;
+  --color-line: #e4dfda;
+  --color-line-strong: #c9c2ba;
+  --color-ink: #1b1a1e;
+  --color-ink-muted: #565162;
+  --color-ink-faint: #6b6673;
+  --color-accent: #a9461f;
+  --color-accent-strong: #8d3817;
+  --color-accent-soft: #f9ece7;
+  --color-live: #3a7449;
+  --color-danger: #b93427;
+  --color-warn: #8a5a10;
 }
 
-html[data-theme="salesforce"] {
-  color-scheme: light;
-  --color-canvas: #f3f3f3; --color-surface: #ffffff; --color-surface-raised: #f3f3f3; --color-surface-hover: #eef4ff;
-  --color-line: #c9c9c9; --color-line-strong: #939393; --color-ink: #181818; --color-ink-muted: #444444; --color-ink-faint: #747474;
-  --color-accent: #0176d3; --color-accent-strong: #0b5cab; --color-accent-soft: #eaf5fe; --color-flame: #ba4a00; --color-danger: #ba0517; --color-warn: #8c4b02;
-}
-
-html[data-theme="atlassian"] {
-  color-scheme: light;
-  --color-canvas: #f7f8f9; --color-surface: #ffffff; --color-surface-raised: #f1f2f4; --color-surface-hover: #dcdfe4;
-  --color-line: #dcdfe4; --color-line-strong: #b3b9c4; --color-ink: #172b4d; --color-ink-muted: #44546f; --color-ink-faint: #626f86;
-  --color-accent: #0c66e4; --color-accent-strong: #0055cc; --color-accent-soft: #e9f2ff; --color-flame: #c25100; --color-danger: #ae2a19; --color-warn: #7f5f01;
-}
-
-html[data-theme="gitlab-light"] {
-  color-scheme: light;
-  --color-canvas: #f8f8fa; --color-surface: #ffffff; --color-surface-raised: #f2f1f5; --color-surface-hover: #ececef;
-  --color-line: #dcdcde; --color-line-strong: #a4a3a8; --color-ink: #1f1e24; --color-ink-muted: #626168; --color-ink-faint: #89888d;
-  --color-accent: #e24329; --color-accent-strong: #c0341d; --color-accent-soft: #fff1e6; --color-flame: #fc6d26; --color-danger: #c91c00; --color-warn: #7a5200;
-}
-
-html[data-theme="gitlab-dark"] {
-  color-scheme: dark;
-  --color-canvas: #171321; --color-surface: #1f1b2d; --color-surface-raised: #29243a; --color-surface-hover: #332e45;
-  --color-line: #3f3952; --color-line-strong: #625b75; --color-ink: #fbfafd; --color-ink-muted: #b9b5c2; --color-ink-faint: #898294;
-  --color-accent: #fc6d26; --color-accent-strong: #e24329; --color-accent-soft: #402417; --color-flame: #fc6d26; --color-danger: #ff6b5d; --color-warn: #f0c96b;
-}
-
-html[data-theme="github-light"] {
-  color-scheme: light;
-  --color-canvas: #f6f8fa; --color-surface: #ffffff; --color-surface-raised: #f6f8fa; --color-surface-hover: #eff2f5;
-  --color-line: #d0d7de; --color-line-strong: #afb8c1; --color-ink: #1f2328; --color-ink-muted: #59636e; --color-ink-faint: #818b98;
-  --color-accent: #0969da; --color-accent-strong: #0550ae; --color-accent-soft: #ddf4ff; --color-flame: #bc4c00; --color-danger: #cf222e; --color-warn: #9a6700;
-}
-
-html[data-theme="github-dark"] {
-  color-scheme: dark;
-  --color-canvas: #0d1117; --color-surface: #0d1117; --color-surface-raised: #161b22; --color-surface-hover: #21262d;
-  --color-line: #30363d; --color-line-strong: #484f58; --color-ink: #f0f6fc; --color-ink-muted: #8b949e; --color-ink-faint: #6e7681;
-  --color-accent: #58a6ff; --color-accent-strong: #1f6feb; --color-accent-soft: #10243d; --color-flame: #f0883e; --color-danger: #f85149; --color-warn: #d29922;
-}
-
+/*
+ * The logo ships as two files rather than one recoloured asset (§15.4), so the
+ * theme picks which one is visible. The prototype's orange square is not used.
+ */
 .brand-logo {
   background-color: #000;
 }
@@ -125,27 +181,15 @@ html[data-theme="github-dark"] {
   display: block;
 }
 
-html[data-theme="x-light"] .brand-logo,
-html[data-theme="salesforce"] .brand-logo,
-html[data-theme="atlassian"] .brand-logo,
-html[data-theme="gitlab-light"] .brand-logo,
-html[data-theme="github-light"] .brand-logo {
+html[data-theme="brickr-light"] .brand-logo {
   background-color: #fff;
 }
 
-html[data-theme="x-light"] .brand-logo__light,
-html[data-theme="salesforce"] .brand-logo__light,
-html[data-theme="atlassian"] .brand-logo__light,
-html[data-theme="gitlab-light"] .brand-logo__light,
-html[data-theme="github-light"] .brand-logo__light {
+html[data-theme="brickr-light"] .brand-logo__light {
   display: block;
 }
 
-html[data-theme="x-light"] .brand-logo__dark,
-html[data-theme="salesforce"] .brand-logo__dark,
-html[data-theme="atlassian"] .brand-logo__dark,
-html[data-theme="gitlab-light"] .brand-logo__dark,
-html[data-theme="github-light"] .brand-logo__dark {
+html[data-theme="brickr-light"] .brand-logo__dark {
   display: none;
 }
 
@@ -173,9 +217,38 @@ body {
   background-color: color-mix(in srgb, var(--color-accent) 35%, transparent);
 }
 
+/*
+ * One focus ring for the whole app, in accent against an offset of canvas, so it
+ * stays visible on every surface level and in both themes (§27).
+ *
+ * :focus-visible rather than :focus - a ring drawn on mouse clicks trains people
+ * to ignore it, and Step 11 asks for a ring that means "the keyboard is here".
+ */
 :focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
+}
+
+/*
+ * Bottom padding that clears a notched phone's home indicator (§14.2, §27).
+ *
+ * A class rather than a global rule: only the fixed bottom bar needs it, and
+ * padding every scroll container would leave a gap on every other screen.
+ */
+.pb-safe {
+  padding-bottom: var(--safe-area-bottom);
+}
+
+/*
+ * The 44px minimum touch target (§27), as an opt-in.
+ *
+ * Deliberately not applied to every `button`: the icon buttons in the current
+ * dense toolbars would grow and reflow screens this step is not rebuilding. The
+ * screens built from Step 6 onwards use this class, and Step 11 audits coverage.
+ */
+.touch-target {
+  min-height: 44px;
+  min-width: 44px;
 }
 
 /* Slim scrollbars that follow the active theme tokens. */
@@ -242,11 +315,26 @@ body {
   animation: brickr-spin 700ms linear infinite;
 }
 
+/*
+ * Motion is a preference, not a detail (§27).
+ *
+ * The three named animations are cut to nothing rather than removed, so anything
+ * that waits on animationend still gets its event. Transitions are flattened too:
+ * the feed reorders itself as replies arrive, and a reader who asked for less
+ * motion should not have rows sliding under their eyes.
+ */
 @media (prefers-reduced-motion: reduce) {
   .brickr-post-in,
   .brickr-dot,
   .brickr-spin {
     animation-duration: 0.01ms;
     animation-iteration-count: 1;
+  }
+
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

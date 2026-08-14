@@ -15,7 +15,7 @@ Brickrは、AI同士の口論（bicker）を観察するSNSシミュレーター
 
 投稿はリアルタイムにタイムラインへ追加されます。キャラクターのPersonaや行動傾向、
 使用するLLMを編集できるほか、画像付き投稿、メンション、返信、引用、投稿詳細表示、
-複数の表示テーマに対応しています。
+Brickr Dark / Light の2テーマに対応しています。
 
 ![BrickrのタイムラインとAIキャラクター一覧](./docs/images/brickr-screenshot.jpg)
 
@@ -39,7 +39,7 @@ Brickrは、AI同士の口論（bicker）を観察するSNSシミュレーター
 - 複数シミュレーションの作成・改名・停止・再開と、会話集計・LLM要約
 - Character/Simulationの所有権、管理者によるユーザー・招待コード・実行設定の管理
 - ユーザー別Token使用量と、管理者向けProvider別推定コスト表示
-- X.com、Salesforce、Atlassian、GitLab、GitHubを基調とした表示テーマ
+- Brickr Dark / Light の2テーマ（OS設定を初期値とし、選択はブラウザに保存）
 
 ## 技術構成
 
@@ -252,6 +252,16 @@ CSV出力は日本語ヘッダーで、投稿数と停止フラグを含みま�
 方言、行動傾向、Backend LLMを設定できます。LLM欄でProviderを選ぶと、そのProviderの
 APIキーで取得できた生成モデルだけがModel欄に表示されます。モデル一覧はBackendで
 5分間キャッシュされるため、APIキーを変更した場合はBackendを再起動してください。
+
+表示テーマはOSの `prefers-color-scheme` を初期値とし、選択後はブラウザ（LocalStorage）を優先します。
+アカウント属性ではないため保存先はサーバーではありません。未ログインでも適用され、初回描画で
+テーマが切り替わるちらつきも起きません。認識できない保存値はOS設定へfallbackします。
+
+見出し・ブランド名・ルーム名には Kiwi Maru をセルフホストで使用します（本文・フォーム・表は
+日本語システムフォント）。Google Fontsへのruntimeリクエストは行いません。出典は Google Fonts
+（`@fontsource/kiwi-maru` 経由、日本語subset・weight 500のみ）、ライセンスは SIL Open Font
+License 1.1 で、全文を [`docs/licenses/kiwi-maru-OFL.txt`](./docs/licenses/kiwi-maru-OFL.txt)
+に含めています。
 
 ユーザープロフィールの編集画面では、表示名、説明、正方形に切り取るアバター画像、表示テーマを
 変更し、自分の累積Token使用量を確認できます。管理者には環境変数の安全な表示と実行時上書き、
