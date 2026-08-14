@@ -20,7 +20,7 @@ export type PostRow = {
   createdAt: Date;
 };
 
-function toPost(row: PostRow): Post {
+export function toPost(row: PostRow): Post {
   return {
     id: row.id,
     simulationId: row.simulationId,

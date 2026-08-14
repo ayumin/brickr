@@ -9,6 +9,8 @@ import { env } from "./config/env.js";
 import { CharacterRepository } from "./characters/character-repository.js";
 import { LLMCharacterPersonaGenerator } from "./characters/character-generator.js";
 import { CharacterService } from "./characters/character-service.js";
+import { FeedRepository } from "./feed/feed-repository.js";
+import { FeedService } from "./feed/feed-service.js";
 import { HandleRepository } from "./handles/handle-repository.js";
 import { HandleService } from "./handles/handle-service.js";
 import { LLMClient } from "./llm/llm-client.js";
