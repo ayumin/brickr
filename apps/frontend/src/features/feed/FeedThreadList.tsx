@@ -70,8 +70,16 @@ export function FeedThreadList({
       window.scrollBy({ top: delta, behavior: resolveScrollBehavior(prefersReducedMotion) });
     }
 
+    // A `scrollBy` shifts every viewport-relative top by `-delta`, so the
+    // anchor must reflect that before storing it - otherwise the very next
+    // commit computes a delta that exactly reverses this correction.
+    const topAfterCorrectionByThreadId =
+      delta === 0
+        ? topAfterByThreadId
+        : new Map([...topAfterByThreadId].map(([id, top]) => [id, top - delta]));
+
     anchorRef.current = captureScrollAnchor(
-      [...topAfterByThreadId.entries()].map(([threadId, top]) => ({ threadId, top })),
+      [...topAfterCorrectionByThreadId.entries()].map(([threadId, top]) => ({ threadId, top })),
     );
   });
 
