@@ -42,6 +42,7 @@ const expectedPaths = [
   "/api/simulations/{id}/resume",
   "/api/simulations/{id}/posts",
   "/api/posts/{id}",
+  "/api/posts/{threadRootId}/replies",
   "/api/simulations/{id}/events",
 ];
 

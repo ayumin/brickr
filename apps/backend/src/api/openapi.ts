@@ -901,6 +901,43 @@ export const openApiDocument: OpenAPIV3.Document = {
         },
       },
     },
+    "/api/feed": {
+      get: {
+        operationId: "getFeed",
+        tags: ["Feed"],
+        summary: "Read the unified feed",
+        description:
+          "Threads from every simulation, including the reserved global one, ordered by last activity. " +
+          "Readable without a session: an anonymous reader gets the same posts and capabilities that " +
+          "permit nothing. Posts from stopped rooms remain listed, but nobody may reply to or quote them. " +
+          "`filter=mine` requires a session and answers 401 without one.",
+        parameters: feedParameters,
+        responses: {
+          "200": jsonResponse("One page of threads", ref("FeedPage")),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          ...errorResponses,
+        },
+      },
+    },
+    "/api/simulations/{id}/feed": {
+      get: {
+        operationId: "getSimulationFeed",
+        security: sessionSecurity,
+        tags: ["Feed"],
+        summary: "Read one simulation's feed",
+        description:
+          "Same ordering, paging and reply previews as the unified feed, restricted to one simulation. " +
+          "The reserved global simulation is not available here — use `/api/feed`. A stopped simulation " +
+          "answers 404 unless the caller created it or is an administrator, so the endpoint cannot be " +
+          "used to discover it.",
+        parameters: [idParameter("Simulation ID"), ...feedParameters],
+        responses: {
+          "200": jsonResponse("One page of threads", ref("FeedPage")),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          ...errorResponses,
+        },
+      },
+    },
     "/api/simulations/{id}/posts": {
       get: {
         operationId: "listSimulationPosts",

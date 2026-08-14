@@ -587,6 +587,55 @@ export async function registerRoutes(
     }));
   });
 
+  // -- feed -----------------------------------------------------------------
+
+  /**
+   * Public on purpose (§10.1): a visitor without an account reads the same posts
+   * and gets `capabilities` that permit nothing. `filter=mine` is the exception —
+   * there is no "mine" without a session, so it answers 401 rather than silently
+   * falling back to `all`, which would show a stranger's feed as if it were theirs.
+   */
+  app.get("/api/feed", async (request, reply) => {
+    const query = feedQuerySchema.safeParse(request.query);
+    if (!query.success) {
+      return sendError(reply, 400, "invalid_query", "feed query is invalid", query.error.issues);
+    }
+
+    const filter = query.data.filter ?? "all";
+    if (filter === "mine" && !request.currentUser) {
+      return sendError(reply, 401, "unauthenticated", "sign in to see threads about you");
+    }
+
+    try {
+      return await services.feed.getUnifiedFeed({
+        reader: request.currentUser ? toFeedReader(request.currentUser) : null,
+        filter,
+        ...(query.data.cursor ? { cursor: query.data.cursor } : {}),
+      });
+    } catch (error) {
+      return handleDomainError(reply, error);
+    }
+  });
+
+  /** Login required, and a room the caller may not read answers 404 (§10.2, §10.4). */
+  app.get("/api/simulations/:id/feed", async (request, reply) => {
+    const user = requireUser(request, reply);
+    if (!user) return reply;
+
+    const query = feedQuerySchema.safeParse(request.query);
+    if (!query.success) {
+      return sendError(reply, 400, "invalid_query", "feed query is invalid", query.error.issues);
+    }
+
+    return withSimulation(request, reply, async (id) =>
+      services.feed.getRoomFeed(id, {
+        reader: toFeedReader(user),
+        filter: query.data.filter ?? "all",
+        ...(query.data.cursor ? { cursor: query.data.cursor } : {}),
+      }),
+    );
+  });
+
   // -- posts ----------------------------------------------------------------
 
   app.get("/api/simulations/:id/posts", async (request, reply) =>
