@@ -9,7 +9,11 @@ import {
   rankPosts,
   SimulationAnalysisService,
 } from "./simulation-analysis-service.js";
-import { SimulationForbiddenError, SimulationNotFoundError } from "./simulation-service.js";
+import {
+  GlobalSimulationMutationError,
+  SimulationForbiddenError,
+  SimulationNotFoundError,
+} from "./simulation-service.js";
 import type { SimulationRepository } from "./simulation-repository.js";
 import type { Simulation } from "./simulation.js";
 
@@ -159,5 +163,34 @@ describe("SimulationAnalysisService.analyze ownership (§66.6)", () => {
     await expect(
       service.analyze("missing", { id: "user-1", isAdmin: true }),
     ).rejects.toBeInstanceOf(SimulationNotFoundError);
+  });
+});
+
+describe("SimulationAnalysisService.analyze global feed protection (§8.2)", () => {
+  it("refuses to analyze the reserved global feed simulation, admin included", async () => {
+    const globalSimulation: Simulation = {
+      id: "sim-1",
+      title: null,
+      status: "active",
+      scope: "global",
+      createdAt: new Date("2026-08-10T00:00:00Z"),
+      lastActivityAt: new Date("2026-08-10T00:00:00Z"),
+    };
+    const simulations = {
+      findById: (id: string) => Promise.resolve(id === globalSimulation.id ? globalSimulation : null),
+    } as unknown as SimulationRepository;
+    const posts = {
+      listBySimulation: () => Promise.resolve([]),
+    } as unknown as PostService;
+    const service = new SimulationAnalysisService(
+      simulations,
+      posts,
+      {} as unknown as LLMClient,
+      { preferred: () => null } as unknown as LLMProviderRegistry,
+    );
+
+    await expect(
+      service.analyze("sim-1", { id: "someone", isAdmin: true }),
+    ).rejects.toBeInstanceOf(GlobalSimulationMutationError);
   });
 });

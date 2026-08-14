@@ -12,6 +12,7 @@ import type { InternalSseEvent, ThreadActivityEvent } from "./public-events.js";
 import type { SimulationRepository } from "./simulation-repository.js";
 import {
   GlobalSimulationMutationError,
+  PostNotFoundError,
   SimulationForbiddenError,
   SimulationService,
   type SimulationActor,
@@ -564,6 +565,65 @@ describe("SimulationService orchestration", () => {
       USER_AUTHOR_ID,
       alpha.id,
     ]);
+  });
+});
+
+describe("SimulationService cross-simulation post validation", () => {
+  it("rejects a replyTo id that belongs to a different simulation", async () => {
+    const harness = makeHarness({ characters: [] });
+    const foreignPost: Post = {
+      id: "post-in-another-simulation",
+      simulationId: "sim-other",
+      authorId: USER_AUTHOR_ID,
+      content: "from a different room",
+      mentions: [],
+      replyTo: null,
+      quoteOf: null,
+      threadRootId: "post-in-another-simulation",
+      threadActivityAt: new Date("2026-01-01T00:00:00Z"),
+      createdAt: new Date("2026-01-01T00:00:00Z"),
+    };
+    harness.posts.push(foreignPost);
+
+    await expect(
+      harness.service.submitUserPost({
+        simulationId: SIMULATION.id,
+        authorId: USER_AUTHOR_ID,
+        content: "hello",
+        responderIds: [],
+        replyTo: foreignPost.id,
+      }),
+    ).rejects.toBeInstanceOf(PostNotFoundError);
+
+    // Nothing was published: the check runs before the post is persisted.
+    expect(harness.posts).toEqual([foreignPost]);
+  });
+
+  it("rejects a quoteOf id that belongs to a different simulation", async () => {
+    const harness = makeHarness({ characters: [] });
+    const foreignPost: Post = {
+      id: "post-in-another-simulation",
+      simulationId: "sim-other",
+      authorId: USER_AUTHOR_ID,
+      content: "from a different room",
+      mentions: [],
+      replyTo: null,
+      quoteOf: null,
+      threadRootId: "post-in-another-simulation",
+      threadActivityAt: new Date("2026-01-01T00:00:00Z"),
+      createdAt: new Date("2026-01-01T00:00:00Z"),
+    };
+    harness.posts.push(foreignPost);
+
+    await expect(
+      harness.service.submitUserPost({
+        simulationId: SIMULATION.id,
+        authorId: USER_AUTHOR_ID,
+        content: "hello",
+        responderIds: [],
+        quoteOf: foreignPost.id,
+      }),
+    ).rejects.toBeInstanceOf(PostNotFoundError);
   });
 });
 
