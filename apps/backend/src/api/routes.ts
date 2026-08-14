@@ -49,6 +49,7 @@ import {
   createPostSchema,
   createSimulationSchema,
   deleteCharacterQuerySchema,
+  feedQuerySchema,
   handleParams,
   idParams,
   importCharactersCsvSchema,
