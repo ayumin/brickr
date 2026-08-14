@@ -215,9 +215,9 @@ export function selectUserTimeline(
     .sort(comparePostsNewestFirst);
 }
 
-/** True when a post belongs to the given author id. */
+/** True when a post belongs to the given author id (§9.1: `author.id`, nothing else). */
 function isAuthoredBy(post: PostDto, authorId: string): boolean {
-  return post.authorId === authorId || post.author.id === authorId;
+  return post.author.id === authorId;
 }
 
 /** Mention handles are normalized to lowercase by the backend. */

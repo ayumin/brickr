@@ -429,6 +429,7 @@ export function Timeline({
             <li key={post.id}>
               <PostCard
                 post={post}
+                currentUserId={userProfile.id}
                 replyToHandle={replyToHandleOf(post)}
                 knownHandles={knownHandles}
                 onOpenAuthor={onOpenAuthor}
@@ -474,6 +475,7 @@ export function Timeline({
                       <li key={reply.id}>
                         <PostCard
                           post={reply}
+                          currentUserId={userProfile.id}
                           dense
                           replyToHandle={replyToHandleOf(reply)}
                           knownHandles={knownHandles}

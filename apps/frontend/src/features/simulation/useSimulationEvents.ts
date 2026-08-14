@@ -113,14 +113,12 @@ function reducer(state: State, action: Action): State {
       return { ...state, loading: false, loadError: action.message };
 
     case "upsertPost": {
-      const author = action.post.author;
+      // Clearing by id needs no author type, which the DTO no longer carries
+      // (§9.1): a person's id simply matches nothing that was generating.
       return {
         ...state,
         posts: mergePosts(state.posts, [action.post]),
-        thinking:
-          author.kind === "character"
-            ? withoutCharacter(state.thinking, author.id)
-            : state.thinking,
+        thinking: withoutCharacter(state.thinking, action.post.author.id),
       };
     }
 

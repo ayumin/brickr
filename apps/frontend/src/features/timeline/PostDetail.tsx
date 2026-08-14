@@ -50,6 +50,7 @@ export function PostDetail({
           </p>
           <PostCard
             post={separateReference}
+            currentUserId={userProfile.id}
             dense
             showQuotedPost={false}
             onOpenAuthor={onOpenAuthor}

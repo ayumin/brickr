@@ -65,19 +65,21 @@ export function Composer({
   const [error, setError] = useState<string | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
 
-  // Replying to a character pre-fills the mention, like a normal SNS client.
+  // Replying pre-fills the mention, like a normal SNS client. Keyed on "not me"
+  // rather than on the author being a character, which the DTO no longer says
+  // (§9.1) — and which was never the reason to skip it.
   useEffect(() => {
     if (!scope || scope.mode !== "reply") {
       return;
     }
-    if (scope.post.author.kind !== "character") {
+    if (scope.post.author.id === userProfile.id) {
       return;
     }
     const handle = scope.post.author.handle;
     setContent((current) =>
       current.trim().length === 0 ? `@${handle} ` : current,
     );
-  }, [scope]);
+  }, [scope, userProfile.id]);
 
   // StrictMode can run this effect twice; appendMentionOnce keeps it idempotent.
   useEffect(() => {
