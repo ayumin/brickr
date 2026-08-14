@@ -654,6 +654,10 @@ describe("SimulationService token usage (CLAUDE.md §66.4)", () => {
 
     expect(harness.posts.map((post) => post.authorId)).toEqual([USER_AUTHOR_ID, alpha.id]);
     expect(completed.generatedPostIds).toEqual(["post-2"]);
-    expect(stream.received.map((event) => event.type)).not.toContain("character.failed");
+    expect(
+      stream.received.filter(
+        (event) => event.type === "response.finished" && event.outcome === "failed",
+      ),
+    ).toEqual([]);
   });
 });
