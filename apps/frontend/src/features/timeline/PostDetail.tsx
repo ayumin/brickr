@@ -15,7 +15,7 @@ export type PostDetailProps = {
   allPosts: PostDto[];
   characters: CharacterDto[];
   userProfile: UserProfileDto;
-  thinking: ThinkingCharacter[];
+  activities: ResponseActivity[];
   canPost: boolean;
   onOpenAuthor: (authorId: string) => void;
   onOpenPost: (postId: string) => void;

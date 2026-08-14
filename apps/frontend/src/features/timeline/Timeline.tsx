@@ -39,32 +39,34 @@ function toggleId(
   return next;
 }
 
-function ThinkingRow({ character }: { character: ThinkingCharacter }) {
+/**
+ * The anonymous "a response is coming" row (§11.2, §16.1).
+ *
+ * No avatar, name or handle: the stream does not say who is generating, and
+ * inventing a placeholder identity here would be the very hint the feed hides.
+ * Several responses to the same post collapse into one row with a count.
+ */
+function ResponseActivityRow({ count }: { count: number }) {
   return (
     <div className="flex items-center gap-2.5 border-b border-line bg-surface px-6 py-2.5">
-      <Avatar
-        handle={character.handle}
-        displayName={character.displayName}
-        size="sm"
-      />
-      <div className="min-w-0">
-        <p className="truncate text-sm text-ink">
-          <span className="font-semibold">{character.displayName}</span>
-          <span className="text-ink-faint"> @{character.handle}</span>
-        </p>
-        <p className="flex items-center gap-1 text-sm text-ink-muted">
-          考え中
-          <span className="flex items-center gap-0.5" aria-hidden="true">
-            {[0, 1, 2].map((index) => (
-              <span
-                key={index}
-                className="brickr-dot inline-block h-1 w-1 rounded-full bg-ink-muted"
-                style={{ animationDelay: `${String(index * 150)}ms` }}
-              />
-            ))}
-          </span>
-        </p>
-      </div>
+      <span
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-raised"
+        aria-hidden="true"
+      >
+        <span className="h-2 w-2 rounded-full bg-ink-faint" />
+      </span>
+      <p className="flex items-center gap-1 text-sm text-ink-muted">
+        {count > 1 ? `応答を生成中（${String(count)}件）` : "応答を生成中"}
+        <span className="flex items-center gap-0.5" aria-hidden="true">
+          {[0, 1, 2].map((index) => (
+            <span
+              key={index}
+              className="brickr-dot inline-block h-1 w-1 rounded-full bg-ink-muted"
+              style={{ animationDelay: `${String(index * 150)}ms` }}
+            />
+          ))}
+        </span>
+      </p>
     </div>
   );
 }

@@ -134,6 +134,7 @@ export class SimulationService {
     private readonly options: SimulationServiceOptions,
     private readonly logger: SimulationLogger,
     private readonly tokenUsage: TokenUsageService,
+    private readonly threadActivity: ThreadActivitySource,
   ) {}
 
   async create(title: string | null, createdByUserId: string): Promise<SimulationDto> {
