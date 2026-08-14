@@ -325,17 +325,23 @@ describe("SimulationService orchestration", () => {
     expect(harness.generationCalls).toHaveLength(1);
     expect(harness.generationCalls[0]?.target.id).toBe(userPost.id);
     expect(stream.received.map((event) => event.type)).toEqual([
-      "post.created",
-      "character.processing",
-      "post.created",
-      "simulation.completed",
+      "thread.activity",
+      "response.started",
+      "thread.activity",
+      "response.finished",
+      "generation.completed",
     ]);
+    // The activity says a response is being generated and against what — never by
+    // whom (§11.2).
     expect(stream.received).toContainEqual(
       expect.objectContaining({
-        type: "character.processing",
+        type: "response.started",
         targetPostId: userPost.id,
-        characterId: alpha.id,
+        threadRootId: userPost.id,
       }),
+    );
+    expect(stream.received).toContainEqual(
+      expect.objectContaining({ type: "response.finished", outcome: "posted" }),
     );
     expect(completed.generatedPostIds).toEqual(["post-2"]);
   });

@@ -357,16 +357,11 @@ export function Timeline({
   };
 
   const renderThinking = (postId: string) => {
-    const charactersForPost = thinkingByTarget.get(postId) ?? [];
-    if (charactersForPost.length === 0) return null;
+    const count = activityCountByTarget.get(postId) ?? 0;
+    if (count === 0) return null;
     return (
-      <div aria-label="この投稿への応答を考えているキャラクター">
-        {charactersForPost.map((character) => (
-          <ThinkingRow
-            key={`${character.characterId}:${character.targetPostId}`}
-            character={character}
-          />
-        ))}
+      <div aria-label="この投稿への応答を生成中">
+        <ResponseActivityRow count={count} />
       </div>
     );
   };

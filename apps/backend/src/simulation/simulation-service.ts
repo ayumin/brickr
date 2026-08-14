@@ -456,33 +456,64 @@ export class SimulationService {
       );
 
       await this.emitPostCreated(post);
+      outcome = "posted";
       return post;
     } catch (error) {
+      outcome = "failed";
+      // The only place the reason exists. Publishing it would describe the
+      // machinery behind the post (§11.2).
       this.logger.warn(
         { simulationId, characterId: character.id, err: describe(error) },
         "character generation failed",
       );
-      this.events.publish({
-        type: "character.failed",
-        simulationId,
-        characterId: character.id,
-        reason: describe(error),
-      });
       return null;
+    } finally {
+      // In a `finally` so every start is answered exactly once, including when
+      // generation throws or the simulation was stopped mid-flight. An unanswered
+      // start would leave the UI showing a response that never arrives.
+      activity.finish(outcome);
     }
   }
 
-  private publishSkipped(simulationId: string, characterId: string): void {
-    this.events.publish({ type: "character.skipped", simulationId, characterId });
+  /**
+   * Opens one anonymous response activity and hands back how to close it.
+   *
+   * `randomUUID` rather than anything derived from the character: an id that could
+   * be traced back to a row would defeat the point of hiding it.
+   */
+  private beginResponse(target: Post): { finish: (outcome: ResponseOutcome) => void } {
+    const activityId = randomUUID();
+    const shared = {
+      simulationId: target.simulationId,
+      activityId,
+      targetPostId: target.id,
+      threadRootId: target.threadRootId,
+    };
+
+    this.events.publish(target.simulationId, { type: "response.started", ...shared });
+
+    return {
+      finish: (outcome) => {
+        this.events.publish(target.simulationId, {
+          type: "response.finished",
+          ...shared,
+          outcome,
+        });
+      },
+    };
   }
 
+  /**
+   * Publishes the thread the post now belongs to, not the post on its own (§11.3).
+   *
+   * The same event reaches this room's subscribers and the unified feed's, so both
+   * surfaces move at the same moment and describe the thread identically.
+   */
   private async emitPostCreated(post: Post): Promise<void> {
-    const dto = await this.posts.toDto(post);
-    this.events.publish({
-      type: "post.created",
-      simulationId: post.simulationId,
-      post: dto,
-    });
+    this.events.publish(
+      post.simulationId,
+      await this.threadActivity.buildThreadActivity(post),
+    );
   }
 
   // -- helpers --------------------------------------------------------------
