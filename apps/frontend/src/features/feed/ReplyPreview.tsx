@@ -3,7 +3,7 @@ import type { FeedThreadDto } from "@brickr/shared";
 import { Icon } from "../../components/Icon";
 import { PostCard } from "../timeline/PostCard";
 import { selectFeedReplyOverflowCount, selectFeedReplyPreview } from "../timeline/thread-utils";
-import { selectFeedThreadActions, type FeedThreadActions } from "./feed-actions";
+import type { FeedThreadActions } from "./feed-actions";
 
 export type ReplyPreviewProps = {
   thread: FeedThreadDto;
@@ -15,12 +15,8 @@ export type ReplyPreviewProps = {
   onOpenThread?: (postId: string) => void;
   /** Fired with the thread's root id when there are more replies than shown here. */
   onShowMoreReplies?: (threadRootId: string) => void;
-  /**
-   * Pre-computed actions from the parent `FeedThreadCard`. When absent the
-   * component derives them itself so `ReplyPreview` can still be used
-   * standalone (e.g. in tests or future contexts).
-   */
-  actions?: FeedThreadActions;
+  /** Computed by the parent `FeedThreadCard` via `selectFeedThreadActions`. */
+  actions: FeedThreadActions;
 };
 
 /**
@@ -47,15 +43,10 @@ export function ReplyPreview({
   onOpenHandle,
   onOpenThread,
   onShowMoreReplies,
-  actions: actionsProp,
+  actions,
 }: ReplyPreviewProps) {
   const preview = selectFeedReplyPreview(thread);
   const overflow = selectFeedReplyOverflowCount(thread);
-
-  // Use pre-computed actions when provided by the parent (avoids recomputing
-  // the same capabilities mapping twice per render), or derive them here when
-  // used standalone.
-  const actions = actionsProp ?? selectFeedThreadActions(thread.capabilities);
 
   if (preview.length === 0) {
     return null;
