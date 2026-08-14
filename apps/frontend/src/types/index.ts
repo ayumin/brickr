@@ -22,9 +22,6 @@ export type ResponseActivity = {
 /** EventSource lifecycle, mapped to something we can show a human. */
 export type ConnectionState = "connecting" | "open" | "reconnecting" | "disconnected";
 
-/** Generic async phase used by the bootstrap screens. */
-export type LoadPhase = "loading" | "ready" | "error";
-
 /**
  * What an inline composer is scoped to.
  * `quote` is also the repost mechanism — there is no separate repost field.
@@ -33,17 +30,3 @@ export type ComposerScope = {
   mode: "reply" | "quote";
   post: PostDto;
 };
-
-/**
- * Which screen the single page is showing.
- * Kept in sync with the URL by `routes.ts` / `SimulationView`, not owned by a
- * `<Route>` tree — see the comment at the top of `routes.ts` for why.
- */
-export type TimelineView =
-  | { kind: "home" }
-  | { kind: "characters" }
-  | { kind: "simulations" }
-  | { kind: "simulation-analysis"; simulationId: string }
-  | { kind: "post"; postId: string }
-  | { kind: "users-management" }
-  | { kind: "timeline"; authorId: string };

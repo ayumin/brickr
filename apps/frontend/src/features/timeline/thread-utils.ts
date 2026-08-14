@@ -197,6 +197,16 @@ export function countReplies(index: ReplyIndex, postId: string): number {
 }
 
 /**
+ * One room's whole timeline: every thread starter in it, newest activity
+ * first. Unlike `selectUserTimeline`/`selectAuthorTimeline`, this has no
+ * notion of "mine" - a room shows everyone's threads (§5.3), not one
+ * account's. Filtering to "自分あて" within a room is Step 7's job.
+ */
+export function selectRoomTimeline(posts: readonly PostDto[]): PostDto[] {
+  return posts.filter(isThreadStarter).sort(comparePostsNewestFirst);
+}
+
+/**
  * The signed-in user's home timeline: their thread starters plus every post
  * that mentions their handle. Replies still live inside their thread unless
  * somebody explicitly mentions them in that reply.

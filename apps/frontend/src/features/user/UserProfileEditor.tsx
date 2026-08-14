@@ -29,6 +29,8 @@ export function UserProfileEditor({
   theme,
   onThemeChange,
   onOpenUsersManagement,
+  variant = "modal",
+  initialSection = "profile",
 }: {
   profile: UserProfileDto;
   onClose: () => void;
@@ -36,10 +38,17 @@ export function UserProfileEditor({
   theme: Theme;
   onThemeChange: (theme: Theme) => void;
   onOpenUsersManagement: () => void;
+  /**
+   * "page" drops the modal overlay/backdrop for `SettingsShell` (§22, Issue
+   * #48), which mounts this at a URL instead of over the current screen.
+   * The internal section nav and every panel are unchanged either way.
+   */
+  variant?: "modal" | "page";
+  initialSection?: SettingsSection;
 }) {
   const navigate = useNavigate();
   const { user, setUser } = useAuth();
-  const [section, setSection] = useState<SettingsSection>("profile");
+  const [section, setSection] = useState<SettingsSection>(initialSection);
   const [displayName, setDisplayName] = useState(profile.displayName);
   const [description, setDescription] = useState(profile.description);
   const [avatarUrl, setAvatarUrl] = useState<string | undefined>(profile.avatarUrl);
@@ -121,19 +130,16 @@ export function UserProfileEditor({
     }
   };
 
-  return (
+  const panel = (
     <div
-      className="fixed inset-0 z-50 overflow-y-auto bg-black/75 p-3 backdrop-blur-sm sm:p-6"
-      onClick={(event) => {
-        if (event.target === event.currentTarget && !saving && !loggingOut) onClose();
-      }}
+      {...(variant === "modal" ? { role: "dialog", "aria-modal": true } : {})}
+      aria-labelledby="user-settings-title"
+      className={
+        variant === "modal"
+          ? "mx-auto flex min-h-[36rem] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-line bg-canvas shadow-2xl sm:flex-row"
+          : "mx-auto flex w-full max-w-5xl flex-col sm:flex-row"
+      }
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="user-settings-title"
-        className="mx-auto flex min-h-[36rem] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-line bg-canvas shadow-2xl sm:flex-row"
-      >
         <aside className="w-full shrink-0 border-b border-line bg-surface-muted p-3 sm:w-56 sm:border-b-0 sm:border-r sm:p-4">
           <h2 id="user-settings-title" className="px-2 pb-3 text-lg font-bold text-ink">
             設定
@@ -231,7 +237,21 @@ export function UserProfileEditor({
           {isAdmin && section === "models" ? <ModelsPanel settings={settings} loading={loadingSettings} /> : null}
           {isAdmin && section === "usage" ? <UsagePanel settings={settings} loading={loadingSettings} /> : null}
         </main>
-      </div>
+    </div>
+  );
+
+  if (variant === "page") {
+    return panel;
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 overflow-y-auto bg-black/75 p-3 backdrop-blur-sm sm:p-6"
+      onClick={(event) => {
+        if (event.target === event.currentTarget && !saving && !loggingOut) onClose();
+      }}
+    >
+      {panel}
     </div>
   );
 }

@@ -205,6 +205,33 @@ describe("api-client", () => {
     });
   });
 
+  describe("api.getFeed", () => {
+    it("requests the unified feed with the given filter", async () => {
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ threads: [], nextCursor: null }),
+      });
+
+      const result = await api.getFeed("all");
+
+      expect(result).toEqual({ threads: [], nextCursor: null });
+      const callUrl = (fetchMock.mock.calls[0] as unknown[])[0] as string;
+      expect(callUrl).toContain("/api/feed?filter=all");
+    });
+
+    it("passes the mine filter through unchanged", async () => {
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ threads: [], nextCursor: null }),
+      });
+
+      await api.getFeed("mine");
+
+      const callUrl = (fetchMock.mock.calls[0] as unknown[])[0] as string;
+      expect(callUrl).toContain("filter=mine");
+    });
+  });
+
   describe("simulationEventsUrl function", () => {
     it("should construct valid SSE URLs with proper encoding", () => {
       const url = simulationEventsUrl("test-simulation-123");
