@@ -612,8 +612,14 @@ Loginへ誘導します。Theme選択もBrowserへ保存します。
 ### 9.2 Network境界
 
 - `api-client.ts`: REST、JSON Error、Abort、Backend URL
-- `sse-client.ts`: EventSource、named event、購読解除
-- `useSimulationEvents.ts`: REST hydrationとSSEをReducerへ統合
+- `sse-client.ts`: EventSource、named event、購読解除。`subscribeToSimulationEvents`（1ルーム）と
+  `subscribeToFeedEvents`（統合Feed全体）は内部のEventSource配線を共有する
+- `useSimulationEvents.ts`: REST hydrationとSSEを1ルームのReducerへ統合
+- `features/feed/`: 統合Feedのデータ層。`feed-reducer.ts`がReact非依存のThread dedupe/再ソートを持ち
+  （initial pageは置換、load moreはroot IDでdedupeして末尾追加のみで再ソートしない、SSE
+  upsertは全loaded threadを再ソートする非対称な扱い）、`useFeedEvents.ts`がFeed/ルームどちらの
+  scopeかに応じてEventSourceを選び分けてReducerへdispatchし、`useFeed.ts`が両者とcursorページングを
+  束ねて画面へ渡す
 - `useCharacters.ts` / `useUserProfile.ts`: Resource取得と更新
 
 ComponentはNetwork Protocolを知りません。
