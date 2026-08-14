@@ -46,6 +46,11 @@
  * expects adjustment), so four values are nudged from it; each is marked with its
  * measured ratio and the prototype value it replaces. Surface, line and *-soft
  * tokens are backgrounds and borders, so they are not held to a text ratio.
+ *
+ * `warn` has no counterpart in the prototype palette. It is kept because the
+ * warning tone, the reconnecting indicator and the generation-failure line
+ * already read it (§15.1), and it is used as text, so it is held to the same
+ * ratio as the rest.
  */
 @theme {
   --color-canvas: #100f13;
