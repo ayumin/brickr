@@ -805,5 +805,11 @@ function handleDomainError(reply: FastifyReply, error: unknown): FastifyReply {
   if (error instanceof SimulationStoppedError) {
     return sendError(reply, 409, "simulation_stopped", error.message);
   }
+  // A cursor we did not issue, or one we can no longer read (§9.4). Answered
+  // rather than ignored: serving page one would look like a feed that silently
+  // lost the reader's place.
+  if (error instanceof FeedCursorInvalidError) {
+    return sendError(reply, 400, "invalid_cursor", error.message);
+  }
   throw error;
 }
