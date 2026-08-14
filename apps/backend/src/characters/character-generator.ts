@@ -2,7 +2,7 @@ import { z } from "zod";
 import { DomainError } from "../domain-error.js";
 import type { LLMClient } from "../llm/llm-client.js";
 import type { ModelProfile } from "../model-profiles/model-profile.js";
-import { runWithConcurrency } from "../simulation/concurrency.js";
+import { runWithConcurrency } from "../lib/concurrency.js";
 
 const BATCH_SIZE = 5;
 const MAX_CONCURRENT_BATCHES = 3;

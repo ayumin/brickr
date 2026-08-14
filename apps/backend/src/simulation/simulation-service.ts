@@ -15,7 +15,7 @@ import type { Post } from "../posts/post.js";
 import type { PostService } from "../posts/post-service.js";
 import type { ThreadContext, ThreadService } from "../posts/thread-service.js";
 import { resolveActionTargets, selectAction } from "./action-selector.js";
-import { runWithConcurrency } from "./concurrency.js";
+import { runWithConcurrency } from "../lib/concurrency.js";
 import type { EventHub } from "./event-hub.js";
 import type { ThreadActivityEvent } from "./public-events.js";
 import { selectCascadeResponders, selectResponders } from "./responder-selector.js";
