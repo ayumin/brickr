@@ -38,7 +38,7 @@ export type ResponseFinishedInternalEvent = {
 };
 
 /**
- * A whole round of responses ended. Never leaves the process.
+ * Every response caused by one submission has finished. Never leaves the process.
  *
  * A client has no use for it — the response pairs already say what is in flight —
  * but the backend does: it is where a run's outcome can be observed without

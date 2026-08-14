@@ -18,15 +18,13 @@ import { resolveActionTargets, selectAction } from "./action-selector.js";
 import { runWithConcurrency } from "./concurrency.js";
 import type { EventHub } from "./event-hub.js";
 import type { ThreadActivityEvent } from "./public-events.js";
-import { selectResponders, shouldRespond } from "./responder-selector.js";
+import { selectCascadeResponders, selectResponders } from "./responder-selector.js";
 import type { UserProfile } from "../user-profile/user-profile.js";
 import type { SimulationRepository } from "./simulation-repository.js";
 import { isGlobalSimulation, type Simulation } from "./simulation.js";
 
 /** Hard ceiling on character posts generated from one user post. */
 const MAX_POSTS_PER_SUBMISSION = 24;
-/** How many characters may pile onto a single character post in a cascade round. */
-const MAX_CASCADE_RESPONDERS = 2;
 
 export type SubmitUserPostInput = {
   simulationId: string;
@@ -120,7 +118,7 @@ export function assertNotGlobalSimulation(
 }
 
 /**
- * Orchestrates a round of character reactions to a post.
+ * Orchestrates the reactions to one post.
  *
  * There is no round or wave model (CLAUDE.md §31): every character reads the
  * thread as it exists the moment that character starts working, so characters
@@ -242,7 +240,7 @@ export class SimulationService {
         maxResponders: this.options.maxResponders,
       });
 
-      await this.runRound({
+      await this.processTarget({
         target: triggerPost,
         responders,
         allCharacters: all,
@@ -277,7 +275,7 @@ export class SimulationService {
   }
 
   /** Runs one set of characters against one target post, then cascades. */
-  private async runRound(input: {
+  private async processTarget(input: {
     target: Post;
     responders: Character[];
     allCharacters: Character[];
@@ -307,8 +305,8 @@ export class SimulationService {
 
     if (depth >= this.options.maxCascadeDepth) return;
 
-    // Characters react to what the previous round produced. Done sequentially
-    // per post but concurrently within each cascade round.
+    // Characters react to what the previous step produced. Done sequentially
+    // per post but concurrently within each cascade step.
     const cascades: Array<Promise<void>> = [];
 
     for (const result of results) {
@@ -318,7 +316,7 @@ export class SimulationService {
       const producedPost = result.value;
       const author = result.item;
 
-      const followers = this.selectCascadeResponders({
+      const followers = selectCascadeResponders({
         allCharacters,
         producedPost,
         author,
@@ -327,7 +325,7 @@ export class SimulationService {
       if (followers.length === 0) continue;
 
       cascades.push(
-        this.runRound({
+        this.processTarget({
           target: producedPost,
           responders: followers,
           allCharacters,
@@ -340,43 +338,6 @@ export class SimulationService {
     }
 
     await Promise.all(cascades);
-  }
-
-  /**
-   * Who reacts to a character's post: anyone it @mentioned (always), plus a
-   * couple of opportunistic reactions gated by `shouldRespond`.
-   */
-  private selectCascadeResponders(input: {
-    allCharacters: Character[];
-    producedPost: Post;
-    author: Character;
-    depth: number;
-  }): Character[] {
-    const { allCharacters, producedPost, author, depth } = input;
-
-    const byHandle = new Map(
-      allCharacters.map((character) => [character.handle.toLowerCase(), character]),
-    );
-
-    const chosen = new Map<string, Character>();
-
-    for (const handle of producedPost.mentions) {
-      const mentioned = byHandle.get(handle);
-      if (mentioned && mentioned.id !== author.id) chosen.set(mentioned.id, mentioned);
-    }
-
-    const opportunistic = allCharacters.filter(
-      (character) =>
-        character.id !== author.id &&
-        !chosen.has(character.id) &&
-        shouldRespond(character, { authorInfluence: author.influence, depth }),
-    );
-
-    for (const character of opportunistic.slice(0, MAX_CASCADE_RESPONDERS)) {
-      chosen.set(character.id, character);
-    }
-
-    return [...chosen.values()];
   }
 
   /**

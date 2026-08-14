@@ -1,4 +1,5 @@
 import type { Character } from "../characters/character.js";
+import type { Post } from "../posts/post.js";
 
 /** Injectable randomness so selection is unit-testable. */
 export type Rng = () => number;
@@ -109,7 +110,7 @@ export function selectResponders(input: ResponderSelectionInput): ResponderSelec
 }
 
 /**
- * Gate for cascade rounds: once a character has posted, which *other*
+ * Gate for cascade steps: once a character has posted, which *other*
  * characters get drawn in to answer it.
  *
  * Mandatory responders bypass this — it only applies to opportunistic reactions.
@@ -124,4 +125,45 @@ export function shouldRespond(
   const chance =
     character.responseProbability * (0.4 + options.authorInfluence) * decay;
   return rng() < chance;
+}
+
+/** How many characters may pile onto a single character post in a cascade step. */
+export const MAX_CASCADE_RESPONDERS = 2;
+
+/**
+ * Who reacts to a character's post: anyone it @mentioned (always), plus a
+ * couple of opportunistic reactions gated by `shouldRespond`.
+ */
+export function selectCascadeResponders(input: {
+  allCharacters: Character[];
+  producedPost: Post;
+  author: Character;
+  depth: number;
+  rng?: Rng;
+}): Character[] {
+  const { allCharacters, producedPost, author, depth, rng } = input;
+
+  const byHandle = new Map(
+    allCharacters.map((character) => [character.handle.toLowerCase(), character]),
+  );
+
+  const chosen = new Map<string, Character>();
+
+  for (const handle of producedPost.mentions) {
+    const mentioned = byHandle.get(handle);
+    if (mentioned && mentioned.id !== author.id) chosen.set(mentioned.id, mentioned);
+  }
+
+  const opportunistic = allCharacters.filter(
+    (character) =>
+      character.id !== author.id &&
+      !chosen.has(character.id) &&
+      shouldRespond(character, { authorInfluence: author.influence, depth, rng }),
+  );
+
+  for (const character of opportunistic.slice(0, MAX_CASCADE_RESPONDERS)) {
+    chosen.set(character.id, character);
+  }
+
+  return [...chosen.values()];
 }
