@@ -8,6 +8,7 @@ import type { Post } from "../posts/post.js";
 import type { PostService, PublishInput } from "../posts/post-service.js";
 import type { ThreadContext, ThreadService } from "../posts/thread-service.js";
 import { EventHub } from "./event-hub.js";
+import type { InternalSseEvent, ThreadActivityEvent } from "./public-events.js";
 import type { SimulationRepository } from "./simulation-repository.js";
 import {
   GlobalSimulationMutationError,
