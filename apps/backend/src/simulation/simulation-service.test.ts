@@ -408,16 +408,16 @@ describe("SimulationService orchestration", () => {
       USER_AUTHOR_ID,
       healthy.id,
     ]);
+    // The failure is reported as an outcome, without naming the character or the
+    // provider that failed (§11.2). The reason stays in the log.
     expect(stream.received).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({
-          type: "character.failed",
-          characterId: broken.id,
-          reason: "provider unavailable",
-        }),
-        expect.objectContaining({ type: "simulation.completed" }),
+        expect.objectContaining({ type: "response.finished", outcome: "failed" }),
+        expect.objectContaining({ type: "response.finished", outcome: "posted" }),
+        expect.objectContaining({ type: "generation.completed" }),
       ]),
     );
+    expect(JSON.stringify(stream.received)).not.toContain("provider unavailable");
   });
 
   it("cascades from a generated mention using that character post as the next target", async () => {
