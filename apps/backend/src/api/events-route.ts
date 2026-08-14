@@ -1,6 +1,10 @@
 import type { SseEvent } from "@brickr/shared";
-import type { FastifyInstance, FastifyReply } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { requireUser } from "../auth/auth-context.js";
+import type { FeedReader } from "../feed/feed-service.js";
 import type { AppServices } from "../services.js";
+import type { EventListener } from "../simulation/event-hub.js";
+import { toPublicEvent } from "../simulation/public-events.js";
 import { SimulationNotFoundError } from "../simulation/simulation-service.js";
 import { sendError } from "./errors.js";
 import { idParams } from "./schemas.js";
@@ -31,21 +35,118 @@ function crossOriginHeaders(reply: FastifyReply): Record<string, string> {
 }
 
 /**
- * GET /api/simulations/:id/events
+ * Turns one subscription into an HTTP stream and keeps it open until the client
+ * leaves.
  *
- * Server-Sent Events. Each frame carries the event name in `event:` and the
- * event object in `data:`, so the browser can use named listeners.
+ * `subscribe` is handed a listener rather than being chosen here, so the same
+ * plumbing serves the unified feed and a single room.
+ */
+function streamEvents(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  subscribe: (listener: EventListener) => () => void,
+  reader: FeedReader,
+): Promise<void> {
+  reply.raw.writeHead(200, {
+    // Writing to `reply.raw` bypasses Fastify's header serialisation, so the
+    // CORS headers @fastify/cors put on the reply have to be copied across by
+    // hand. Without them the browser rejects the EventSource and retries
+    // forever, which looks like a permanently broken realtime connection.
+    ...crossOriginHeaders(reply),
+    "Content-Type": "text/event-stream; charset=utf-8",
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    // Nginx and friends buffer streamed responses without this.
+    "X-Accel-Buffering": "no",
+  });
+
+  const write = (chunk: string): void => {
+    if (reply.raw.writableEnded) return;
+    reply.raw.write(chunk);
+  };
+
+  // Tell the browser not to reconnect too aggressively, then say hello so the
+  // client can flip to "connected" immediately.
+  write("retry: 3000\n\n");
+  write(": connected\n\n");
+
+  const unsubscribe = subscribe((event) => {
+    // The one conversion point (§11.4). Internal events map to nothing and are
+    // never written, and capabilities are resolved for this connection's reader.
+    const publicEvent: SseEvent | null = toPublicEvent(event, reader);
+    if (!publicEvent) return;
+    write(`event: ${publicEvent.type}\ndata: ${JSON.stringify(publicEvent)}\n\n`);
+  });
+
+  const heartbeat = setInterval(() => write(": ping\n\n"), HEARTBEAT_MS);
+
+  const cleanup = (): void => {
+    clearInterval(heartbeat);
+    unsubscribe();
+  };
+
+  request.raw.on("close", cleanup);
+  reply.raw.on("close", cleanup);
+  reply.raw.on("error", cleanup);
+
+  // Returning this promise keeps Fastify from finalising the reply. It stays
+  // pending until the client disconnects.
+  return new Promise<void>((resolve) => {
+    request.raw.on("close", () => resolve());
+  });
+}
+
+/**
+ * The two event streams (§11.1).
+ *
+ * Each frame carries the event name in `event:` and the event object in `data:`,
+ * so the browser can use named listeners.
  */
 export function registerEventsRoute(app: FastifyInstance, services: AppServices): void {
+  /**
+   * Every simulation's public events, for the unified feed.
+   *
+   * Authentication is optional, like the feed it belongs to: an anonymous reader
+   * watches the same threads appear and receives capabilities that permit nothing.
+   */
+  app.get("/api/feed/events", async (request, reply) => {
+    const reader = request.currentUser
+      ? {
+          id: request.currentUser.id,
+          isAdmin: request.currentUser.isAdmin,
+          handle: request.currentUser.handle,
+        }
+      : null;
+
+    return streamEvents(
+      request,
+      reply,
+      (listener) => services.events.subscribeAll(listener),
+      reader,
+    );
+  });
+
+  /**
+   * One room's events.
+   *
+   * A session is required and the room has to be readable (§11.1): without that,
+   * subscribing would reveal that a stopped room exists and when it is active,
+   * which the equivalent REST read refuses to say (§10.4).
+   */
   app.get("/api/simulations/:id/events", async (request, reply) => {
+    const user = requireUser(request, reply);
+    if (!user) return reply;
+
     const params = idParams.safeParse(request.params);
     if (!params.success) {
       return sendError(reply, 400, "invalid_params", "simulation id is invalid");
     }
 
+    const reader = { id: user.id, isAdmin: user.isAdmin, handle: user.handle };
     const simulationId = params.data.id;
+
     try {
-      await services.simulations.get(simulationId);
+      await services.feed.assertRoomReadable(simulationId, reader);
     } catch (error) {
       if (error instanceof SimulationNotFoundError) {
         return sendError(reply, 404, "not_found", error.message);
@@ -53,48 +154,11 @@ export function registerEventsRoute(app: FastifyInstance, services: AppServices)
       throw error;
     }
 
-    reply.raw.writeHead(200, {
-      // Writing to `reply.raw` bypasses Fastify's header serialisation, so the
-      // CORS headers @fastify/cors put on the reply have to be copied across by
-      // hand. Without them the browser rejects the EventSource and retries
-      // forever, which looks like a permanently broken realtime connection.
-      ...crossOriginHeaders(reply),
-      "Content-Type": "text/event-stream; charset=utf-8",
-      "Cache-Control": "no-cache, no-transform",
-      Connection: "keep-alive",
-      // Nginx and friends buffer streamed responses without this.
-      "X-Accel-Buffering": "no",
-    });
-
-    const write = (chunk: string): void => {
-      if (reply.raw.writableEnded) return;
-      reply.raw.write(chunk);
-    };
-
-    // Tell the browser not to reconnect too aggressively, then say hello so the
-    // client can flip to "connected" immediately.
-    write("retry: 3000\n\n");
-    write(": connected\n\n");
-
-    const unsubscribe = services.events.subscribe(simulationId, (event: SseEvent) => {
-      write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
-    });
-
-    const heartbeat = setInterval(() => write(": ping\n\n"), HEARTBEAT_MS);
-
-    const cleanup = (): void => {
-      clearInterval(heartbeat);
-      unsubscribe();
-    };
-
-    request.raw.on("close", cleanup);
-    reply.raw.on("close", cleanup);
-    reply.raw.on("error", cleanup);
-
-    // Returning this promise keeps Fastify from finalising the reply. It stays
-    // pending until the client disconnects.
-    return new Promise<void>((resolve) => {
-      request.raw.on("close", () => resolve());
-    });
+    return streamEvents(
+      request,
+      reply,
+      (listener) => services.events.subscribe(simulationId, listener),
+      reader,
+    );
   });
 }

@@ -15,6 +15,7 @@ import {
   SimulationNotFoundError,
   type SimulationActor,
 } from "../simulation/simulation-service.js";
+import type { ThreadActivityEvent } from "../simulation/public-events.js";
 import { toFeedCapabilities } from "./feed-capabilities.js";
 import { decodeFeedCursor, encodeFeedCursor } from "./feed-cursor.js";
 import type { FeedRepository, FeedRoom, FeedThreadRow } from "./feed-repository.js";
@@ -92,18 +93,68 @@ export class FeedService {
     simulationId: string,
     request: FeedPageRequest & { reader: NonNullable<FeedReader> },
   ): Promise<FeedPageDto> {
+    await this.assertRoomReadable(simulationId, request.reader);
+    return this.buildPage(request, { simulationId });
+  }
+
+  /**
+   * Whether this reader may read one room as a room (§10.2, §10.4).
+   *
+   * Shared with the room event stream (§11.1), so a subscription can never observe
+   * a room the equivalent request would refuse.
+   */
+  async assertRoomReadable(
+    simulationId: string,
+    reader: NonNullable<FeedReader>,
+  ): Promise<void> {
     const simulation = await this.simulations.findById(simulationId);
     if (!simulation || isGlobalSimulation(simulation)) {
       throw new SimulationNotFoundError(simulationId);
     }
-    if (
-      simulation.status === "stopped" &&
-      !isSimulationOwnerOrAdmin(simulation, request.reader)
-    ) {
+    if (simulation.status === "stopped" && !isSimulationOwnerOrAdmin(simulation, reader)) {
       throw new SimulationNotFoundError(simulationId);
     }
+  }
 
-    return this.buildPage(request, { simulationId });
+  /**
+   * The thread a new post belongs to, as an event payload (§11.3).
+   *
+   * Built through the same `toThreadDto` the feed pages with, so a live update and
+   * a fresh page describe the thread identically — the reply preview, the count,
+   * the activity time and the room label cannot drift apart. Capabilities are left
+   * at their anonymous baseline here and personalised per subscriber at delivery.
+   */
+  async buildThreadActivity(post: Post): Promise<ThreadActivityEvent> {
+    const root =
+      post.threadRootId === post.id ? post : await this.posts.findById(post.threadRootId);
+    if (!root) throw new PostNotFoundError(post.threadRootId);
+
+    const simulation = await this.simulations.findById(root.simulationId);
+    if (!simulation) throw new SimulationNotFoundError(root.simulationId);
+
+    const room: FeedRoom = {
+      id: simulation.id,
+      title: simulation.title,
+      status: simulation.status,
+      scope: simulation.scope,
+      ...(simulation.createdByUserId ? { createdByUserId: simulation.createdByUserId } : {}),
+    };
+
+    const [replyCounts, previews] = await Promise.all([
+      this.feed.countRepliesByThread([root.id]),
+      this.feed.findLatestRepliesByThread([root.id], REPLY_PREVIEW_COUNT),
+    ]);
+    const dtos = await this.posts.toDtos([root, ...previews]);
+
+    const thread = this.toThreadDto({
+      row: { root, room },
+      reader: null,
+      replyCount: replyCounts.get(root.id) ?? 0,
+      previews,
+      dtoById: new Map(dtos.map((dto) => [dto.id, dto])),
+    });
+
+    return { type: "thread.activity", simulationId: root.simulationId, room, thread };
   }
 
   /**

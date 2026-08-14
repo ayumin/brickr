@@ -1,4 +1,4 @@
-import { GLOBAL_SIMULATION_ID, type PostDto, type SseEvent } from "@brickr/shared";
+import { GLOBAL_SIMULATION_ID, type PostDto } from "@brickr/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentService, GenerateRequest, GeneratedPost } from "../agents/agent-service.js";
 import type { CharacterRepository } from "../characters/character-repository.js";
@@ -8,6 +8,7 @@ import type { Post } from "../posts/post.js";
 import type { PostService, PublishInput } from "../posts/post-service.js";
 import type { ThreadContext, ThreadService } from "../posts/thread-service.js";
 import { EventHub } from "./event-hub.js";
+import type { InternalSseEvent, ThreadActivityEvent } from "./public-events.js";
 import type { SimulationRepository } from "./simulation-repository.js";
 import {
   GlobalSimulationMutationError,
@@ -75,6 +76,8 @@ type Harness = {
   generationCalls: GenerateRequest[];
   threadSnapshots: Array<{ targetId: string; postIds: string[] }>;
   tokenUsageRecords: TokenUsageRecord[];
+  /** Ids of the posts the thread payload was assembled for, in order. */
+  threadActivityCalls: string[];
 };
 
 /**
@@ -211,6 +214,43 @@ function makeHarness(options: HarnessOptions): Harness {
     },
   } as unknown as TokenUsageService;
 
+  /**
+   * Stands in for the feed, which assembles the thread a post event carries
+   * (§11.3). Only the identity of the thread matters here; the DTO's contents are
+   * fixed in `feed-service.test.ts`.
+   */
+  const threadActivityCalls: string[] = [];
+  const threadActivity = {
+    buildThreadActivity: (post: Post): Promise<ThreadActivityEvent> => {
+      threadActivityCalls.push(post.id);
+      return Promise.resolve({
+        type: "thread.activity",
+        simulationId: post.simulationId,
+        room: {
+          id: simulation.id,
+          title: simulation.title,
+          status: simulation.status,
+          scope: simulation.scope,
+        },
+        thread: {
+          root: toDto(posts.find((entry) => entry.id === post.threadRootId) ?? post),
+          room: { id: simulation.id, title: simulation.title ?? "", isFeed: false },
+          latestReplies: [],
+          replyCount: 0,
+          lastActivityAt: post.threadActivityAt.toISOString(),
+          capabilities: {
+            canOpenAuthor: false,
+            canOpenRoom: false,
+            canOpenThread: false,
+            canReply: false,
+            canQuote: false,
+            canLoadMoreReplies: false,
+          },
+        },
+      });
+    },
+  };
+
   const events = new EventHub();
   const service = new SimulationService(
     simulationRepository,
@@ -228,9 +268,18 @@ function makeHarness(options: HarnessOptions): Harness {
     },
     logger,
     tokenUsage,
+    threadActivity,
   );
 
-  return { service, events, posts, generationCalls, threadSnapshots, tokenUsageRecords };
+  return {
+    service,
+    events,
+    posts,
+    generationCalls,
+    threadSnapshots,
+    tokenUsageRecords,
+    threadActivityCalls,
+  };
 }
 
 function knownMentions(content: string, characters: Character[]): string[] {
@@ -240,23 +289,28 @@ function knownMentions(content: string, characters: Character[]): string[] {
     .filter((handle, index, all) => known.has(handle) && all.indexOf(handle) === index);
 }
 
+type CompletedEvent = Extract<InternalSseEvent, { type: "generation.completed" }>;
+
+/**
+ * Collects what the hub carried, and resolves when the run reports itself done.
+ *
+ * `generation.completed` is internal (§11.4): it never reaches a subscriber — the
+ * public conversion drops it — but it is the signal a test can wait on, since
+ * `submitUserPost` returns before generation starts.
+ */
 function collectUntilCompleted(events: EventHub): {
-  received: SseEvent[];
-  completed: Promise<Extract<SseEvent, { type: "simulation.completed" }>>;
+  received: InternalSseEvent[];
+  completed: Promise<CompletedEvent>;
 } {
-  const received: SseEvent[] = [];
-  let resolveCompleted:
-    | ((event: Extract<SseEvent, { type: "simulation.completed" }>) => void)
-    | undefined;
-  const completed = new Promise<Extract<SseEvent, { type: "simulation.completed" }>>(
-    (resolve) => {
-      resolveCompleted = resolve;
-    },
-  );
+  const received: InternalSseEvent[] = [];
+  let resolveCompleted: ((event: CompletedEvent) => void) | undefined;
+  const completed = new Promise<CompletedEvent>((resolve) => {
+    resolveCompleted = resolve;
+  });
 
   events.subscribe(SIMULATION.id, (event) => {
     received.push(event);
-    if (event.type === "simulation.completed") resolveCompleted?.(event);
+    if (event.type === "generation.completed") resolveCompleted?.(event);
   });
 
   return { received, completed };
@@ -285,17 +339,23 @@ describe("SimulationService orchestration", () => {
     expect(harness.generationCalls).toHaveLength(1);
     expect(harness.generationCalls[0]?.target.id).toBe(userPost.id);
     expect(stream.received.map((event) => event.type)).toEqual([
-      "post.created",
-      "character.processing",
-      "post.created",
-      "simulation.completed",
+      "thread.activity",
+      "response.started",
+      "thread.activity",
+      "response.finished",
+      "generation.completed",
     ]);
+    // The activity says a response is being generated and against what — never by
+    // whom (§11.2).
     expect(stream.received).toContainEqual(
       expect.objectContaining({
-        type: "character.processing",
+        type: "response.started",
         targetPostId: userPost.id,
-        characterId: alpha.id,
+        threadRootId: userPost.id,
       }),
+    );
+    expect(stream.received).toContainEqual(
+      expect.objectContaining({ type: "response.finished", outcome: "posted" }),
     );
     expect(completed.generatedPostIds).toEqual(["post-2"]);
   });
@@ -362,16 +422,16 @@ describe("SimulationService orchestration", () => {
       USER_AUTHOR_ID,
       healthy.id,
     ]);
+    // The failure is reported as an outcome, without naming the character or the
+    // provider that failed (§11.2). The reason stays in the log.
     expect(stream.received).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({
-          type: "character.failed",
-          characterId: broken.id,
-          reason: "provider unavailable",
-        }),
-        expect.objectContaining({ type: "simulation.completed" }),
+        expect.objectContaining({ type: "response.finished", outcome: "failed" }),
+        expect.objectContaining({ type: "response.finished", outcome: "posted" }),
+        expect.objectContaining({ type: "generation.completed" }),
       ]),
     );
+    expect(JSON.stringify(stream.received)).not.toContain("provider unavailable");
   });
 
   it("cascades from a generated mention using that character post as the next target", async () => {
@@ -407,11 +467,7 @@ describe("SimulationService orchestration", () => {
     expect(harness.generationCalls[1]?.target.id).toBe("post-2");
     expect(harness.posts[2]).toMatchObject({ authorId: beta.id });
     expect(stream.received).toContainEqual(
-      expect.objectContaining({
-        type: "character.processing",
-        targetPostId: "post-2",
-        characterId: beta.id,
-      }),
+      expect.objectContaining({ type: "response.started", targetPostId: "post-2" }),
     );
     expect(completed.generatedPostIds).toEqual(["post-2", "post-3"]);
   });
@@ -440,6 +496,57 @@ describe("SimulationService orchestration", () => {
       USER_AUTHOR_ID,
       alpha.id,
     ]);
+  });
+});
+
+/**
+ * The thread payload costs queries beyond the post, and one submission can
+ * cascade into many posts, so it is only assembled when a stream is open to
+ * receive it. `publish` would discard it otherwise.
+ *
+ * These cases use no characters on purpose: with generation out of the picture,
+ * the only payload in play is the user post's, and `submitUserPost` awaits that
+ * decision before returning — so there is nothing to wait on afterwards.
+ */
+describe("SimulationService thread events (§11.3)", () => {
+  const onlyUserPost = {
+    simulationId: SIMULATION.id,
+    authorId: USER_AUTHOR_ID,
+    content: "hello",
+    responderIds: [],
+  };
+
+  it("skips assembling the thread when neither stream is open", async () => {
+    const harness = makeHarness({ characters: [] });
+
+    await harness.service.submitUserPost(onlyUserPost);
+
+    expect(harness.threadActivityCalls).toEqual([]);
+    // The post itself is unaffected: only the event payload was skipped.
+    expect(harness.posts).toHaveLength(1);
+  });
+
+  it("assembles the thread for a room subscriber", async () => {
+    const harness = makeHarness({ characters: [] });
+    harness.events.subscribe(SIMULATION.id, vi.fn());
+
+    const post = await harness.service.submitUserPost(onlyUserPost);
+
+    expect(harness.threadActivityCalls).toEqual([post.id]);
+  });
+
+  /** The feed spans every room, so its listeners alone are reason enough to build. */
+  it("assembles the thread for a feed subscriber with no room stream open", async () => {
+    const harness = makeHarness({ characters: [] });
+    const feed = vi.fn();
+    harness.events.subscribeAll(feed);
+
+    const post = await harness.service.submitUserPost(onlyUserPost);
+
+    expect(harness.threadActivityCalls).toEqual([post.id]);
+    expect(feed).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "thread.activity" }),
+    );
   });
 });
 
@@ -585,7 +692,7 @@ describe("SimulationService token usage (CLAUDE.md §66.4)", () => {
     expect(harness.tokenUsageRecords).toEqual([]);
   });
 
-  it("does not turn a successful response into character.failed when recording usage throws", async () => {
+  it("does not turn a successful response into a failed outcome when recording usage throws", async () => {
     vi.spyOn(Math, "random").mockReturnValue(0);
     const alpha = makeCharacter("alpha");
     const harness = makeHarness({
@@ -612,6 +719,10 @@ describe("SimulationService token usage (CLAUDE.md §66.4)", () => {
 
     expect(harness.posts.map((post) => post.authorId)).toEqual([USER_AUTHOR_ID, alpha.id]);
     expect(completed.generatedPostIds).toEqual(["post-2"]);
-    expect(stream.received.map((event) => event.type)).not.toContain("character.failed");
+    expect(
+      stream.received.filter(
+        (event) => event.type === "response.finished" && event.outcome === "failed",
+      ),
+    ).toEqual([]);
   });
 });

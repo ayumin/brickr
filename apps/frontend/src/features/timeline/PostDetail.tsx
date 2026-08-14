@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type { CharacterDto, PostDto, UserProfileDto } from "@brickr/shared";
 
-import type { ThinkingCharacter } from "../../types";
+import type { ResponseActivity } from "../../types";
 import { PostCard } from "./PostCard";
 import { Timeline } from "./Timeline";
 import {
@@ -15,7 +15,7 @@ export type PostDetailProps = {
   allPosts: PostDto[];
   characters: CharacterDto[];
   userProfile: UserProfileDto;
-  thinking: ThinkingCharacter[];
+  activities: ResponseActivity[];
   canPost: boolean;
   onOpenAuthor: (authorId: string) => void;
   onOpenPost: (postId: string) => void;
@@ -28,7 +28,7 @@ export function PostDetail({
   allPosts,
   characters,
   userProfile,
-  thinking,
+  activities,
   canPost,
   onOpenAuthor,
   onOpenPost,
@@ -66,7 +66,7 @@ export function PostDetail({
         allPosts={allPosts}
         characters={characters}
         userProfile={userProfile}
-        thinking={thinking}
+        activities={activities}
         loading={false}
         canPost={canPost}
         emptyTitle="投稿が見つかりません"

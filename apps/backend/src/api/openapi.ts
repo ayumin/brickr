@@ -1012,19 +1012,44 @@ export const openApiDocument: OpenAPIV3.Document = {
         },
       },
     },
+    "/api/feed/events": {
+      get: {
+        operationId: "streamFeedEvents",
+        tags: ["Events"],
+        summary: "Stream events from every simulation",
+        description:
+          "Server-Sent Events stream behind the unified feed. Event names: feed.post-created, " +
+          "response.started and response.finished. Authentication is optional, like the feed itself: " +
+          "an anonymous reader receives the same events with capabilities that permit nothing. No " +
+          "payload identifies who is generating a response — there is no character id, handle, " +
+          "display name, model or failure reason in any event.",
+        responses: {
+          "200": {
+            description: "Named Server-Sent Events stream",
+            content: { "text/event-stream": { schema: { type: "string" } } },
+          },
+          ...errorResponses,
+        },
+      },
+    },
     "/api/simulations/{id}/events": {
       get: {
         operationId: "streamSimulationEvents",
+        security: sessionSecurity,
         tags: ["Events"],
-        summary: "Stream simulation events",
+        summary: "Stream one simulation's events",
         description:
-          "Server-Sent Events stream. Event names: post.created, character.processing, character.skipped, character.failed, simulation.completed and simulation.failed.",
+          "The same anonymous events as the feed stream, limited to one simulation. Requires a " +
+          "session, and answers 404 for the reserved global simulation or for a stopped one the " +
+          "caller neither created nor administers: subscribing must not reveal what the equivalent " +
+          "read refuses to show.",
         parameters: [idParameter("Simulation ID")],
         responses: {
           "200": {
             description: "Named Server-Sent Events stream",
             content: { "text/event-stream": { schema: { type: "string" } } },
           },
+          "401": { $ref: "#/components/responses/Unauthorized" },
           ...errorResponses,
         },
       },

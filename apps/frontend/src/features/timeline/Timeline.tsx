@@ -4,7 +4,7 @@ import type { CharacterDto, PostDto, UserProfileDto } from "@brickr/shared";
 import { Avatar } from "../../components/Avatar";
 import { Icon } from "../../components/Icon";
 import { Spinner } from "../../components/Spinner";
-import type { ThinkingCharacter } from "../../types";
+import type { ResponseActivity } from "../../types";
 import { Composer } from "../composer/Composer";
 import { PostCard } from "./PostCard";
 import { PostContent } from "./PostContent";
@@ -39,32 +39,34 @@ function toggleId(
   return next;
 }
 
-function ThinkingRow({ character }: { character: ThinkingCharacter }) {
+/**
+ * The anonymous "a response is coming" row (§11.2, §16.1).
+ *
+ * No avatar, name or handle: the stream does not say who is generating, and
+ * inventing a placeholder identity here would be the very hint the feed hides.
+ * Several responses to the same post collapse into one row with a count.
+ */
+function ResponseActivityRow({ count }: { count: number }) {
   return (
     <div className="flex items-center gap-2.5 border-b border-line bg-surface px-6 py-2.5">
-      <Avatar
-        handle={character.handle}
-        displayName={character.displayName}
-        size="sm"
-      />
-      <div className="min-w-0">
-        <p className="truncate text-sm text-ink">
-          <span className="font-semibold">{character.displayName}</span>
-          <span className="text-ink-faint"> @{character.handle}</span>
-        </p>
-        <p className="flex items-center gap-1 text-sm text-ink-muted">
-          考え中
-          <span className="flex items-center gap-0.5" aria-hidden="true">
-            {[0, 1, 2].map((index) => (
-              <span
-                key={index}
-                className="brickr-dot inline-block h-1 w-1 rounded-full bg-ink-muted"
-                style={{ animationDelay: `${String(index * 150)}ms` }}
-              />
-            ))}
-          </span>
-        </p>
-      </div>
+      <span
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-raised"
+        aria-hidden="true"
+      >
+        <span className="h-2 w-2 rounded-full bg-ink-faint" />
+      </span>
+      <p className="flex items-center gap-1 text-sm text-ink-muted">
+        {count > 1 ? `応答を生成中（${String(count)}件）` : "応答を生成中"}
+        <span className="flex items-center gap-0.5" aria-hidden="true">
+          {[0, 1, 2].map((index) => (
+            <span
+              key={index}
+              className="brickr-dot inline-block h-1 w-1 rounded-full bg-ink-muted"
+              style={{ animationDelay: `${String(index * 150)}ms` }}
+            />
+          ))}
+        </span>
+      </p>
     </div>
   );
 }
@@ -171,7 +173,7 @@ export type TimelineProps = {
   allPosts: PostDto[];
   characters: CharacterDto[];
   userProfile: UserProfileDto;
-  thinking: ThinkingCharacter[];
+  activities: ResponseActivity[];
   loading: boolean;
   emptyTitle: string;
   emptyBody: string;
@@ -197,7 +199,7 @@ export function Timeline({
   allPosts,
   characters,
   userProfile,
-  thinking,
+  activities,
   loading,
   emptyTitle,
   emptyBody,
@@ -228,31 +230,29 @@ export function Timeline({
   const repostIndex = useMemo(() => buildRepostIndex(allPosts), [allPosts]);
   const postsById = useMemo(() => indexPostsById(allPosts), [allPosts]);
 
-  const thinkingByTarget = useMemo(() => {
-    const index = new Map<string, ThinkingCharacter[]>();
-    for (const character of thinking) {
-      const current = index.get(character.targetPostId);
-      if (current) current.push(character);
-      else index.set(character.targetPostId, [character]);
+  const activityCountByTarget = useMemo(() => {
+    const index = new Map<string, number>();
+    for (const activity of activities) {
+      index.set(activity.targetPostId, (index.get(activity.targetPostId) ?? 0) + 1);
     }
     return index;
-  }, [thinking]);
+  }, [activities]);
 
   // A cascade may start while its target is inside a collapsed reply thread.
   // Reveal that thread so the indicator can stay directly below its target.
   useEffect(() => {
-    if (thinking.length === 0) return;
+    if (activities.length === 0) return;
     const visibleRoots = new Set(visibleRootPosts.map((post) => post.id));
     const rootsToExpand = new Set<string>();
 
-    for (const character of thinking) {
-      let post = postsById.get(character.targetPostId);
+    for (const activity of activities) {
+      let post = postsById.get(activity.targetPostId);
       const visited = new Set<string>();
       while (post?.replyTo && !visited.has(post.id)) {
         visited.add(post.id);
         post = postsById.get(post.replyTo);
       }
-      if (post && visibleRoots.has(post.id) && post.id !== character.targetPostId) {
+      if (post && visibleRoots.has(post.id) && post.id !== activity.targetPostId) {
         rootsToExpand.add(post.id);
       }
     }
@@ -269,7 +269,7 @@ export function Timeline({
       }
       return changed ? next : current;
     });
-  }, [thinking, postsById, visibleRootPosts]);
+  }, [activities, postsById, visibleRootPosts]);
 
   const knownHandles = useMemo(() => {
     const handles = new Set<string>([userProfile.handle]);
@@ -357,16 +357,11 @@ export function Timeline({
   };
 
   const renderThinking = (postId: string) => {
-    const charactersForPost = thinkingByTarget.get(postId) ?? [];
-    if (charactersForPost.length === 0) return null;
+    const count = activityCountByTarget.get(postId) ?? 0;
+    if (count === 0) return null;
     return (
-      <div aria-label="この投稿への応答を考えているキャラクター">
-        {charactersForPost.map((character) => (
-          <ThinkingRow
-            key={`${character.characterId}:${character.targetPostId}`}
-            character={character}
-          />
-        ))}
+      <div aria-label="この投稿への応答を生成中">
+        <ResponseActivityRow count={count} />
       </div>
     );
   };

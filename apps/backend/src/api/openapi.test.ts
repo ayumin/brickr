@@ -43,6 +43,7 @@ const expectedPaths = [
   "/api/simulations/{id}/posts",
   "/api/posts/{id}",
   "/api/posts/{threadRootId}/replies",
+  "/api/feed/events",
   "/api/simulations/{id}/events",
 ];
 
@@ -76,6 +77,7 @@ const sessionProtectedOperationIds = [
   "getSimulationFeed",
   "createPost",
   "listThreadReplies",
+  "streamSimulationEvents",
 ];
 
 describe("OpenAPI documentation", () => {

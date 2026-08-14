@@ -464,10 +464,6 @@ export function SimulationView({
     return null;
   }, [authorId, authoredPost, selectedCharacter]);
 
-  const failureDetail = events.failures
-    .map((failure) => `${failure.label}: ${failure.reason}`)
-    .join(" / ");
-
   const sidebar = (
     <section className="overflow-hidden rounded-2xl border border-line bg-surface">
       <header className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
@@ -777,12 +773,13 @@ export function SimulationView({
             </div>
           ) : null}
 
-          {events.failures.length > 0 ? (
+          {events.failedResponses > 0 ? (
             <div className="px-4 pt-3">
+              {/* Aggregated on purpose: naming who failed, or why, would describe
+                  the machinery behind a post (§11.2). Details stay in the log. */}
               <ErrorBanner
                 tone="warning"
-                message="一部のキャラクターは応答できませんでした（他のキャラクターは継続します）"
-                detail={failureDetail}
+                message="一部の応答を生成できませんでした"
                 onDismiss={events.dismissFailures}
               />
             </div>
@@ -833,7 +830,7 @@ export function SimulationView({
                 allPosts={events.posts}
                 characters={characters}
                 userProfile={userProfile}
-                thinking={events.thinking}
+                activities={events.activities}
                 canPost={canPost}
                 onOpenAuthor={openAuthor}
                 onOpenPost={openPost}
@@ -883,7 +880,7 @@ export function SimulationView({
               allPosts={events.posts}
               characters={characters}
               userProfile={userProfile}
-              thinking={events.thinking}
+              activities={events.activities}
               loading={events.loading}
               canPost={canPost}
               emptyTitle="まだスレッドやメンションがありません"
@@ -902,7 +899,7 @@ export function SimulationView({
               allPosts={events.posts}
               characters={characters}
               userProfile={userProfile}
-              thinking={events.thinking}
+              activities={events.activities}
               loading={events.loading}
               canPost={canPost}
               emptyTitle="まだ投稿やメンションがありません"

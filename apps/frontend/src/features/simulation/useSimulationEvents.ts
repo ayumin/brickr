@@ -3,195 +3,21 @@ import type { PostDto, SseEvent } from "@brickr/shared";
 
 import { api, isAbortError, toErrorMessage } from "../../services/api-client";
 import { subscribeToSimulationEvents } from "../../services/sse-client";
-import type {
-  CharacterFailure,
-  ConnectionState,
-  ThinkingCharacter,
-} from "../../types";
-
-const MAX_VISIBLE_FAILURES = 4;
-
-type State = {
-  posts: PostDto[];
-  thinking: ThinkingCharacter[];
-  failures: CharacterFailure[];
-  connection: ConnectionState;
-  loading: boolean;
-  loadError: string | null;
-  simulationError: string | null;
-};
-
-const INITIAL_STATE: State = {
-  posts: [],
-  thinking: [],
-  failures: [],
-  connection: "connecting",
-  loading: true,
-  loadError: null,
-  simulationError: null,
-};
-
-type Action =
-  | { kind: "reset" }
-  | { kind: "hydrated"; posts: PostDto[] }
-  | { kind: "loadFailed"; message: string }
-  | { kind: "upsertPost"; post: PostDto }
-  | { kind: "processing"; character: ThinkingCharacter }
-  | { kind: "characterSkipped"; characterId: string }
-  | { kind: "characterFailed"; characterId: string; reason: string }
-  | { kind: "completed" }
-  | { kind: "simulationFailed"; reason: string }
-  | { kind: "connection"; connection: ConnectionState }
-  | { kind: "disconnected" }
-  | { kind: "dismissError" }
-  | { kind: "dismissFailures" };
-
-/** Chronological order; ids break ties so equal timestamps stay stable. */
-function comparePosts(a: PostDto, b: PostDto): number {
-  if (a.createdAt !== b.createdAt) {
-    return a.createdAt < b.createdAt ? -1 : 1;
-  }
-  if (a.id === b.id) {
-    return 0;
-  }
-  return a.id < b.id ? -1 : 1;
-}
-
-/**
- * Merge posts by id.
- *
- * Used for both the REST hydration and every SSE `post.created`, which is what
- * makes the two sources race-safe: whichever arrives first wins the slot, the
- * other one just overwrites the same id instead of duplicating it.
- */
-function mergePosts(existing: PostDto[], incoming: PostDto[]): PostDto[] {
-  if (incoming.length === 0) {
-    return existing;
-  }
-
-  const byId = new Map<string, PostDto>();
-  for (const post of existing) {
-    byId.set(post.id, post);
-  }
-
-  let changed = false;
-  for (const post of incoming) {
-    changed = true;
-    byId.set(post.id, post);
-  }
-
-  if (!changed && byId.size === existing.length) {
-    return existing;
-  }
-
-  return [...byId.values()].sort(comparePosts);
-}
-
-function withoutCharacter(
-  thinking: ThinkingCharacter[],
-  characterId: string,
-): ThinkingCharacter[] {
-  const next = thinking.filter((entry) => entry.characterId !== characterId);
-  return next.length === thinking.length ? thinking : next;
-}
-
-function reducer(state: State, action: Action): State {
-  switch (action.kind) {
-    case "reset":
-      return INITIAL_STATE;
-
-    case "hydrated":
-      return {
-        ...state,
-        // Merge, don't replace: SSE posts may already be in state.
-        posts: mergePosts(state.posts, action.posts),
-        loading: false,
-        loadError: null,
-      };
-
-    case "loadFailed":
-      return { ...state, loading: false, loadError: action.message };
-
-    case "upsertPost": {
-      // Clearing by id needs no author type, which the DTO no longer carries
-      // (§9.1): a person's id simply matches nothing that was generating.
-      return {
-        ...state,
-        posts: mergePosts(state.posts, [action.post]),
-        thinking: withoutCharacter(state.thinking, action.post.author.id),
-      };
-    }
-
-    case "processing": {
-      if (
-        state.thinking.some(
-          (entry) =>
-            entry.characterId === action.character.characterId &&
-            entry.targetPostId === action.character.targetPostId,
-        )
-      ) {
-        return state;
-      }
-      return { ...state, thinking: [...state.thinking, action.character] };
-    }
-
-    case "characterSkipped":
-      return {
-        ...state,
-        thinking: withoutCharacter(state.thinking, action.characterId),
-      };
-
-    case "characterFailed": {
-      const known = state.thinking.find(
-        (entry) => entry.characterId === action.characterId,
-      );
-      const failure: CharacterFailure = {
-        characterId: action.characterId,
-        label: known ? `@${known.handle}` : action.characterId,
-        reason: action.reason,
-      };
-      return {
-        ...state,
-        thinking: withoutCharacter(state.thinking, action.characterId),
-        failures: [...state.failures, failure].slice(-MAX_VISIBLE_FAILURES),
-      };
-    }
-
-    case "completed":
-      // Every responder for that round is done, so no indicator should linger.
-      return state.thinking.length === 0 ? state : { ...state, thinking: [] };
-
-    case "simulationFailed":
-      return { ...state, thinking: [], simulationError: action.reason };
-
-    case "connection":
-      return state.connection === action.connection
-        ? state
-        : { ...state, connection: action.connection };
-
-    case "disconnected":
-      return { ...state, connection: "disconnected", thinking: [] };
-
-    case "dismissError":
-      return { ...state, loadError: null, simulationError: null };
-
-    case "dismissFailures":
-      return state.failures.length === 0 ? state : { ...state, failures: [] };
-
-    default:
-      return state;
-  }
-}
+import type { ConnectionState, ResponseActivity } from "../../types";
+import {
+  INITIAL_SIMULATION_EVENT_STATE,
+  reduceSimulationEvents,
+} from "./simulation-event-state";
 
 export type UseSimulationEventsResult = {
   posts: PostDto[];
-  thinking: ThinkingCharacter[];
-  failures: CharacterFailure[];
+  activities: ResponseActivity[];
+  failedResponses: number;
   connection: ConnectionState;
   connected: boolean;
   loading: boolean;
   error: string | null;
-  /** Insert the user's own post immediately, before SSE echoes it back. */
+  /** Insert the user's own post immediately, before the stream echoes it back. */
   addLocalPost: (post: PostDto) => void;
   reload: () => void;
   dismissError: () => void;
@@ -208,7 +34,7 @@ export function useSimulationEvents(
   simulationId: string,
   enabled: boolean = true,
 ): UseSimulationEventsResult {
-  const [state, dispatch] = useReducer(reducer, INITIAL_STATE);
+  const [state, dispatch] = useReducer(reduceSimulationEvents, INITIAL_SIMULATION_EVENT_STATE);
   const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
@@ -227,40 +53,34 @@ export function useSimulationEvents(
     dispatch({ kind: "connection", connection: "connecting" });
 
     const handleEvent = (event: SseEvent): void => {
-      if (cancelled || event.simulationId !== simulationId) {
-        return;
-      }
+      if (cancelled) return;
 
       switch (event.type) {
-        case "post.created":
-          dispatch({ kind: "upsertPost", post: event.post });
-          break;
-        case "character.processing":
+        case "feed.post-created": {
+          // The event carries the whole thread (§11.3). This screen shows a flat
+          // timeline, so it takes the posts and lets the server keep owning the
+          // counts and capabilities.
+          if (event.thread.root.simulationId !== simulationId) return;
           dispatch({
-            kind: "processing",
-            character: {
-              targetPostId: event.targetPostId,
-              characterId: event.characterId,
-              handle: event.handle,
-              displayName: event.displayName,
-            },
+            kind: "upsertPosts",
+            posts: [event.thread.root, ...event.thread.latestReplies],
           });
           break;
-        case "character.skipped":
-          dispatch({ kind: "characterSkipped", characterId: event.characterId });
-          break;
-        case "character.failed":
+        }
+        case "response.started":
+          if (event.simulationId !== simulationId) return;
           dispatch({
-            kind: "characterFailed",
-            characterId: event.characterId,
-            reason: event.reason,
+            kind: "responseStarted",
+            activity: { activityId: event.activityId, targetPostId: event.targetPostId },
           });
           break;
-        case "simulation.completed":
-          dispatch({ kind: "completed" });
-          break;
-        case "simulation.failed":
-          dispatch({ kind: "simulationFailed", reason: event.reason });
+        case "response.finished":
+          if (event.simulationId !== simulationId) return;
+          dispatch({
+            kind: "responseFinished",
+            activityId: event.activityId,
+            failed: event.outcome === "failed",
+          });
           break;
         default:
           break;
@@ -305,7 +125,7 @@ export function useSimulationEvents(
   }, [simulationId, reloadToken, enabled]);
 
   const addLocalPost = useCallback((post: PostDto) => {
-    dispatch({ kind: "upsertPost", post });
+    dispatch({ kind: "upsertPosts", posts: [post] });
   }, []);
 
   const reload = useCallback(() => {
@@ -322,8 +142,8 @@ export function useSimulationEvents(
 
   return {
     posts: state.posts,
-    thinking: state.thinking,
-    failures: state.failures,
+    activities: state.activities,
+    failedResponses: state.failedResponses,
     connection: state.connection,
     connected: state.connection === "open",
     loading: state.loading,

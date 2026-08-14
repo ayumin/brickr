@@ -1,4 +1,6 @@
+import { randomUUID } from "node:crypto";
 import type {
+  ResponseOutcome,
   SimulationDto,
   SimulationResponse,
   SimulationSummaryDto,
@@ -14,6 +16,7 @@ import type { ThreadService } from "../posts/thread-service.js";
 import { resolveActionTargets, selectAction } from "./action-selector.js";
 import { runWithConcurrency } from "./concurrency.js";
 import type { EventHub } from "./event-hub.js";
+import type { ThreadActivityEvent } from "./public-events.js";
 import { selectResponders, shouldRespond } from "./responder-selector.js";
 import type { UserProfile } from "../user-profile/user-profile.js";
 import type { SimulationRepository } from "./simulation-repository.js";
@@ -46,6 +49,17 @@ export type SimulationServiceOptions = {
   maxResponders: number;
   maxConcurrentCharacters: number;
   maxCascadeDepth: number;
+};
+
+/**
+ * Builds the thread payload a post event carries (§11.3).
+ *
+ * Declared here as the narrow port this service needs, and satisfied by
+ * `FeedService`, so the dependency stays one-way: the feed knows about
+ * simulations, not the other way round.
+ */
+export type ThreadActivitySource = {
+  buildThreadActivity: (post: Post) => Promise<ThreadActivityEvent>;
 };
 
 export class SimulationNotFoundError extends Error {
@@ -120,6 +134,7 @@ export class SimulationService {
     private readonly options: SimulationServiceOptions,
     private readonly logger: SimulationLogger,
     private readonly tokenUsage: TokenUsageService,
+    private readonly threadActivity: ThreadActivitySource,
   ) {}
 
   async create(title: string | null, createdByUserId: string): Promise<SimulationDto> {
@@ -199,8 +214,11 @@ export class SimulationService {
         { simulationId: input.simulationId, err: describe(error) },
         "simulation run failed",
       );
-      this.events.publish({
-        type: "simulation.failed",
+      // Internal only: the reason names the provider or model that failed, which
+      // would say out loud that the author is an AI (§11.2). Subscribers learn
+      // about failures through `response.finished` outcomes instead.
+      this.events.publish(input.simulationId, {
+        type: "generation.failed",
         simulationId: input.simulationId,
         reason: describe(error),
       });
@@ -239,8 +257,8 @@ export class SimulationService {
         billingUserId: triggerPost.authorId,
       });
     } finally {
-      this.events.publish({
-        type: "simulation.completed",
+      this.events.publish(triggerPost.simulationId, {
+        type: "generation.completed",
         simulationId: triggerPost.simulationId,
         triggerPostId: triggerPost.id,
         generatedPostIds: generatedIds,
@@ -366,20 +384,16 @@ export class SimulationService {
     const simulationId = target.simulationId;
     if (this.stopped.has(simulationId)) return null;
 
-    this.events.publish({
-      type: "character.processing",
-      simulationId,
-      targetPostId: target.id,
-      characterId: character.id,
-      handle: character.handle,
-      displayName: character.displayName,
-    });
+    // The activity, not the character: subscribers learn that *a* response is
+    // being generated, never whose (§11.2). The id exists only to pair the finish
+    // with this start; everything worth investigating goes to the log below.
+    const activity = this.beginResponse(target);
+    let outcome: ResponseOutcome = "skipped";
 
     try {
       // Context is read immediately before the LLM call (CLAUDE.md §32).
       const thread = await this.threads.getCurrentThread(target.id);
       if (!thread) {
-        this.publishSkipped(simulationId, character.id);
         return null;
       }
 
@@ -408,7 +422,7 @@ export class SimulationService {
 
       // Recorded even if publishing fails below: the tokens were already
       // spent. A tracking hiccup is logged, not surfaced as a failed response —
-      // it must never turn a successful generation into a `character.failed` event.
+      // it must never turn a successful generation into a failed outcome.
       if (generated.usage) {
         try {
           await this.tokenUsage.record(billingUserId, generated.usage);
@@ -442,33 +456,73 @@ export class SimulationService {
       );
 
       await this.emitPostCreated(post);
+      outcome = "posted";
       return post;
     } catch (error) {
+      outcome = "failed";
+      // The only place the reason exists. Publishing it would describe the
+      // machinery behind the post (§11.2).
       this.logger.warn(
         { simulationId, characterId: character.id, err: describe(error) },
         "character generation failed",
       );
-      this.events.publish({
-        type: "character.failed",
-        simulationId,
-        characterId: character.id,
-        reason: describe(error),
-      });
       return null;
+    } finally {
+      // In a `finally` so every start is answered exactly once, including when
+      // generation throws or the simulation was stopped mid-flight. An unanswered
+      // start would leave the UI showing a response that never arrives.
+      activity.finish(outcome);
     }
   }
 
-  private publishSkipped(simulationId: string, characterId: string): void {
-    this.events.publish({ type: "character.skipped", simulationId, characterId });
+  /**
+   * Opens one anonymous response activity and hands back how to close it.
+   *
+   * `randomUUID` rather than anything derived from the character: an id that could
+   * be traced back to a row would defeat the point of hiding it.
+   */
+  private beginResponse(target: Post): { finish: (outcome: ResponseOutcome) => void } {
+    const activityId = randomUUID();
+    const shared = {
+      simulationId: target.simulationId,
+      activityId,
+      targetPostId: target.id,
+      threadRootId: target.threadRootId,
+    };
+
+    this.events.publish(target.simulationId, { type: "response.started", ...shared });
+
+    return {
+      finish: (outcome) => {
+        this.events.publish(target.simulationId, {
+          type: "response.finished",
+          ...shared,
+          outcome,
+        });
+      },
+    };
   }
 
+  /**
+   * Publishes the thread the post now belongs to, not the post on its own (§11.3).
+   *
+   * The same event reaches this room's subscribers and the unified feed's, so both
+   * surfaces move at the same moment and describe the thread identically.
+   */
   private async emitPostCreated(post: Post): Promise<void> {
-    const dto = await this.posts.toDto(post);
-    this.events.publish({
-      type: "post.created",
-      simulationId: post.simulationId,
-      post: dto,
-    });
+    // Assembling the thread costs queries beyond the post itself, and one
+    // submission can cascade into `MAX_POSTS_PER_SUBMISSION` of them. With no
+    // stream open, `publish` would discard the payload, so skip building it.
+    //
+    // This does not reopen the race that subscribing before hydrating closes: a
+    // stream that opens after this check hydrates over REST afterwards, and the
+    // post is committed by then, so it cannot be missed.
+    if (!this.events.hasSubscribers(post.simulationId)) return;
+
+    this.events.publish(
+      post.simulationId,
+      await this.threadActivity.buildThreadActivity(post),
+    );
   }
 
   // -- helpers --------------------------------------------------------------
