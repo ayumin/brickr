@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import type { UserProfileDto } from "@brickr/shared";
 
@@ -8,6 +8,8 @@ import { applyTheme, readPreferredTheme, type Theme } from "../../services/theme
 import { UserManagementList } from "../admin/UserManagementList";
 import { UserProfileEditor } from "../user/UserProfileEditor";
 import { useUserProfile } from "../../hooks/useUserProfile";
+import { useAuth } from "../auth/AuthContext";
+import { checkAdminSettingsAccess } from "../../app/route-access";
 
 /**
  * Maps a URL section (`routes.ts`'s `SettingsSection`) to the internal
@@ -44,6 +46,16 @@ export function SettingsShell({ onProfileUpdated }: { onProfileUpdated?: (profil
   const params = useParams<{ section: string }>();
   const userProfile = useUserProfile();
   const [theme, setTheme] = useState<Theme>(readPreferredTheme);
+  const { user } = useAuth();
+
+  const section = params.section && isSettingsSection(params.section) ? params.section : "profile";
+
+  const accessDecision = checkAdminSettingsAccess(section, user);
+  useEffect(() => {
+    if (!accessDecision.allowed) {
+      navigate(accessDecision.redirectTo, { replace: true });
+    }
+  }, [accessDecision.allowed, navigate]);
 
   const close = (): void => {
     const state = location.state as { returnTo?: string } | null;
@@ -54,8 +66,6 @@ export function SettingsShell({ onProfileUpdated }: { onProfileUpdated?: (profil
     const storedRoomId = readSelectedRoomId();
     navigate(storedRoomId ? roomPath(storedRoomId) : "/", { replace: true });
   };
-
-  const section = params.section && isSettingsSection(params.section) ? params.section : "profile";
 
   if (section === "users" || section === "invites") {
     return (
