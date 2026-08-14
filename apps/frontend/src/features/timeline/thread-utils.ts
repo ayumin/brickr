@@ -197,16 +197,6 @@ export function countReplies(index: ReplyIndex, postId: string): number {
 }
 
 /**
- * One room's whole timeline: every thread starter in it, newest activity
- * first. Unlike `selectUserTimeline`/`selectAuthorTimeline`, this has no
- * notion of "mine" - a room shows everyone's threads (§5.3), not one
- * account's. Filtering to "自分あて" within a room is Step 7's job.
- */
-export function selectRoomTimeline(posts: readonly PostDto[]): PostDto[] {
-  return posts.filter(isThreadStarter).sort(comparePostsNewestFirst);
-}
-
-/**
  * The signed-in user's home timeline: their thread starters plus every post
  * that mentions their handle. Replies still live inside their thread unless
  * somebody explicitly mentions them in that reply.
@@ -263,28 +253,42 @@ export type FeedReplyPreviewEntry = {
 };
 
 /**
- * Resolves each previewed reply's `→ @handle` target (§12.2).
+ * Resolves each of a thread's replies to the `→ @handle` it answers (§12.2),
+ * against a root plus whichever replies are actually being shown.
  *
- * Selection and ordering are already done server-side: `thread.latestReplies`
- * is at most two entries - the newest two, given oldest-first for display.
- * This function does not re-select or re-sort them (re-deriving that here
- * would duplicate backend logic and risk disagreeing with it - the reasoning
- * that put `thread` on `CreatePostResponse` in the first place, see
- * `api-client.ts`). It only looks up which handle each reply answers, since a
- * `PostDto` reply knows its parent's id (`replyTo`) but not that parent's
- * handle.
+ * `replies` is never re-selected or re-sorted here - both the two-reply
+ * preview (`thread.latestReplies`) and a full expansion (`GET
+ * /api/posts/:threadRootId/replies`) already arrive selected and ordered by
+ * the backend, and re-deriving that here would duplicate backend logic and
+ * risk disagreeing with it (the same reasoning that put `thread` on
+ * `CreatePostResponse` in the first place, see `api-client.ts`). This only
+ * looks up which handle each reply answers, since a `PostDto` reply knows its
+ * parent's id (`replyTo`) but not that parent's handle.
+ *
+ * A reply answering a post outside `replies` (and not the root) resolves to
+ * `null` rather than a guess - true for the two-reply preview, where an
+ * earlier reply may not have made the cut; never true for a full expansion,
+ * where every ancestor is included.
  */
-export function selectFeedReplyPreview(thread: FeedThreadDto): FeedReplyPreviewEntry[] {
-  const handleById = new Map<string, string>([[thread.root.id, thread.root.author.handle]]);
-  for (const reply of thread.latestReplies) {
+export function resolveReplyDisplay(
+  root: PostDto,
+  replies: readonly PostDto[],
+): FeedReplyPreviewEntry[] {
+  const handleById = new Map<string, string>([[root.id, root.author.handle]]);
+  for (const reply of replies) {
     handleById.set(reply.id, reply.author.handle);
   }
 
-  return thread.latestReplies.map((post) => ({
+  return replies.map((post) => ({
     post,
     replyToHandle:
       post.replyTo === null || post.replyTo === post.id ? null : (handleById.get(post.replyTo) ?? null),
   }));
+}
+
+/** The two-reply preview's `→ @handle` resolution - see `resolveReplyDisplay`. */
+export function selectFeedReplyPreview(thread: FeedThreadDto): FeedReplyPreviewEntry[] {
+  return resolveReplyDisplay(thread.root, thread.latestReplies);
 }
 
 /** Replies that exist but are not among the previewed ones (never negative). */
