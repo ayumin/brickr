@@ -627,7 +627,7 @@ describe("SimulationService token usage (CLAUDE.md §66.4)", () => {
     expect(harness.tokenUsageRecords).toEqual([]);
   });
 
-  it("does not turn a successful response into character.failed when recording usage throws", async () => {
+  it("does not turn a successful response into a failed outcome when recording usage throws", async () => {
     vi.spyOn(Math, "random").mockReturnValue(0);
     const alpha = makeCharacter("alpha");
     const harness = makeHarness({
