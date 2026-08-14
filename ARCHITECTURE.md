@@ -316,6 +316,32 @@ Session Cookieは`HttpOnly`、`SameSite=Lax`、`Path=/`で、HTTPS運用時は
 EventSourceは同じCookieを利用します。AdminはUser停止・再開、一時Password発行、InviteCode管理、
 Application Settings参照/変更を行えます。停止Userは既存Sessionを解決できず、新規Loginも拒否されます。
 
+### 5.5 Feedの読み取り
+
+`FeedService`が統合Feed・Room Feed・Thread返信全件を提供し、`FeedRepository`が読み取りを担います。
+Serviceは「順序・Paging・どのThreadが読者に関係するか・読者が何をできるか」を持ち、Repositoryは
+「その行をどう取るか」だけを持ちます。
+
+Pagingのcursorは `(threadActivityAt, postId)` をBase64URL JSONで包んだ不透明値です。Post IDを第2キーに
+入れる理由は、同一ミリ秒の返信が複数着信したときにPage境界が曙昧になり、次Pageで重複または欠落が
+起きるためです。encode/decodeはServer専用で、読めないcursorは400 `invalid_cursor`として返します。
+Page sizeは固定20で、次Pageの有無は21件目を読むことで判定します。
+
+1 Pageの取得は、Thread数に比例しないクエリ数で完結させます（Rootごとの個別クエリを発行しない）。
+
+- Root Post 1クエリ（`replyTo IS NULL`、`threadActivityAt DESC, id DESC`、所属Simulationを同時取得）
+- 返信数のgroupBy 1クエリ
+- 各Root最新2返信を1クエリ。Group内上位N件はPrismaで表現できないため、ここだけ型付き`$queryRaw`で
+  window function（`row_number()`）を使います。列はDomain名へaliasし、Post mapperを共有します
+- `自分あて` filterは追加2クエリ（自分のPostへの返信があるThread、自分をmentionしたThread）。
+  `threadRootId`はRelationを持たない非正規化列なので、Thread単位の条件はID集合として合成します
+- Root・preview返信・引用元・authorはまとめてDTO化します（`PostService.toDtos`）
+
+公開値は`capabilities`だけで表現し、`status`をFeed DTOへ含めません。未ログインは全capability false、
+停止中Room由来のThreadは全員が返信・引用・Room遷移不可で、Thread詳細と残り返信の取得だけ所有者・
+管理者に許可します。Global Simulation由来のThreadは`isFeed = true`で「フィード」として表示し、
+Room画面を持たないため`canOpenRoom`は常にfalseです。
+
 ## 6. 投稿生成フロー
 
 ```mermaid

@@ -1633,6 +1633,82 @@ export const openApiDocument: OpenAPIV3.Document = {
           createdAt: { type: "string", format: "date-time" },
         },
       },
+      FeedRoomRef: {
+        type: "object",
+        required: ["id", "title", "isFeed"],
+        description:
+          "The simulation a thread belongs to. `isFeed` marks the reserved global one, shown as the " +
+          "feed rather than as a room. Whether it is stopped is expressed only through capabilities.",
+        properties: {
+          id: { type: "string" },
+          title: { type: "string" },
+          isFeed: { type: "boolean" },
+        },
+      },
+      FeedCapabilities: {
+        type: "object",
+        required: [
+          "canOpenAuthor",
+          "canOpenRoom",
+          "canOpenThread",
+          "canReply",
+          "canQuote",
+          "canLoadMoreReplies",
+        ],
+        description:
+          "What the caller may do with this thread. Decided per thread by the server; clients must not " +
+          "infer it from a status field or from whether a session exists. Everything is false for an " +
+          "anonymous reader.",
+        properties: {
+          canOpenAuthor: { type: "boolean" },
+          canOpenRoom: { type: "boolean" },
+          canOpenThread: { type: "boolean" },
+          canReply: { type: "boolean" },
+          canQuote: { type: "boolean" },
+          canLoadMoreReplies: { type: "boolean" },
+        },
+      },
+      FeedThread: {
+        type: "object",
+        required: [
+          "root",
+          "room",
+          "latestReplies",
+          "replyCount",
+          "lastActivityAt",
+          "capabilities",
+        ],
+        properties: {
+          root: ref("Post"),
+          room: ref("FeedRoomRef"),
+          latestReplies: {
+            type: "array",
+            maxItems: 2,
+            description: "The newest two replies, ordered oldest first.",
+            items: ref("Post"),
+          },
+          replyCount: {
+            type: "integer",
+            description: "Every transitive reply, including those not previewed.",
+          },
+          lastActivityAt: { type: "string", format: "date-time" },
+          capabilities: ref("FeedCapabilities"),
+        },
+      },
+      FeedPage: {
+        type: "object",
+        required: ["threads", "nextCursor"],
+        properties: {
+          threads: { type: "array", maxItems: 20, items: ref("FeedThread") },
+          nextCursor: {
+            type: "string",
+            nullable: true,
+            description:
+              "Opaque cursor for the next page, or null at the end of the feed. Pass it back unchanged " +
+              "as `cursor`; an unrecognised value answers 400.",
+          },
+        },
+      },
       CreatePost: {
         type: "object",
         required: ["content"],

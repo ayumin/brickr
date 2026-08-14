@@ -724,6 +724,14 @@ function replyWithSession(
   return reply.header("set-cookie", serializeSessionCookie(issued.token, options));
 }
 
+/**
+ * The signed-in reader as the feed sees them: an id, an admin flag and a handle,
+ * the last one because `filter=mine` matches mentions by handle (§12.3).
+ */
+function toFeedReader(user: UserAccount): NonNullable<FeedReader> {
+  return { id: user.id, isAdmin: user.isAdmin, handle: user.handle };
+}
+
 /** Shared param parsing + domain-error mapping for simulation-scoped routes. */
 async function withSimulation<T>(
   request: FastifyRequest,
