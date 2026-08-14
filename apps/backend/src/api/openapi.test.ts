@@ -30,7 +30,8 @@ const expectedPaths = [
   "/api/users/{id}/characters",
   "/api/users/{id}/token-usage",
   "/api/invite-codes",
-  "/api/handles/{handle}",
+  "/api/profiles/{handle}",
+  "/api/profiles/{handle}/posts",
   "/api/application-settings",
   "/api/characters",
   "/api/characters/management",
@@ -60,6 +61,22 @@ const expectedPaths = [
 ];
 
 const sessionProtectedOperationIds = [
+  // Reads that used to be public. Step 3 closed them: every public endpoint is
+  // another way to learn whether a handle is a person or an AI (§25), so only the
+  // unified feed and its stream stay open (§5.1, §10.8).
+  "getPublicProfile",
+  "listPublicProfilePosts",
+  "listCharacters",
+  "listCharactersForManagement",
+  "exportCharactersCsv",
+  "getCharacter",
+  "getCharacterConfig",
+  "getCharacterBulkCreationJob",
+  "listModelProfiles",
+  "listSimulations",
+  "getSimulation",
+  "listSimulationPosts",
+  "getPostThread",
   "listUserManagement",
   "getUser",
   "suspendUser",

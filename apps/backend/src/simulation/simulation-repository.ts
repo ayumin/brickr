@@ -1,7 +1,8 @@
 import type { SimulationScope, SimulationStatus } from "@brickr/shared";
 import type { Db } from "../persistence/prisma.js";
 import { optionalField } from "../persistence/repository-mapping.js";
-import type { Simulation, SimulationSummary } from "./simulation.js";
+import { toFallbackHandle } from "../user-profile/user-profile-repository.js";
+import type { Simulation, SimulationActor, SimulationSummary } from "./simulation.js";
 
 type SimulationRow = {
   id: string;
@@ -59,16 +60,45 @@ export class SimulationRepository {
     return toSimulation(row);
   }
 
-  /** Rooms only: the global simulation is the feed, not an entry in the room list (§8.2). */
-  async findAll(): Promise<SimulationSummary[]> {
+  /**
+   * The rooms one actor may list, newest activity first (§10.3).
+   *
+   * Three rules, all enforced here rather than by filtering afterwards, so a
+   * room the caller may not see is never even read:
+   *
+   * - The global row is excluded: it is the feed, not an entry in the room list
+   *   (§8.2).
+   * - A stopped room is listed only for its creator and for an administrator.
+   *   Everyone else gets a list in which it does not appear at all, rather than
+   *   an entry they cannot open (§10.3).
+   * - Ordering is by `lastActivityAt`, not creation time, so an active room does
+   *   not sink out of reach. An empty room keeps `lastActivityAt = createdAt`
+   *   (§8.1), which makes it sort by creation time without a special case.
+   */
+  async findAllVisibleTo(actor: SimulationActor): Promise<SimulationSummary[]> {
     const rows = await this.db.simulation.findMany({
-      where: { scope: "room" },
-      include: { _count: { select: { posts: true } } },
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      where: {
+        scope: "room",
+        ...(actor.isAdmin
+          ? {}
+          : { OR: [{ status: "active" }, { createdByUserId: actor.id }] }),
+      },
+      include: {
+        _count: { select: { posts: true } },
+        createdByUser: { select: { id: true, handle: true, displayName: true } },
+      },
+      orderBy: [{ lastActivityAt: "desc" }, { id: "desc" }],
     });
     return rows.map((row) => ({
       ...toSimulation(row),
       postCount: row._count.posts,
+      creator: row.createdByUser
+        ? {
+            id: row.createdByUser.id,
+            handle: row.createdByUser.handle ?? toFallbackHandle(row.createdByUser.id),
+            displayName: row.createdByUser.displayName,
+          }
+        : null,
     }));
   }
 

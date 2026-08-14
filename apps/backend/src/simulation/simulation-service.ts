@@ -6,7 +6,6 @@ import type {
   SimulationSummaryDto,
 } from "@brickr/shared";
 import type { AgentService, GeneratedPost } from "../agents/agent-service.js";
-import type { UserAccount } from "../auth/user-account.js";
 import type { CharacterRepository } from "../characters/character-repository.js";
 import type { Character } from "../characters/character.js";
 import { DomainError } from "../domain-error.js";
@@ -22,7 +21,7 @@ import type { ThreadActivityEvent } from "./public-events.js";
 import { selectCascadeResponders, selectResponders } from "./responder-selector.js";
 import type { UserProfile } from "../user-profile/user-profile.js";
 import type { SimulationRepository } from "./simulation-repository.js";
-import { isGlobalSimulation, type Simulation } from "./simulation.js";
+import { isGlobalSimulation, type Simulation, type SimulationActor } from "./simulation.js";
 
 /** Hard ceiling on character posts generated from one user post. */
 const MAX_POSTS_PER_SUBMISSION = 24;
@@ -132,6 +131,33 @@ export function assertNotGlobalSimulation(
 }
 
 /**
+ * Whether this actor may read one simulation *as a room* (§10.2, §10.4).
+ *
+ * Both refusals are 404 rather than 403 on purpose: 403 confirms that something
+ * is there, which turns any of these endpoints into a way to discover somebody
+ * else's stopped rooms by id (§10.4).
+ *
+ * - The global row is not a room. It is the feed, and serving it here would give
+ *   the same posts a second, room-shaped surface (§10.2).
+ * - A stopped room stays readable for its creator and for an administrator, and
+ *   does not exist for anyone else. Note that this is about reading a room; the
+ *   posts themselves remain visible to everybody through the unified feed, which
+ *   is deliberately the only place they show up (§10.1).
+ *
+ * Shared by the room feed, the room detail and the room's post list, so a caller
+ * cannot reach through one endpoint what another would refuse.
+ */
+export function assertRoomReadable(
+  simulation: Pick<Simulation, "id" | "scope" | "status" | "createdByUserId">,
+  actor: SimulationActor,
+): void {
+  if (isGlobalSimulation(simulation)) throw new SimulationNotFoundError(simulation.id);
+  if (simulation.status === "stopped" && !isSimulationOwnerOrAdmin(simulation, actor)) {
+    throw new SimulationNotFoundError(simulation.id);
+  }
+}
+
+/**
  * Orchestrates the reactions to one post.
  *
  * There is no round or wave model (CLAUDE.md §31): every character reads the
@@ -150,18 +176,41 @@ export class SimulationService {
     return toSimulationDto(simulation);
   }
 
-  async list(): Promise<SimulationSummaryDto[]> {
-    const simulations = await this.deps.simulations.findAll();
+  /**
+   * The room list for one caller (§10.3).
+   *
+   * `canManage` is computed here rather than left to the client: the same rule
+   * decides whether `rename`/`stop`/`resume` will be accepted, so deriving it
+   * twice is how a button appears for an action the server then refuses.
+   */
+  async list(actor: SimulationActor): Promise<SimulationSummaryDto[]> {
+    const simulations = await this.deps.simulations.findAllVisibleTo(actor);
     return simulations.map((simulation) => ({
       ...toSimulationDto(simulation),
       postCount: simulation.postCount,
+      lastActivityAt: simulation.lastActivityAt.toISOString(),
+      creator: simulation.creator,
+      canManage: isSimulationOwnerOrAdmin(simulation, actor),
     }));
   }
 
-  async get(id: string): Promise<SimulationResponse> {
+  /**
+   * One room's basics (§10.4). The posts it used to carry are the feed's job now.
+   */
+  async get(id: string, actor: SimulationActor): Promise<SimulationResponse> {
+    return { simulation: toSimulationDto(await this.requireReadableRoom(id, actor)) };
+  }
+
+  /**
+   * The room behind a room-scoped request, or a 404 (§10.4).
+   *
+   * Public so the routes that still serve a whole room — its post list — apply
+   * exactly the same rule as the room detail itself.
+   */
+  async requireReadableRoom(id: string, actor: SimulationActor): Promise<Simulation> {
     const simulation = await this.requireSimulation(id);
-    const posts = await this.deps.posts.listBySimulation(id);
-    return { simulation: toSimulationDto(simulation), posts };
+    assertRoomReadable(simulation, actor);
+    return simulation;
   }
 
   async rename(id: string, title: string, actor: SimulationActor): Promise<SimulationDto> {
@@ -572,8 +621,7 @@ export function toSimulationDto(simulation: Simulation): SimulationDto {
   };
 }
 
-/** The signed-in caller, reduced to what an ownership check needs (CLAUDE.md §66.6). */
-export type SimulationActor = Pick<UserAccount, "id" | "isAdmin">;
+export type { SimulationActor } from "./simulation.js";
 
 /**
  * A simulation with no owner (created before login existed) matches no actor

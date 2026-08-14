@@ -32,6 +32,18 @@ export type CharacterConfigDto = CharacterDto & {
   createdByUserId?: string;
 };
 
+/**
+ * Who owns a character, for the administrator's management list (§10.7, §20.3).
+ *
+ * A display name and a handle rather than the raw `createdByUserId`, because a
+ * UUID tells an operator nothing. `null` stands for System-owned.
+ */
+export type CharacterCreatorDto = {
+  id: string;
+  handle: string;
+  displayName: string;
+};
+
 /** Settings needed by the character management table, without persona prompts. */
 export type CharacterManagementDto = CharacterDto & {
   isDeleted: boolean;
@@ -44,6 +56,12 @@ export type CharacterManagementDto = CharacterDto & {
   modelProfileId: string;
   /** Only present for the creator or an admin (CLAUDE.md §66.5); omitted, not null, otherwise. */
   createdByUserId?: string;
+  /**
+   * Only present for an administrator, who is the one caller whose list spans
+   * other people's characters (§10.7). `null` there means System-owned; the
+   * field is absent entirely for an ordinary caller, whose list is their own.
+   */
+  creator?: CharacterCreatorDto | null;
 };
 
 export type CharacterManagementResponse = {

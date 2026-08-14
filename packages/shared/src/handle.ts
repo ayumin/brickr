@@ -1,20 +1,13 @@
-import type { CharacterDto } from "./character.js";
-import type { UserProfileDto } from "./user-profile.js";
-
 /**
- * Resolution of a handle from the namespace users and characters share
- * (CLAUDE.md §66.13).
+ * There is deliberately no handle-owner DTO here any more (§10.6).
  *
- * The user arm carries `UserProfileDto`, not the signed-in user shape: a handle
- * lookup is public, so it must not expose `isAdmin` or `status`.
+ * `GET /api/handles/:handle` used to answer with a discriminated union carrying
+ * `ownerType: "user" | "character"`, so resolving any handle said outright whether
+ * it belonged to a person or to an AI — the one thing the public surface must
+ * never state (§25). Both the endpoint and the type are gone;
+ * `GET /api/profiles/:handle` returns a `PublicProfileDto` instead, with the same
+ * shape whichever half of the shared namespace holds the handle.
  */
-export type HandleOwnerDto =
-  | { ownerType: "user"; user: UserProfileDto }
-  | { ownerType: "character"; character: CharacterDto };
-
-export type HandleResponse = {
-  owner: HandleOwnerDto;
-};
 
 /**
  * Handles that no user or character may take, because a bare `/handle` URL is
@@ -27,9 +20,17 @@ export type HandleResponse = {
  * now always belongs to a signed-in account (§8.2).
  */
 export const RESERVED_HANDLES: readonly string[] = [
-  // Routes the app serves today.
+  // Routes the app serves today. `rooms` and `cast` are the refreshed names for
+  // the room list and character management (§6.1); `characters` and `simulations`
+  // stay reserved because the old URLs keep redirecting during phase 1 (§6.2).
   "login", "signup", "logout", "admin", "settings",
-  "characters", "simulations", "posts",
+  "characters", "simulations", "posts", "rooms", "cast",
+  // Settings sections (§6.3, §22). They live under the already-reserved
+  // `settings` prefix, so none of them can collide today — they are listed for
+  // the same reason as everything else here: a word is cheap to reserve now and
+  // expensive once somebody holds it, and each of these is a plausible
+  // top-level page later.
+  "profile", "appearance", "usage", "runtime", "users", "invites",
   // Phase 2 auth flows: OAuth and magic links (§66.8), and the password reset
   // that §66.10 deliberately leaves out for now.
   "auth", "callback", "oauth", "verify", "confirm", "reset", "password",

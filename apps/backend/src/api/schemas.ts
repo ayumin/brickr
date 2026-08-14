@@ -165,19 +165,29 @@ export const threadRootParams = z.object({ threadRootId: id });
  * opaque string — only the feed service knows how to read it, and an unreadable
  * one answers 400 from there rather than being validated into a different shape.
  */
+const cursor = z
+  .string()
+  .trim()
+  .min(1)
+  .max(512)
+  .meta({ description: "Opaque cursor returned as `nextCursor` by the previous page." })
+  .optional();
+
 export const feedQuerySchema = z.object({
   // The default lives here only as documentation: the handler applies it via
   // `?? "all"` rather than Zod, since an absent filter and an absent query
   // parameter are the same request either way.
   filter: z.enum(FEED_FILTERS).meta({ default: "all" }).optional(),
-  cursor: z
-    .string()
-    .trim()
-    .min(1)
-    .max(512)
-    .meta({ description: "Opaque cursor returned as `nextCursor` by the previous page." })
-    .optional(),
+  cursor,
 });
+
+/**
+ * `GET /api/profiles/:handle/posts` (§10.6).
+ *
+ * The same opaque cursor as the feed, for the same reason: one page format the
+ * server alone can read, so the ordering behind it stays ours to change.
+ */
+export const cursorQuery = z.object({ cursor });
 
 // -- auth ------------------------------------------------------------------
 

@@ -12,7 +12,6 @@ import { CharacterService } from "./characters/character-service.js";
 import { FeedRepository } from "./feed/feed-repository.js";
 import { FeedService } from "./feed/feed-service.js";
 import { HandleRepository } from "./handles/handle-repository.js";
-import { HandleService } from "./handles/handle-service.js";
 import { LLMClient } from "./llm/llm-client.js";
 import { LLMUsageTracker } from "./llm/usage-tracker.js";
 import type { LLMProviderRegistry } from "./llm/provider-registry.js";
@@ -24,6 +23,8 @@ import { ModelProfileService } from "./model-profiles/model-profile-service.js";
 import type { Db } from "./persistence/prisma.js";
 import { PostRepository } from "./posts/post-repository.js";
 import { PostService } from "./posts/post-service.js";
+import { ProfileRepository } from "./profiles/profile-repository.js";
+import { ProfileService } from "./profiles/profile-service.js";
 import { ThreadService } from "./posts/thread-service.js";
 import { EventHub } from "./simulation/event-hub.js";
 import { SimulationRepository } from "./simulation/simulation-repository.js";
@@ -40,8 +41,8 @@ export type AppServices = {
   auth: AuthService;
   userAdmin: UserAdminService;
   inviteCodes: InviteCodeService;
-  handles: HandleService;
   characters: CharacterService;
+  profiles: ProfileService;
   modelProfiles: ModelProfileService;
   userProfile: UserProfileService;
   posts: PostService;
@@ -148,15 +149,20 @@ export async function buildServices(db: Db, logger: SimulationLogger): Promise<A
     }),
     userAdmin: new UserAdminService(userAccountRepository, sessionRepository),
     inviteCodes: new InviteCodeService(inviteCodeRepository),
-    handles: new HandleService(
-      handleRepository,
-      characterRepository,
-      userAccountRepository,
-    ),
     characters: new CharacterService(
       characterRepository,
       modelProfileRepository,
       new LLMCharacterPersonaGenerator(llmClient),
+      // Only used to label who owns a character in the administrator's list
+      // (§20.3); the ordinary list needs no account lookup at all.
+      userProfileRepository,
+    ),
+    profiles: new ProfileService(
+      handleRepository,
+      characterRepository,
+      userProfileRepository,
+      new ProfileRepository(db),
+      postService,
     ),
     modelProfiles,
     userProfile: new UserProfileService(userProfileRepository),

@@ -1,4 +1,9 @@
-import type { CharacterConfigDto, CharacterDto, CharacterManagementDto } from "@brickr/shared";
+import type {
+  CharacterConfigDto,
+  CharacterCreatorDto,
+  CharacterDto,
+  CharacterManagementDto,
+} from "@brickr/shared";
 import type { UserAccount } from "../auth/user-account.js";
 import type { Character } from "./character.js";
 
@@ -33,6 +38,18 @@ function canSeeOwner(
   return viewer !== null && (viewer.isAdmin || viewer.id === character.createdByUserId);
 }
 
+/**
+ * No owner id means System-owned (§66.14). A present id with no matching account
+ * means that account is gone, which the screen can only show the same way.
+ */
+function toCreator(
+  character: Pick<Character, "createdByUserId">,
+  creators: Map<string, CharacterCreatorDto>,
+): CharacterCreatorDto | null {
+  if (!character.createdByUserId) return null;
+  return creators.get(character.createdByUserId) ?? null;
+}
+
 export function toCharacterConfigDto(
   character: Character,
   viewer: CharacterActor | null,
@@ -56,14 +73,23 @@ export function toCharacterConfigDto(
   };
 }
 
+/**
+ * `creators` is supplied only for the administrator's list — the one list that
+ * spans other people's characters (§10.7, §20.3).
+ *
+ * When it is null the field is omitted rather than sent as null, because null
+ * means System-owned and would be a lie about a character the caller owns.
+ */
 export function toCharacterManagementDto(
   character: Character,
   postCount: number,
   viewer: CharacterActor | null = null,
+  creators: Map<string, CharacterCreatorDto> | null = null,
 ): CharacterManagementDto {
   const ownerVisible = canSeeOwner(character, viewer);
   return {
     ...toCharacterDto(character),
+    ...(creators === null ? {} : { creator: toCreator(character, creators) }),
     isDeleted: Boolean(character.deletedAt),
     postCount,
     activityLevel: character.activityLevel,

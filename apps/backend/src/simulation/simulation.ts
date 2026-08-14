@@ -1,4 +1,14 @@
 import { GLOBAL_SIMULATION_ID, type SimulationScope, type SimulationStatus } from "@brickr/shared";
+import type { UserAccount } from "../auth/user-account.js";
+
+/**
+ * The signed-in caller, reduced to what an ownership check needs (CLAUDE.md §66.6).
+ *
+ * Defined with the domain model rather than with the service, because the
+ * repository needs it too: which rooms exist *for this caller* is part of the
+ * query (§10.3), and a repository must not import from a service.
+ */
+export type SimulationActor = Pick<UserAccount, "id" | "isAdmin">;
 
 export type Simulation = {
   id: string;
@@ -21,8 +31,17 @@ export function isGlobalSimulation(simulation: Pick<Simulation, "id" | "scope">)
   return simulation.scope === "global" || simulation.id === GLOBAL_SIMULATION_ID;
 }
 
+/** Public identity of a room's creator, for the room list (§10.3). */
+export type SimulationCreator = {
+  id: string;
+  handle: string;
+  displayName: string;
+};
+
 export type SimulationSummary = Simulation & {
   postCount: number;
+  /** `null` when the room has no owner — a room created before login existed. */
+  creator: SimulationCreator | null;
 };
 
 /** The two post shapes a character can produce. Plain `post` is a standalone comment. */

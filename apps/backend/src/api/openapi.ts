@@ -79,6 +79,17 @@ const feedParameters: OpenAPIV3.ParameterObject[] = [
   },
 ];
 
+/** Path parameter for the shared handle namespace; a display form like `@Architect` is accepted. */
+function handleParameter(): OpenAPIV3.ParameterObject {
+  return {
+    name: "handle",
+    in: "path",
+    required: true,
+    description: "Handle without the `@`, lower-cased",
+    schema: { type: "string", pattern: "^@?[A-Za-z0-9_]{3,32}$" },
+  };
+}
+
 const errorResponses = {
   "400": { $ref: "#/components/responses/BadRequest" },
   "404": { $ref: "#/components/responses/NotFound" },
@@ -99,8 +110,10 @@ export const openApiDocument: OpenAPIV3.Document = {
       "Protected operations use the `brickr_session` httpOnly cookie issued by `/api/auth/login` or " +
       "`/api/auth/signup`. They answer 401 without a valid session. Account administration, invite " +
       "codes and application settings additionally require an administrator; character and simulation " +
-      "lifecycle changes may require the creator or an administrator. Timeline/profile reads and the " +
-      "event stream are public unless an operation explicitly declares `cookieAuth` below.",
+      "lifecycle changes may require the creator or an administrator. Only the unified feed " +
+      "(`/api/feed`) and its event stream are readable without a session: a signed-out visitor reads " +
+      "the feed and nothing else, which keeps the surface that has to be audited for leaks to a single " +
+      "response (5.1, 10.8). Everything else declares `cookieAuth` below.",
   },
   servers: [{ url: "/", description: "Current Backend origin" }],
   tags: [
@@ -114,7 +127,11 @@ export const openApiDocument: OpenAPIV3.Document = {
     { name: "Feed", description: "Thread feed across every simulation, and per simulation" },
     { name: "Posts", description: "Timeline posts, replies and quotes" },
     { name: "Events", description: "Realtime simulation events" },
-    { name: "Handles", description: "Handle namespace shared by users and characters" },
+    {
+      name: "Profiles",
+      description:
+        "Public profiles, one shape for people and AI cast members alike (Brickr-ux-refine 9.2)",
+    },
   ],
   paths: {
     "/api/health": {
@@ -381,25 +398,54 @@ export const openApiDocument: OpenAPIV3.Document = {
         },
       },
     },
-    "/api/handles/{handle}": {
+    "/api/profiles/{handle}": {
       get: {
-        operationId: "resolveHandle",
-        tags: ["Handles"],
-        summary: "Resolve a handle to its owner",
+        operationId: "getPublicProfile",
+        security: sessionSecurity,
+        tags: ["Profiles"],
+        summary: "Get the public profile behind a handle",
         description:
-          "Users and characters share one handle namespace. Resolves without a simulation loaded, so a direct visit to `/handle` or a reload can render the timeline. A leading `@` is accepted. Soft-deleted characters still resolve, because their past posts keep naming them as the author.",
+          "Users and characters share one handle namespace and resolve to the same shape, so a caller " +
+          "cannot tell a person from an AI cast member (Brickr-ux-refine 9.2, 25). Owner type, model " +
+          "profile, persona prompts, createdByUserId and token usage are never included. `canEdit` is " +
+          "true on the caller's own profile too, so it identifies no kind of account. A leading `@` is " +
+          "accepted. Soft-deleted characters still resolve, because their past posts keep naming them, " +
+          "but they are never editable. Requires a session: the unified feed carries everything a " +
+          "signed-out reader needs.",
+        parameters: [handleParameter()],
+        responses: {
+          "200": jsonResponse("Public profile", ref("PublicProfileResponse")),
+          "400": { $ref: "#/components/responses/BadRequest" },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "500": { $ref: "#/components/responses/InternalError" },
+        },
+      },
+    },
+    "/api/profiles/{handle}/posts": {
+      get: {
+        operationId: "listPublicProfilePosts",
+        security: sessionSecurity,
+        tags: ["Profiles"],
+        summary: "List an account's posts across every room",
+        description:
+          "Newest first, paged with the same opaque cursor the feed uses. Posts from stopped rooms are " +
+          "excluded unless the caller created that room or is an administrator: the unified feed is the " +
+          "only place a stopped room's history stays visible to everyone (10.1, 10.6).",
         parameters: [
+          handleParameter(),
           {
-            name: "handle",
-            in: "path",
-            required: true,
-            description: "Handle without the `@`, lower-cased",
-            schema: { type: "string", pattern: "^@?[A-Za-z0-9_]{3,32}$" },
+            name: "cursor",
+            in: "query",
+            required: false,
+            description: "Opaque cursor returned as `nextCursor` by the previous page.",
+            schema: { type: "string", maxLength: 512 },
           },
         ],
         responses: {
-          "200": jsonResponse("Resolved handle owner", ref("HandleResponse")),
+          "200": jsonResponse("One page of the account's posts", ref("PostsPage")),
           "400": { $ref: "#/components/responses/BadRequest" },
+          "401": { $ref: "#/components/responses/Unauthorized" },
           "404": { $ref: "#/components/responses/NotFound" },
           "500": { $ref: "#/components/responses/InternalError" },
         },
@@ -439,14 +485,20 @@ export const openApiDocument: OpenAPIV3.Document = {
     "/api/characters": {
       get: {
         operationId: "listCharacters",
+        security: sessionSecurity,
         tags: ["Characters"],
-        summary: "List public character profiles",
+        summary: "List the characters the caller may manage",
+        description:
+          "The caller's own characters, or every character for an administrator (10.7). Never the whole " +
+          "table for an ordinary caller: a complete list maps handles to \"this account is an AI\", which " +
+          "is what the feed's anonymity depends on not being obtainable (25).",
         responses: {
           "200": jsonResponse("Character profiles", {
             type: "object",
             required: ["characters"],
             properties: { characters: { type: "array", items: ref("Character") } },
           }),
+          "401": { $ref: "#/components/responses/Unauthorized" },
           "500": errorResponses["500"],
         },
       },
@@ -473,8 +525,13 @@ export const openApiDocument: OpenAPIV3.Document = {
     "/api/characters/management": {
       get: {
         operationId: "listCharactersForManagement",
+        security: sessionSecurity,
         tags: ["Characters"],
         summary: "List active and logically deleted character management rows",
+        description:
+          "Scoped to what the caller may manage: their own characters, or all of them plus a `creator` " +
+          "label for an administrator, where null means System-owned (10.7, 20.3). Soft-deleted rows are " +
+          "included so they can be filtered and restored.",
         responses: {
           "200": jsonResponse("Character management rows", {
             type: "object",
@@ -483,6 +540,7 @@ export const openApiDocument: OpenAPIV3.Document = {
               characters: { type: "array", items: ref("CharacterManagement") },
             },
           }),
+          "401": { $ref: "#/components/responses/Unauthorized" },
           "500": errorResponses["500"],
         },
       },
@@ -490,8 +548,12 @@ export const openApiDocument: OpenAPIV3.Document = {
     "/api/characters/export": {
       get: {
         operationId: "exportCharactersCsv",
+        security: sessionSecurity,
         tags: ["Characters"],
-        summary: "Export all characters as CSV including post counts and deletion status",
+        summary: "Export the caller's characters as CSV, with post counts and deletion status",
+        description:
+          "Scoped like the management list it mirrors: the caller's own characters, or all of them for " +
+          "an administrator (10.7).",
         responses: {
           "200": jsonResponse("CSV export", {
             type: "object",
@@ -501,6 +563,7 @@ export const openApiDocument: OpenAPIV3.Document = {
               csv: { type: "string" },
             },
           }),
+          "401": { $ref: "#/components/responses/Unauthorized" },
           "500": errorResponses["500"],
         },
       },
@@ -512,7 +575,10 @@ export const openApiDocument: OpenAPIV3.Document = {
         tags: ["Characters"],
         summary: "Create or update characters from an exported CSV",
         description:
-          "Requires a signed-in user. Matches existing characters by ID or handle and ignores the postCount column. The current import service is a trusted bulk-maintenance operation: it does not apply per-row owner checks and imported new rows are system-owned.",
+          "Requires a signed-in user. Matches existing characters by ID or handle and ignores the " +
+          "postCount column. Every matched row is checked for ownership: a row belonging to another user " +
+          "or to System rejects the whole import rather than being skipped, so a partial write cannot " +
+          "look like a success (10.7). Newly created rows belong to the caller.",
         requestBody: jsonBody(requestSchema(importCharactersCsvSchema)),
         responses: {
           "200": jsonResponse("Import summary", {
@@ -533,10 +599,15 @@ export const openApiDocument: OpenAPIV3.Document = {
     "/api/characters/{id}": {
       get: {
         operationId: "getCharacter",
+        security: sessionSecurity,
         tags: ["Characters"],
-        summary: "Get a public character profile",
+        summary: "Get a character the caller may manage",
+        description:
+          "The creator or an administrator only. Anyone else gets 404 rather than 403: confirming that an " +
+          "id belongs to a character would be enough to sort accounts into people and AI (10.7, 25).",
         parameters: [idParameter("Character ID")],
         responses: {
+          "401": { $ref: "#/components/responses/Unauthorized" },
           "200": jsonResponse("Character profile", {
             type: "object",
             required: ["character"],
@@ -594,12 +665,14 @@ export const openApiDocument: OpenAPIV3.Document = {
     "/api/characters/{id}/config": {
       get: {
         operationId: "getCharacterConfig",
+        security: sessionSecurity,
         tags: ["Characters"],
         summary: "Get editable character configuration",
         description:
           "Public read. createdByUserId rides along only for the creator or an admin (CLAUDE.md 66.5).",
         parameters: [idParameter("Character ID")],
         responses: {
+          "401": { $ref: "#/components/responses/Unauthorized" },
           "200": jsonResponse("Character configuration", {
             type: "object",
             required: ["character"],
@@ -653,10 +726,12 @@ export const openApiDocument: OpenAPIV3.Document = {
     "/api/character-bulk-jobs/{id}": {
       get: {
         operationId: "getCharacterBulkCreationJob",
+        security: sessionSecurity,
         tags: ["Characters"],
         summary: "Get bulk character generation progress",
         parameters: [idParameter("Bulk creation job ID")],
         responses: {
+          "401": { $ref: "#/components/responses/Unauthorized" },
           "200": jsonResponse("Bulk creation job", {
             type: "object",
             required: ["job"],
@@ -692,9 +767,15 @@ export const openApiDocument: OpenAPIV3.Document = {
     "/api/model-profiles": {
       get: {
         operationId: "listModelProfiles",
+        security: sessionSecurity,
         tags: ["Models"],
         summary: "List available provider/model profiles",
+        description:
+          "Requires a session (10.7). A model profile names a provider and a model, which is exactly the " +
+          "machinery a public response must not carry; it is needed to create or edit a cast member and " +
+          "nowhere else.",
         responses: {
+          "401": { $ref: "#/components/responses/Unauthorized" },
           "200": jsonResponse("Model profiles", {
             type: "object",
             required: ["modelProfiles"],
@@ -760,16 +841,24 @@ export const openApiDocument: OpenAPIV3.Document = {
     "/api/simulations": {
       get: {
         operationId: "listSimulations",
+        security: sessionSecurity,
         tags: ["Simulations"],
-        summary: "List simulation history",
+        summary: "List the rooms the caller may see",
+        description:
+          "Requires a session: rooms are not part of the public surface, where an anonymous visitor reads " +
+          "the unified feed and nothing else (5.1, 10.3). Ordered by last activity, newest first. The " +
+          "reserved global row is excluded because it is the feed rather than a room, and a stopped room " +
+          "is listed only for its creator and for an administrator. `canManage` says whether " +
+          "rename/stop/resume/analysis will be accepted, so no client has to re-derive it.",
         responses: {
-          "200": jsonResponse("Simulation history", {
+          "200": jsonResponse("Rooms visible to the caller", {
             type: "object",
             required: ["simulations"],
             properties: {
               simulations: { type: "array", items: ref("SimulationSummary") },
             },
           }),
+          "401": { $ref: "#/components/responses/Unauthorized" },
           "500": errorResponses["500"],
         },
       },
@@ -794,18 +883,21 @@ export const openApiDocument: OpenAPIV3.Document = {
     "/api/simulations/{id}": {
       get: {
         operationId: "getSimulation",
+        security: sessionSecurity,
         tags: ["Simulations"],
-        summary: "Get a simulation and its posts",
+        summary: "Get one room's basics",
+        description:
+          "Requires a session, and no longer returns the room's posts - reading a room is the feed's job " +
+          "(10.4). The reserved global row and a stopped room the caller neither created nor administers " +
+          "both answer 404, so this cannot be used to discover that a room exists.",
         parameters: [idParameter("Simulation ID")],
         responses: {
-          "200": jsonResponse("Simulation and posts", {
+          "200": jsonResponse("The room's basics", {
             type: "object",
-            required: ["simulation", "posts"],
-            properties: {
-              simulation: ref("Simulation"),
-              posts: { type: "array", items: ref("Post") },
-            },
+            required: ["simulation"],
+            properties: { simulation: ref("Simulation") },
           }),
+          "401": { $ref: "#/components/responses/Unauthorized" },
           ...errorResponses,
         },
       },
@@ -930,8 +1022,13 @@ export const openApiDocument: OpenAPIV3.Document = {
     "/api/simulations/{id}/posts": {
       get: {
         operationId: "listSimulationPosts",
+        security: sessionSecurity,
         tags: ["Posts"],
-        summary: "List posts in a simulation",
+        summary: "List every post in a room",
+        description:
+          "Requires a session and follows the same room access rule as the room itself, so the 404 given " +
+          "for somebody else's stopped room cannot be undone by reading its posts here (10.4, 10.8). The " +
+          "paged feed is what the UI reads.",
         parameters: [idParameter("Simulation ID")],
         responses: {
           "200": jsonResponse("Simulation posts", {
@@ -939,6 +1036,7 @@ export const openApiDocument: OpenAPIV3.Document = {
             required: ["posts"],
             properties: { posts: { type: "array", items: ref("Post") } },
           }),
+          "401": { $ref: "#/components/responses/Unauthorized" },
           ...errorResponses,
         },
       },
@@ -965,15 +1063,23 @@ export const openApiDocument: OpenAPIV3.Document = {
     "/api/posts/{id}": {
       get: {
         operationId: "getPostThread",
+        security: sessionSecurity,
         tags: ["Posts"],
         summary: "Get a post by ID",
         parameters: [idParameter("Post ID")],
+        description:
+          "Requires a session: everything an anonymous reader needs is already in the feed response, so " +
+          "the post detail is not part of the public surface (10.8). A post in an active room or in the " +
+          "global feed row is readable by every signed-in caller; one in a stopped room is readable by " +
+          "that room's creator and by an administrator, and answers 404 - not 403 - for anyone else, so " +
+          "\"hidden\" cannot be told apart from \"absent\".",
         responses: {
-          "200": jsonResponse("Root post and related posts", {
+          "200": jsonResponse("The post, with the same anonymous author shape the feed uses", {
             type: "object",
             required: ["post"],
             properties: { post: ref("Post") },
           }),
+          "401": { $ref: "#/components/responses/Unauthorized" },
           ...errorResponses,
         },
       },
@@ -1086,20 +1192,45 @@ export const openApiDocument: OpenAPIV3.Document = {
         type: "string",
         description: "Base64 PNG/JPEG/GIF/WebP data URL (maximum 5 MiB)",
       },
-      HandleResponse: {
+      PublicProfileResponse: {
         type: "object",
-        required: ["owner"],
-        properties: { owner: ref("HandleOwner") },
+        required: ["profile"],
+        properties: { profile: ref("PublicProfile") },
       },
-      HandleOwner: {
+      PublicProfile: {
         type: "object",
         description:
-          "Owner of a handle. `user` is present when ownerType is user, `character` when it is character. The user arm is the public profile: email, admin flag and status are never included (CLAUDE.md 66.1).",
-        required: ["ownerType"],
+          "One account as every public screen sees it. There is deliberately no owner type and no " +
+          "discriminated union around one: the type itself would answer \"person or AI?\" " +
+          "(Brickr-ux-refine 9.2, 25). `canEdit` is safe to publish because it is true on the caller's " +
+          "own profile too, so it identifies no kind of account - clients must follow it rather than " +
+          "reason from it.",
+        required: ["id", "handle", "displayName", "postCount", "canEdit"],
         properties: {
-          ownerType: { type: "string", enum: ["user", "character"] },
-          user: ref("UserProfile"),
-          character: ref("Character"),
+          id: { type: "string" },
+          handle: { type: "string" },
+          displayName: { type: "string" },
+          description: { type: "string" },
+          avatarUrl: ref("AvatarUrl"),
+          postCount: {
+            type: "integer",
+            minimum: 0,
+            description:
+              "Posts this caller may actually see, so the number matches the list under it.",
+          },
+          canEdit: { type: "boolean" },
+        },
+      },
+      PostsPage: {
+        type: "object",
+        required: ["posts", "nextCursor"],
+        properties: {
+          posts: { type: "array", items: ref("Post") },
+          nextCursor: {
+            type: "string",
+            nullable: true,
+            description: "Opaque server-issued cursor; null at the end of the list.",
+          },
         },
       },
       Character: {
@@ -1144,6 +1275,12 @@ export const openApiDocument: OpenAPIV3.Document = {
                 type: "string",
                 description:
                   "Present only for the creator or an admin (CLAUDE.md 66.5); omitted for everyone else and for System-owned (seed) characters.",
+              },
+              creator: {
+                nullable: true,
+                allOf: [ref("SimulationCreator")],
+                description:
+                  "Present only for an administrator, the one caller whose list spans other people's characters (10.7, 20.3). Null means System-owned. Omitted entirely for an ordinary caller, whose list is their own by definition.",
               },
             },
           },
@@ -1455,10 +1592,38 @@ export const openApiDocument: OpenAPIV3.Document = {
           ref("Simulation"),
           {
             type: "object",
-            required: ["postCount"],
-            properties: { postCount: { type: "integer", minimum: 0 } },
+            required: ["postCount", "lastActivityAt", "creator", "canManage"],
+            properties: {
+              postCount: { type: "integer", minimum: 0 },
+              lastActivityAt: {
+                type: "string",
+                format: "date-time",
+                description: "Newest activity anywhere in the room; the room list orders by it (10.3).",
+              },
+              creator: {
+                nullable: true,
+                allOf: [ref("SimulationCreator")],
+                description: "Null when the room has no owner.",
+              },
+              canManage: {
+                type: "boolean",
+                description:
+                  "Whether rename/stop/resume/analysis will be accepted. Decided by the server so no client re-derives the rule (10.3).",
+              },
+            },
           },
         ],
+      },
+      SimulationCreator: {
+        type: "object",
+        description:
+          "Public identity of an owner. A display name and a handle rather than a raw id, because an id tells a reader nothing.",
+        required: ["id", "handle", "displayName"],
+        properties: {
+          id: { type: "string" },
+          handle: { type: "string" },
+          displayName: { type: "string" },
+        },
       },
       SimulationAnalysis: {
         type: "object",

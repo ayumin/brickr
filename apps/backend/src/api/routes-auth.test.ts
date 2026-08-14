@@ -61,14 +61,37 @@ const writeRoutes = [
   },
 ];
 
-/** Reads stay open: browsing needs no invite, and `/handle` must render (§66.2). */
-const publicRoutes = [
-  "/api/health",
+/**
+ * What is left of the public surface (§5.1, §10.8).
+ *
+ * Reading used to be open across the board. It is not any more: rooms, cast
+ * management, model profiles, profiles and post details all require a session,
+ * because every extra public endpoint is another way to learn whether a handle
+ * belongs to a person or to an AI (§25). A signed-out visitor reads the unified
+ * feed — covered by `routes-feed.test.ts` — and nothing else.
+ */
+const publicRoutes = ["/api/health", "/api/auth/session"];
+
+/**
+ * Reads that now need a session. Listed separately from `writeRoutes` because
+ * these used to answer 200 to anybody, so a regression here would be silent:
+ * nothing would break, the data would just be public again.
+ */
+const protectedReadRoutes = [
   "/api/characters",
   "/api/characters/management",
+  "/api/characters/export",
+  "/api/characters/c1",
+  "/api/characters/c1/config",
+  "/api/character-bulk-jobs/job-1",
   "/api/model-profiles",
   "/api/simulations",
-  "/api/auth/session",
+  "/api/simulations/s1",
+  "/api/simulations/s1/posts",
+  "/api/posts/p1",
+  "/api/posts/p1/replies",
+  "/api/profiles/hanako",
+  "/api/profiles/hanako/posts",
 ];
 
 /** Every route that requires admin access (§66.7, §66.9, §66.15, §66.16). */
@@ -109,6 +132,10 @@ function makeServices(): AppServices {
       listDtos: () => Promise.resolve([]),
       listManagementDtos: () => Promise.resolve([]),
       listManagementDtosByCreator: () => Promise.resolve([]),
+      exportCsv: () => Promise.resolve({ filename: "characters.csv", csv: "" }),
+      findDto: () => Promise.resolve({ id: "c1" }),
+      findConfigDto: () => Promise.resolve({ id: "c1" }),
+      findBulkCreationJob: () => ({ id: "job-1" }),
       create: () => Promise.resolve({ id: "c1" }),
       update: () => Promise.resolve({ id: "c1" }),
       delete: () => Promise.resolve("c1"),
@@ -124,13 +151,26 @@ function makeServices(): AppServices {
     },
     simulations: {
       list: () => Promise.resolve([]),
+      get: () => Promise.resolve({ simulation: { id: "s1" } }),
+      requireReadableRoom: () => Promise.resolve({ id: "s1" }),
       create: () => Promise.resolve({ id: "s1" }),
       rename: () => Promise.resolve({ id: "s1" }),
       stop: () => Promise.resolve({ id: "s1" }),
       resume: () => Promise.resolve({ id: "s1" }),
       submitUserPost: () => Promise.resolve({ id: "p1" }),
     },
-    posts: { toDto: () => Promise.resolve({ id: "p1" }) },
+    posts: {
+      toDto: () => Promise.resolve({ id: "p1" }),
+      listBySimulation: () => Promise.resolve([]),
+    },
+    feed: {
+      findVisiblePost: () => Promise.resolve({ id: "p1" }),
+      listThreadReplies: () => Promise.resolve([]),
+    },
+    profiles: {
+      getProfile: () => Promise.resolve({ id: "user-1", handle: "hanako" }),
+      listPosts: () => Promise.resolve({ posts: [], nextCursor: null }),
+    },
     simulationAnalysis: { analyze: () => Promise.resolve({ postCount: 0 }) },
     applicationSettings: {
       get: () => Promise.resolve({ environment: [], llm: {} }),
@@ -229,6 +269,26 @@ describe("read endpoints", () => {
 
     const response = await app.inject({ method: "GET", url });
 
+    expect(response.statusCode).not.toBe(401);
+  });
+
+  it.each(protectedReadRoutes)("refuses GET %s while signed out", async (url) => {
+    const app = await buildApp(null);
+    apps.push(app);
+
+    const response = await app.inject({ method: "GET", url });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it.each(protectedReadRoutes)("lets a signed-in caller through to GET %s", async (url) => {
+    const app = await buildApp(signedInUser);
+    apps.push(app);
+
+    const response = await app.inject({ method: "GET", url });
+
+    // Not 200: what these answer depends on scope and ownership, which the
+    // service tests and the access matrix cover. Only the guard is asserted here.
     expect(response.statusCode).not.toBe(401);
   });
 

@@ -27,8 +27,6 @@ import type {
   CreateSimulationResponse,
   DeleteCharacterResponse,
   ExportCharactersCsvResponse,
-  HandleOwnerDto,
-  HandleResponse,
   ImportCharactersCsvResponse,
   InviteCodeDto,
   InviteCodesResponse,
@@ -37,6 +35,8 @@ import type {
   ModelProfilesResponse,
   PostDto,
   PostsResponse,
+  PublicProfileDto,
+  PublicProfileResponse,
   ResetPasswordResponse,
   RestoreCharacterResponse,
   SaveCharacterRequest,
@@ -387,13 +387,20 @@ export const api = {
     });
   },
 
-  /** Resolves without any simulation loaded — what a direct `/handle` visit or reload needs (CLAUDE.md §66.2). */
-  async resolveHandle(handle: string, signal?: AbortSignal): Promise<HandleOwnerDto> {
-    const data = await request<HandleResponse>(
-      `/api/handles/${encodeURIComponent(handle)}`,
+  /**
+   * The public profile behind a handle — what a direct `/handle` visit or a
+   * reload needs, with no simulation loaded (CLAUDE.md §66.2).
+   *
+   * One shape for people and cast members alike (§10.6). The endpoint this
+   * replaced, `GET /api/handles/:handle`, answered with an owner type, which told
+   * every caller whether a handle belonged to a person or to an AI (§25).
+   */
+  async resolveProfile(handle: string, signal?: AbortSignal): Promise<PublicProfileDto> {
+    const data = await request<PublicProfileResponse>(
+      `/api/profiles/${encodeURIComponent(handle)}`,
       signal ? { signal } : {},
     );
-    return data.owner;
+    return data.profile;
   },
 
   async getModelProfiles(signal?: AbortSignal): Promise<ModelProfileDto[]> {
