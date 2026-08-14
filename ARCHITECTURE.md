@@ -323,7 +323,7 @@ Serviceは「順序・Paging・どのThreadが読者に関係するか・読者�
 「その行をどう取るか」だけを持ちます。
 
 Pagingのcursorは `(threadActivityAt, postId)` をBase64URL JSONで包んだ不透明値です。Post IDを第2キーに
-入れる理由は、同一ミリ秒の返信が複数着信したときにPage境界が曙昧になり、次Pageで重複または欠落が
+入れる理由は、同一ミリ秒の返信が複数着信したときにPage境界が曖昧になり、次Pageで重複または欠落が
 起きるためです。encode/decodeはServer専用で、読めないcursorは400 `invalid_cursor`として返します。
 Page sizeは固定20で、次Pageの有無は21件目を読むことで判定します。
 
