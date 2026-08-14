@@ -5,27 +5,26 @@ import type {
   SimulationResponse,
   SimulationSummaryDto,
 } from "@brickr/shared";
-import type { AgentService } from "../agents/agent-service.js";
+import type { AgentService, GeneratedPost } from "../agents/agent-service.js";
 import type { UserAccount } from "../auth/user-account.js";
 import type { CharacterRepository } from "../characters/character-repository.js";
 import type { Character } from "../characters/character.js";
+import { DomainError } from "../domain-error.js";
 import type { TokenUsageService } from "../llm/token-usage-service.js";
 import type { Post } from "../posts/post.js";
 import type { PostService } from "../posts/post-service.js";
-import type { ThreadService } from "../posts/thread-service.js";
+import type { ThreadContext, ThreadService } from "../posts/thread-service.js";
 import { resolveActionTargets, selectAction } from "./action-selector.js";
 import { runWithConcurrency } from "./concurrency.js";
 import type { EventHub } from "./event-hub.js";
 import type { ThreadActivityEvent } from "./public-events.js";
-import { selectResponders, shouldRespond } from "./responder-selector.js";
+import { selectCascadeResponders, selectResponders } from "./responder-selector.js";
 import type { UserProfile } from "../user-profile/user-profile.js";
 import type { SimulationRepository } from "./simulation-repository.js";
 import { isGlobalSimulation, type Simulation } from "./simulation.js";
 
 /** Hard ceiling on character posts generated from one user post. */
 const MAX_POSTS_PER_SUBMISSION = 24;
-/** How many characters may pile onto a single character post in a cascade round. */
-const MAX_CASCADE_RESPONDERS = 2;
 
 export type SubmitUserPostInput = {
   simulationId: string;
@@ -62,32 +61,49 @@ export type ThreadActivitySource = {
   buildThreadActivity: (post: Post) => Promise<ThreadActivityEvent>;
 };
 
-export class SimulationNotFoundError extends Error {
+export type SimulationServiceDeps = {
+  simulations: SimulationRepository;
+  posts: PostService;
+  characters: CharacterRepository;
+  threads: ThreadService;
+  agents: AgentService;
+  events: EventHub;
+  options: SimulationServiceOptions;
+  logger: SimulationLogger;
+  tokenUsage: TokenUsageService;
+  threadActivity: ThreadActivitySource;
+};
+
+export class SimulationNotFoundError extends DomainError {
+  readonly httpStatus = 404;
+  readonly errorCode = "not_found" as const;
   constructor(id: string) {
     super(`simulation "${id}" not found`);
-    this.name = "SimulationNotFoundError";
   }
 }
 
-export class SimulationStoppedError extends Error {
+export class SimulationStoppedError extends DomainError {
+  readonly httpStatus = 409;
+  readonly errorCode = "simulation_stopped" as const;
   constructor(id: string) {
     super(`simulation "${id}" has been stopped`);
-    this.name = "SimulationStoppedError";
   }
 }
 
 /** Rename/stop/resume/analysis are limited to the creator or an admin (CLAUDE.md §66.6). */
-export class SimulationForbiddenError extends Error {
+export class SimulationForbiddenError extends DomainError {
+  readonly httpStatus = 403;
+  readonly errorCode = "forbidden" as const;
   constructor(id: string) {
     super(`not allowed to manage simulation "${id}"`);
-    this.name = "SimulationForbiddenError";
   }
 }
 
-export class PostNotFoundError extends Error {
+export class PostNotFoundError extends DomainError {
+  readonly httpStatus = 404;
+  readonly errorCode = "not_found" as const;
   constructor(id: string) {
     super(`post "${id}" not found`);
-    this.name = "PostNotFoundError";
   }
 }
 
@@ -98,10 +114,11 @@ export class PostNotFoundError extends Error {
  * Refused here rather than only in the UI, because a UI guard is bypassed by
  * calling the API directly.
  */
-export class GlobalSimulationMutationError extends Error {
+export class GlobalSimulationMutationError extends DomainError {
+  readonly httpStatus = 403;
+  readonly errorCode = "forbidden" as const;
   constructor(id: string) {
     super(`simulation "${id}" is the global feed and cannot be managed as a room`);
-    this.name = "GlobalSimulationMutationError";
   }
 }
 
@@ -114,7 +131,7 @@ export function assertNotGlobalSimulation(
 }
 
 /**
- * Orchestrates a round of character reactions to a post.
+ * Orchestrates the reactions to one post.
  *
  * There is no round or wave model (CLAUDE.md §31): every character reads the
  * thread as it exists the moment that character starts working, so characters
@@ -124,27 +141,16 @@ export class SimulationService {
   /** Tracks in-flight generation per simulation so `stop` can take effect. */
   private readonly stopped = new Set<string>();
 
-  constructor(
-    private readonly simulations: SimulationRepository,
-    private readonly posts: PostService,
-    private readonly characters: CharacterRepository,
-    private readonly threads: ThreadService,
-    private readonly agents: AgentService,
-    private readonly events: EventHub,
-    private readonly options: SimulationServiceOptions,
-    private readonly logger: SimulationLogger,
-    private readonly tokenUsage: TokenUsageService,
-    private readonly threadActivity: ThreadActivitySource,
-  ) {}
+  constructor(private readonly deps: SimulationServiceDeps) {}
 
   async create(title: string | null, createdByUserId: string): Promise<SimulationDto> {
-    const simulation = await this.simulations.create(title, createdByUserId);
+    const simulation = await this.deps.simulations.create(title, createdByUserId);
     this.stopped.delete(simulation.id);
     return toSimulationDto(simulation);
   }
 
   async list(): Promise<SimulationSummaryDto[]> {
-    const simulations = await this.simulations.findAll();
+    const simulations = await this.deps.simulations.findAll();
     return simulations.map((simulation) => ({
       ...toSimulationDto(simulation),
       postCount: simulation.postCount,
@@ -153,7 +159,7 @@ export class SimulationService {
 
   async get(id: string): Promise<SimulationResponse> {
     const simulation = await this.requireSimulation(id);
-    const posts = await this.posts.listBySimulation(id);
+    const posts = await this.deps.posts.listBySimulation(id);
     return { simulation: toSimulationDto(simulation), posts };
   }
 
@@ -163,7 +169,7 @@ export class SimulationService {
     // would otherwise be allowed through (§8.2).
     assertNotGlobalSimulation(simulation);
     assertSimulationOwnerOrAdmin(simulation, actor);
-    return toSimulationDto(await this.simulations.updateTitle(id, title));
+    return toSimulationDto(await this.deps.simulations.updateTitle(id, title));
   }
 
   async stop(id: string, actor: SimulationActor): Promise<SimulationDto> {
@@ -171,7 +177,7 @@ export class SimulationService {
     assertNotGlobalSimulation(simulation);
     assertSimulationOwnerOrAdmin(simulation, actor);
     this.stopped.add(id);
-    const stoppedSimulation = await this.simulations.updateStatus(id, "stopped");
+    const stoppedSimulation = await this.deps.simulations.updateStatus(id, "stopped");
     return toSimulationDto(stoppedSimulation);
   }
 
@@ -180,7 +186,7 @@ export class SimulationService {
     assertNotGlobalSimulation(simulation);
     assertSimulationOwnerOrAdmin(simulation, actor);
     this.stopped.delete(id);
-    const resumedSimulation = await this.simulations.updateStatus(id, "active");
+    const resumedSimulation = await this.deps.simulations.updateStatus(id, "active");
     return toSimulationDto(resumedSimulation);
   }
 
@@ -197,7 +203,7 @@ export class SimulationService {
     await this.assertPostBelongsToSimulation(input.replyTo, input.simulationId);
     await this.assertPostBelongsToSimulation(input.quoteOf, input.simulationId);
 
-    const post = await this.posts.publish({
+    const post = await this.deps.posts.publish({
       simulationId: input.simulationId,
       authorId: input.authorId,
       content: input.content,
@@ -209,43 +215,34 @@ export class SimulationService {
     await this.emitPostCreated(post);
 
     // Fire and forget: the HTTP response returns now, posts stream over SSE.
-    void this.runGeneration(post, input.responderIds).catch((error: unknown) => {
-      this.logger.error(
-        { simulationId: input.simulationId, err: describe(error) },
-        "simulation run failed",
-      );
-      // Internal only: the reason names the provider or model that failed, which
-      // would say out loud that the author is an AI (§11.2). Subscribers learn
-      // about failures through `response.finished` outcomes instead.
-      this.events.publish(input.simulationId, {
-        type: "generation.failed",
-        simulationId: input.simulationId,
-        reason: describe(error),
-      });
-    });
+    // `runGeneration` reports its own outcome and does not reject; this `.catch`
+    // is a last resort so a failure in the reporting itself cannot become an
+    // unhandled rejection.
+    void this.runGeneration(post, input.responderIds).catch(() => undefined);
 
     return post;
   }
 
   // -- generation -----------------------------------------------------------
 
+  /** Publishes exactly one of `generation.completed` / `generation.failed` per run. */
   private async runGeneration(triggerPost: Post, explicitIds: string[]): Promise<void> {
     const generatedIds: string[] = [];
     const budget = { remaining: MAX_POSTS_PER_SUBMISSION };
 
     try {
-      const all = await this.characters.findAll();
+      const all = await this.deps.characters.findAll();
 
       const { all: responders } = selectResponders({
         characters: all,
         mentionedHandles: triggerPost.mentions,
         explicitIds,
         excludeIds: [triggerPost.authorId],
-        minResponders: this.options.minResponders,
-        maxResponders: this.options.maxResponders,
+        minResponders: this.deps.options.minResponders,
+        maxResponders: this.deps.options.maxResponders,
       });
 
-      await this.runRound({
+      await this.processTarget({
         target: triggerPost,
         responders,
         allCharacters: all,
@@ -256,18 +253,31 @@ export class SimulationService {
         // characters deep — is billed to the human who started it (§66.4).
         billingUserId: triggerPost.authorId,
       });
-    } finally {
-      this.events.publish(triggerPost.simulationId, {
+
+      this.deps.events.publish(triggerPost.simulationId, {
         type: "generation.completed",
         simulationId: triggerPost.simulationId,
         triggerPostId: triggerPost.id,
         generatedPostIds: generatedIds,
       });
+    } catch (error) {
+      this.deps.logger.error(
+        { simulationId: triggerPost.simulationId, err: describe(error) },
+        "simulation run failed",
+      );
+      // Internal only: the reason names the provider or model that failed, which
+      // would say out loud that the author is an AI (§11.2). Subscribers learn
+      // about failures through `response.finished` outcomes instead.
+      this.deps.events.publish(triggerPost.simulationId, {
+        type: "generation.failed",
+        simulationId: triggerPost.simulationId,
+        reason: describe(error),
+      });
     }
   }
 
   /** Runs one set of characters against one target post, then cascades. */
-  private async runRound(input: {
+  private async processTarget(input: {
     target: Post;
     responders: Character[];
     allCharacters: Character[];
@@ -285,7 +295,7 @@ export class SimulationService {
 
     const results = await runWithConcurrency(
       slice,
-      this.options.maxConcurrentCharacters,
+      this.deps.options.maxConcurrentCharacters,
       (character) => this.processCharacter(character, target, allCharacters, billingUserId),
     );
 
@@ -295,10 +305,10 @@ export class SimulationService {
       }
     }
 
-    if (depth >= this.options.maxCascadeDepth) return;
+    if (depth >= this.deps.options.maxCascadeDepth) return;
 
-    // Characters react to what the previous round produced. Done sequentially
-    // per post but concurrently within each cascade round.
+    // Characters react to what the previous step produced. Done sequentially
+    // per post but concurrently within each cascade step.
     const cascades: Array<Promise<void>> = [];
 
     for (const result of results) {
@@ -308,7 +318,7 @@ export class SimulationService {
       const producedPost = result.value;
       const author = result.item;
 
-      const followers = this.selectCascadeResponders({
+      const followers = selectCascadeResponders({
         allCharacters,
         producedPost,
         author,
@@ -317,7 +327,7 @@ export class SimulationService {
       if (followers.length === 0) continue;
 
       cascades.push(
-        this.runRound({
+        this.processTarget({
           target: producedPost,
           responders: followers,
           allCharacters,
@@ -333,45 +343,8 @@ export class SimulationService {
   }
 
   /**
-   * Who reacts to a character's post: anyone it @mentioned (always), plus a
-   * couple of opportunistic reactions gated by `shouldRespond`.
-   */
-  private selectCascadeResponders(input: {
-    allCharacters: Character[];
-    producedPost: Post;
-    author: Character;
-    depth: number;
-  }): Character[] {
-    const { allCharacters, producedPost, author, depth } = input;
-
-    const byHandle = new Map(
-      allCharacters.map((character) => [character.handle.toLowerCase(), character]),
-    );
-
-    const chosen = new Map<string, Character>();
-
-    for (const handle of producedPost.mentions) {
-      const mentioned = byHandle.get(handle);
-      if (mentioned && mentioned.id !== author.id) chosen.set(mentioned.id, mentioned);
-    }
-
-    const opportunistic = allCharacters.filter(
-      (character) =>
-        character.id !== author.id &&
-        !chosen.has(character.id) &&
-        shouldRespond(character, { authorInfluence: author.influence, depth }),
-    );
-
-    for (const character of opportunistic.slice(0, MAX_CASCADE_RESPONDERS)) {
-      chosen.set(character.id, character);
-    }
-
-    return [...chosen.values()];
-  }
-
-  /**
-   * One character's turn: read the thread as it stands *now*, pick an action,
-   * generate, persist, publish.
+   * One character's turn, from "did it stay quiet" to "the SSE activity is
+   * closed" — the lifecycle boundary around `generateAndPublish`.
    *
    * Returns the post it produced, or null if it stayed quiet or failed.
    */
@@ -391,78 +364,14 @@ export class SimulationService {
     let outcome: ResponseOutcome = "skipped";
 
     try {
-      // Context is read immediately before the LLM call (CLAUDE.md §32).
-      const thread = await this.threads.getCurrentThread(target.id);
-      if (!thread) {
-        return null;
-      }
-
-      const action = selectAction({
-        character,
-        target: thread.target,
-        threadPosts: thread.posts,
-      });
-
-      // The transcript names users by handle too, so a character can react to
-      // the person who wrote the post rather than to an opaque id.
-      const users = await this.posts.findUsersByIds(
-        [thread.target, ...thread.posts].map((post) => post.authorId),
-      );
-      const handleOf = buildHandleResolver(allCharacters, users);
-
-      const generated = await this.agents.generate({
-        character,
-        target: thread.target,
-        posts: thread.posts,
-        action,
-        resolveHandle: handleOf,
-      });
-
-      if (this.stopped.has(simulationId)) return null;
-
-      // Recorded even if publishing fails below: the tokens were already
-      // spent. A tracking hiccup is logged, not surfaced as a failed response —
-      // it must never turn a successful generation into a failed outcome.
-      if (generated.usage) {
-        try {
-          await this.tokenUsage.record(billingUserId, generated.usage);
-        } catch (error) {
-          this.logger.warn(
-            { simulationId, characterId: character.id, billingUserId, err: describe(error) },
-            "failed to record token usage",
-          );
-        }
-      }
-
-      const { replyTo, quoteOf } = resolveActionTargets(action, thread.target);
-
-      const post = await this.posts.publish({
-        simulationId,
-        authorId: character.id,
-        content: generated.content,
-        replyTo,
-        quoteOf,
-      });
-
-      this.logger.info(
-        {
-          simulationId,
-          characterId: character.id,
-          action,
-          providerId: generated.providerId,
-          model: generated.model,
-        },
-        "character posted",
-      );
-
-      await this.emitPostCreated(post);
-      outcome = "posted";
+      const post = await this.generateAndPublish(character, target, allCharacters, billingUserId);
+      outcome = post ? "posted" : "skipped";
       return post;
     } catch (error) {
       outcome = "failed";
       // The only place the reason exists. Publishing it would describe the
       // machinery behind the post (§11.2).
-      this.logger.warn(
+      this.deps.logger.warn(
         { simulationId, characterId: character.id, err: describe(error) },
         "character generation failed",
       );
@@ -472,6 +381,113 @@ export class SimulationService {
       // generation throws or the simulation was stopped mid-flight. An unanswered
       // start would leave the UI showing a response that never arrives.
       activity.finish(outcome);
+    }
+  }
+
+  /**
+   * Picks an action, generates, persists and publishes. Returns null if the
+   * thread disappeared or the simulation was stopped mid-flight — both are
+   * "stayed quiet", not a failure, so the caller must not treat them as one.
+   */
+  private async generateAndPublish(
+    character: Character,
+    target: Post,
+    allCharacters: Character[],
+    billingUserId: string,
+  ): Promise<Post | null> {
+    const simulationId = target.simulationId;
+
+    const context = await this.loadGenerationContext(target, allCharacters);
+    if (!context) return null;
+    const { thread, resolveHandle } = context;
+
+    const action = selectAction({
+      character,
+      target: thread.target,
+      threadPosts: thread.posts,
+    });
+
+    const generated = await this.deps.agents.generate({
+      character,
+      target: thread.target,
+      posts: thread.posts,
+      action,
+      resolveHandle,
+    });
+
+    if (this.stopped.has(simulationId)) return null;
+
+    if (generated.usage) {
+      await this.recordUsage(billingUserId, generated.usage, {
+        simulationId,
+        characterId: character.id,
+      });
+    }
+
+    const { replyTo, quoteOf } = resolveActionTargets(action, thread.target);
+
+    const post = await this.deps.posts.publish({
+      simulationId,
+      authorId: character.id,
+      content: generated.content,
+      replyTo,
+      quoteOf,
+    });
+
+    this.deps.logger.info(
+      {
+        simulationId,
+        characterId: character.id,
+        action,
+        providerId: generated.providerId,
+        model: generated.model,
+      },
+      "character posted",
+    );
+
+    await this.emitPostCreated(post);
+    return post;
+  }
+
+  /**
+   * Thread and handle context, read fresh immediately before the LLM call
+   * (CLAUDE.md §32). Returns null when the target has disappeared from the
+   * thread since this character's turn started.
+   */
+  private async loadGenerationContext(
+    target: Post,
+    allCharacters: Character[],
+  ): Promise<{ thread: ThreadContext; resolveHandle: (authorId: string) => string } | null> {
+    const thread = await this.deps.threads.getCurrentThread(target.id);
+    if (!thread) return null;
+
+    // The transcript names users by handle too, so a character can react to
+    // the person who wrote the post rather than to an opaque id.
+    const users = await this.deps.posts.findUsersByIds(
+      [thread.target, ...thread.posts].map((post) => post.authorId),
+    );
+    const resolveHandle = buildHandleResolver(allCharacters, users);
+
+    return { thread, resolveHandle };
+  }
+
+  /**
+   * Recorded even if publishing fails below: the tokens were already spent. A
+   * tracking hiccup is logged, not surfaced as a failed response — it must
+   * never turn a successful generation into a failed outcome.
+   */
+  private async recordUsage(
+    billingUserId: string,
+    usage: NonNullable<GeneratedPost["usage"]>,
+    context: { simulationId: string; characterId: string },
+  ): Promise<void> {
+    try {
+      await this.deps.tokenUsage.record(billingUserId, usage);
+    } catch (error) {
+      this.deps.logger.warn(
+        { ...context, billingUserId, err: describe(error) },
+        "failed to record token usage",
+      );
     }
   }
 
@@ -490,11 +506,11 @@ export class SimulationService {
       threadRootId: target.threadRootId,
     };
 
-    this.events.publish(target.simulationId, { type: "response.started", ...shared });
+    this.deps.events.publish(target.simulationId, { type: "response.started", ...shared });
 
     return {
       finish: (outcome) => {
-        this.events.publish(target.simulationId, {
+        this.deps.events.publish(target.simulationId, {
           type: "response.finished",
           ...shared,
           outcome,
@@ -517,18 +533,18 @@ export class SimulationService {
     // This does not reopen the race that subscribing before hydrating closes: a
     // stream that opens after this check hydrates over REST afterwards, and the
     // post is committed by then, so it cannot be missed.
-    if (!this.events.hasSubscribers(post.simulationId)) return;
+    if (!this.deps.events.hasSubscribers(post.simulationId)) return;
 
-    this.events.publish(
+    this.deps.events.publish(
       post.simulationId,
-      await this.threadActivity.buildThreadActivity(post),
+      await this.deps.threadActivity.buildThreadActivity(post),
     );
   }
 
   // -- helpers --------------------------------------------------------------
 
   private async requireSimulation(id: string): Promise<Simulation> {
-    const simulation = await this.simulations.findById(id);
+    const simulation = await this.deps.simulations.findById(id);
     if (!simulation) throw new SimulationNotFoundError(id);
     return simulation;
   }
@@ -538,7 +554,7 @@ export class SimulationService {
     simulationId: string,
   ): Promise<void> {
     if (!postId) return;
-    const post = await this.posts.findById(postId);
+    const post = await this.deps.posts.findById(postId);
     if (!post || post.simulationId !== simulationId) {
       throw new PostNotFoundError(postId);
     }

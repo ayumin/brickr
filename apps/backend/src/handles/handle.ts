@@ -1,4 +1,5 @@
 import type { HandleOwnerType } from "@brickr/shared";
+import { DomainError } from "../domain-error.js";
 
 /**
  * A row of the handle namespace users and characters share (CLAUDE.md §66.13).
@@ -13,10 +14,11 @@ export type HandleOwner = {
   ownerId: string;
 };
 
-export class HandleTakenError extends Error {
+export class HandleTakenError extends DomainError {
+  readonly httpStatus = 409;
+  readonly errorCode = "handle_conflict" as const;
   constructor(handle: string) {
     super(`handle @${handle} is already taken`);
-    this.name = "HandleTakenError";
   }
 }
 

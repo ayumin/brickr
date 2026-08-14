@@ -7,6 +7,7 @@ import type { EventListener } from "../simulation/event-hub.js";
 import { toPublicEvent } from "../simulation/public-events.js";
 import { SimulationNotFoundError } from "../simulation/simulation-service.js";
 import { sendError } from "./errors.js";
+import { toFeedReader } from "./feed-reader.js";
 import { idParams } from "./schemas.js";
 
 /** Comment frames keep proxies from closing an idle stream. */
@@ -110,13 +111,7 @@ export function registerEventsRoute(app: FastifyInstance, services: AppServices)
    * watches the same threads appear and receives capabilities that permit nothing.
    */
   app.get("/api/feed/events", async (request, reply) => {
-    const reader = request.currentUser
-      ? {
-          id: request.currentUser.id,
-          isAdmin: request.currentUser.isAdmin,
-          handle: request.currentUser.handle,
-        }
-      : null;
+    const reader = request.currentUser ? toFeedReader(request.currentUser) : null;
 
     return streamEvents(
       request,
@@ -142,7 +137,7 @@ export function registerEventsRoute(app: FastifyInstance, services: AppServices)
       return sendError(reply, 400, "invalid_params", "simulation id is invalid");
     }
 
-    const reader = { id: user.id, isAdmin: user.isAdmin, handle: user.handle };
+    const reader = toFeedReader(user);
     const simulationId = params.data.id;
 
     try {

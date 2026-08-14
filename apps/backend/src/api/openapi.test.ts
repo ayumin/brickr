@@ -1,8 +1,20 @@
+import { MAX_PASSWORD_LENGTH, MAX_POST_LENGTH, MIN_PASSWORD_LENGTH } from "@brickr/shared";
 import Fastify from "fastify";
 import { afterEach, describe, expect, it } from "vitest";
 import type { AppServices } from "../services.js";
 import { openApiDocument, registerOpenApi } from "./openapi.js";
 import { registerRoutes } from "./routes.js";
+
+type SchemaObjectWithProperties = {
+  properties?: Record<string, { minLength?: number; maxLength?: number; pattern?: string }>;
+  minProperties?: number;
+};
+
+function schema(name: string): SchemaObjectWithProperties {
+  const found = openApiDocument.components?.schemas?.[name];
+  if (!found || "$ref" in found) throw new Error(`no inline schema named "${name}"`);
+  return found as SchemaObjectWithProperties;
+}
 
 const expectedPaths = [
   "/api/health",
@@ -168,5 +180,53 @@ describe("OpenAPI documentation", () => {
     expect(uiResponse.statusCode).toBe(200);
     expect(uiResponse.headers["content-type"]).toContain("text/html");
     expect(uiResponse.body).toContain("Brickr API Documentation");
+  });
+});
+
+/**
+ * Request schemas are derived from schemas.ts (api/openapi-schemas.ts), so
+ * `components.schemas.X === requestSchema(xSchema)` by construction — that
+ * equality is not worth asserting. What is worth asserting is the actual
+ * constraint values the document ends up serving, cross-checked against the
+ * shared constants the validator itself uses: this is what would catch
+ * either side changing a bound without the other moving too.
+ */
+describe("openapi request schema field constraints", () => {
+  it("LoginRequest.password matches the shared password length bounds", () => {
+    expect(schema("LoginRequest").properties?.password).toMatchObject({
+      minLength: 1,
+      maxLength: MAX_PASSWORD_LENGTH,
+    });
+  });
+
+  it("SignupRequest.password matches the shared password length bounds", () => {
+    expect(schema("SignupRequest").properties?.password).toMatchObject({
+      minLength: MIN_PASSWORD_LENGTH,
+      maxLength: MAX_PASSWORD_LENGTH,
+    });
+  });
+
+  it("CreatePost.content matches the shared post length bound", () => {
+    expect(schema("CreatePost").properties?.content).toMatchObject({
+      maxLength: MAX_POST_LENGTH,
+    });
+  });
+
+  it("SaveCharacter.handle keeps the shared handle pattern", () => {
+    expect(schema("SaveCharacter").properties?.handle).toMatchObject({
+      pattern: "^[a-z0-9_]{3,32}$",
+    });
+  });
+
+  it("SaveCharacter.rolePrompt/tonePrompt keep their length bounds", () => {
+    const properties = schema("SaveCharacter").properties;
+    expect(properties?.rolePrompt).toMatchObject({ minLength: 1, maxLength: 4000 });
+    expect(properties?.tonePrompt).toMatchObject({ minLength: 1, maxLength: 4000 });
+  });
+
+  it("UpdateApplicationSettingsRequest.overrides requires at least one entry", () => {
+    expect(schema("UpdateApplicationSettingsRequest").properties?.overrides).toMatchObject({
+      minProperties: 1,
+    });
   });
 });

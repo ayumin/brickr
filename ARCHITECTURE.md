@@ -404,7 +404,7 @@ Thread状態から`reply`、`quote`、`post`を決めます。選択結果は次
 
 ### 6.3 Round/Waveを永続化しない
 
-実装上の`runRound`は、ある対象Postへ反応するCharacter集合を処理し、その結果からcascadeを
+実装上の`processTarget`は、ある対象Postへ反応するCharacter集合を処理し、その結果からcascadeを
 再帰的に開始する制御関数です。Domain ModelやDBにRound/Waveは存在しません。
 
 各CharacterはLLM呼び出しの直前に`ThreadService`から現在のThreadを読み直します。

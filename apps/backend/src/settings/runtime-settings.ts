@@ -1,5 +1,6 @@
 import type { EditableApplicationSettingName } from "@brickr/shared";
 import { env } from "../config/env.js";
+import { DomainError } from "../domain-error.js";
 
 export type RuntimeSettingsValues = {
   models: { openai: string; anthropic: string; gemini: string };
@@ -133,9 +134,7 @@ function settingValue(values: RuntimeSettingsValues, name: EditableApplicationSe
   return String(values.simulation.maxCascadeDepth);
 }
 
-export class InvalidApplicationSettingError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "InvalidApplicationSettingError";
-  }
+export class InvalidApplicationSettingError extends DomainError {
+  readonly httpStatus = 400;
+  readonly errorCode = "invalid_setting" as const;
 }

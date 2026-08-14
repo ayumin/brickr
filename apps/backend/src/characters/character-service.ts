@@ -9,138 +9,58 @@ import type {
   SaveCharacterRequest,
 } from "@brickr/shared";
 import { randomUUID } from "node:crypto";
-import type { UserAccount } from "../auth/user-account.js";
-import { LLMError, LLMTimeoutError } from "../llm/provider.js";
+import { DomainError } from "../domain-error.js";
 import type { ModelProfileRepository } from "../model-profiles/model-profile-repository.js";
-import type { ModelProfile } from "../model-profiles/model-profile.js";
+import { CharacterBulkCreationJobs } from "./character-bulk-creation-job.js";
+import { CharacterCsvService } from "./character-csv-service.js";
 import type { CharacterRepository } from "./character-repository.js";
 import type { Character, SaveCharacter } from "./character.js";
 import {
-  CharacterCsvError,
-  exportCharactersCsv,
-  parseCharactersCsv,
-} from "./character-csv.js";
-import {
-  CharacterPersonaParseError,
-  type CharacterPersonaGenerator,
-} from "./character-generator.js";
+  toCharacterConfigDto,
+  toCharacterDto,
+  toCharacterManagementDto,
+  type CharacterActor,
+} from "./character-dto.js";
+import { CharacterGenerationError, type CharacterPersonaGenerator } from "./character-generator.js";
 import { CHARACTER_SEEDS } from "./character-seeds.js";
 import { DEMO_AVATAR_COUNT, demoAvatarDataUrl } from "./demo-avatar.js";
 
-/**
- * Strips the persona and behaviour fields.
- *
- * Ordinary timeline/profile responses stay lightweight. The editor uses the
- * separate config DTO below; provider credentials are never included.
- */
-export function toCharacterDto(character: Character): CharacterDto {
-  return {
-    id: character.id,
-    handle: character.handle,
-    displayName: character.displayName,
-    description: character.description,
-    ...(character.avatarUrl ? { avatarUrl: character.avatarUrl } : {}),
-  };
-}
-
-/** The signed-in caller, reduced to what an ownership check needs (CLAUDE.md §66.5). */
-export type CharacterActor = Pick<UserAccount, "id" | "isAdmin">;
-
-/**
- * Whether `createdByUserId` may be shown to this viewer: the creator or an
- * admin — never anyone else, and never for a System-owned (seed) character,
- * which has none (CLAUDE.md §66.5).
- */
-function canSeeOwner(
-  character: Pick<Character, "createdByUserId">,
-  viewer: CharacterActor | null,
-): boolean {
-  return viewer !== null && (viewer.isAdmin || viewer.id === character.createdByUserId);
-}
-
-export function toCharacterConfigDto(
-  character: Character,
-  viewer: CharacterActor | null,
-): CharacterConfigDto {
-  const ownerVisible = canSeeOwner(character, viewer);
-  return {
-    ...toCharacterDto(character),
-    rolePrompt: character.rolePrompt,
-    tonePrompt: character.tonePrompt,
-    ...(character.dialectPrompt ? { dialectPrompt: character.dialectPrompt } : {}),
-    interests: character.interests,
-    activityLevel: character.activityLevel,
-    responseProbability: character.responseProbability,
-    replyProbability: character.replyProbability,
-    quoteProbability: character.quoteProbability,
-    influence: character.influence,
-    modelProfileId: character.modelProfileId,
-    ...(ownerVisible && character.createdByUserId
-      ? { createdByUserId: character.createdByUserId }
-      : {}),
-  };
-}
-
-export function toCharacterManagementDto(
-  character: Character,
-  postCount: number,
-  viewer: CharacterActor | null = null,
-): CharacterManagementDto {
-  const ownerVisible = canSeeOwner(character, viewer);
-  return {
-    ...toCharacterDto(character),
-    isDeleted: Boolean(character.deletedAt),
-    postCount,
-    activityLevel: character.activityLevel,
-    responseProbability: character.responseProbability,
-    replyProbability: character.replyProbability,
-    quoteProbability: character.quoteProbability,
-    influence: character.influence,
-    modelProfileId: character.modelProfileId,
-    ...(ownerVisible && character.createdByUserId
-      ? { createdByUserId: character.createdByUserId }
-      : {}),
-  };
-}
-
-export class CharacterNotFoundError extends Error {
+export class CharacterNotFoundError extends DomainError {
+  readonly httpStatus = 404;
+  readonly errorCode = "not_found" as const;
   constructor(id: string) {
     super(`character "${id}" not found`);
-    this.name = "CharacterNotFoundError";
   }
 }
 
 /** Edit/delete/restore is limited to the creator or an admin (CLAUDE.md §66.5). */
-export class CharacterForbiddenError extends Error {
+export class CharacterForbiddenError extends DomainError {
+  readonly httpStatus = 403;
+  readonly errorCode = "forbidden" as const;
   constructor(id: string) {
     super(`not allowed to modify character "${id}"`);
-    this.name = "CharacterForbiddenError";
   }
 }
 
-export class CharacterHandleConflictError extends Error {
+export class CharacterHandleConflictError extends DomainError {
+  readonly httpStatus = 409;
+  readonly errorCode = "handle_conflict" as const;
   constructor(handle: string) {
     super(`handle "@${handle}" is already in use`);
-    this.name = "CharacterHandleConflictError";
   }
 }
 
-export class ModelProfileNotFoundError extends Error {
+export class ModelProfileNotFoundError extends DomainError {
+  readonly httpStatus = 404;
+  readonly errorCode = "not_found" as const;
   constructor(id: string) {
     super(`model profile "${id}" not found`);
-    this.name = "ModelProfileNotFoundError";
-  }
-}
-
-export class CharacterGenerationError extends Error {
-  constructor(options?: { cause?: unknown }) {
-    super("characters could not be generated by the LLM", options);
-    this.name = "CharacterGenerationError";
   }
 }
 
 export class CharacterService {
-  private readonly bulkCreationJobs = new Map<string, CharacterBulkCreationJobDto>();
+  private readonly bulkCreationJobs: CharacterBulkCreationJobs;
+  private readonly csv: CharacterCsvService;
   /** Seed avatars occupy the start of the pool; generated characters continue after them. */
   private nextDemoAvatarIndex = CHARACTER_SEEDS.length % DEMO_AVATAR_COUNT;
 
@@ -149,7 +69,16 @@ export class CharacterService {
     private readonly modelProfiles: ModelProfileRepository,
     private readonly personaGenerator: CharacterPersonaGenerator,
     private readonly random: () => number = Math.random,
-  ) {}
+  ) {
+    // Assigned here, not as field initializers: under this project's
+    // `target: ES2022` (useDefineForClassFields defaults to true), a field
+    // initializer runs before constructor parameter properties are assigned,
+    // so both would close over an as-yet-uninitialized `this`/`this.characters`.
+    this.bulkCreationJobs = new CharacterBulkCreationJobs((count, userId, onProgress) =>
+      this.createMany(count, userId, onProgress),
+    );
+    this.csv = new CharacterCsvService(characters, modelProfiles);
+  }
 
   async listDtos(): Promise<CharacterDto[]> {
     const all = await this.characters.findAll();
@@ -181,88 +110,11 @@ export class CharacterService {
   }
 
   async exportCsv(): Promise<ExportCharactersCsvResponse> {
-    const [characters, profiles] = await Promise.all([
-      this.characters.findAllIncludingDeleted(),
-      this.modelProfiles.findAll(),
-    ]);
-    const postCounts = await this.characters.countPostsByCharacterIds(
-      characters.map((character) => character.id),
-    );
-    return {
-      filename: `brickr-characters-${new Date().toISOString().slice(0, 10)}.csv`,
-      csv: exportCharactersCsv(
-        characters,
-        new Map(profiles.map((profile) => [profile.id, profile])),
-        postCounts,
-      ),
-    };
+    return this.csv.exportCsv();
   }
 
   async importCsv(csv: string): Promise<ImportCharactersCsvResponse> {
-    const rows = parseCharactersCsv(csv);
-    const [existingCharacters, existingProfiles] = await Promise.all([
-      this.characters.findAllIncludingDeleted(),
-      this.modelProfiles.findAll(),
-    ]);
-    const byId = new Map(existingCharacters.map((character) => [character.id, character]));
-    const byHandle = new Map(existingCharacters.map((character) => [character.handle, character]));
-    const profiles = new Map(existingProfiles.map((profile) => [profile.id, profile]));
-    const missingProfiles = new Map<string, ModelProfile>();
-    const entries: Array<{ id: string; input: SaveCharacter; isDeleted: boolean }> = [];
-    let createdCount = 0;
-
-    for (const row of rows) {
-      const idMatch = row.id ? byId.get(row.id) : undefined;
-      const handleMatch = byHandle.get(row.handle);
-      if (idMatch && handleMatch && idMatch.id !== handleMatch.id) {
-        throw new CharacterCsvError(
-          `id「${row.id}」とhandle「@${row.handle}」が別の既存キャラクターを指しています。`,
-        );
-      }
-      const existing = idMatch ?? handleMatch;
-      const id = existing?.id ?? (row.id || randomUUID());
-      if (!existing) createdCount += 1;
-
-      if (!profiles.has(row.modelProfileId) && !missingProfiles.has(row.modelProfileId)) {
-        missingProfiles.set(row.modelProfileId, {
-          id: row.modelProfileId,
-          providerId: row.providerId,
-          model: row.model,
-        });
-      }
-      entries.push({
-        id,
-        isDeleted: row.isDeleted,
-        input: {
-          handle: row.handle,
-          displayName: row.displayName,
-          description: row.description,
-          rolePrompt: row.rolePrompt,
-          tonePrompt: row.tonePrompt,
-          ...(row.dialectPrompt ? { dialectPrompt: row.dialectPrompt } : {}),
-          interests: row.interests,
-          activityLevel: row.activityLevel,
-          responseProbability: row.responseProbability,
-          replyProbability: row.replyProbability,
-          quoteProbability: row.quoteProbability,
-          influence: row.influence,
-          modelProfileId: row.modelProfileId,
-          ...(row.avatarUrl ? { avatarUrl: row.avatarUrl } : {}),
-        },
-      });
-    }
-
-    await this.modelProfiles.ensureAll([...missingProfiles.values()]);
-    try {
-      await this.characters.importMany(entries);
-    } catch (cause) {
-      throw new CharacterCsvError("CSVのキャラクターを保存できませんでした。重複するidまたはhandleを確認してください。", { cause });
-    }
-    return {
-      importedCount: entries.length,
-      createdCount,
-      updatedCount: entries.length - createdCount,
-    };
+    return this.csv.importCsv(csv);
   }
 
   async findDto(id: string): Promise<CharacterDto | null> {
@@ -330,55 +182,11 @@ export class CharacterService {
   }
 
   startCreateMany(count: number, createdByUserId: string): CharacterBulkCreationJobDto {
-    const id = randomUUID();
-    const job: CharacterBulkCreationJobDto = {
-      id,
-      status: "generating",
-      completed: 0,
-      total: count,
-      createdCount: 0,
-    };
-    this.bulkCreationJobs.set(id, job);
-    this.pruneBulkCreationJobs();
-
-    void this.createMany(count, createdByUserId, (completed) => {
-      this.bulkCreationJobs.set(id, {
-        ...job,
-        status: completed >= count ? "saving" : "generating",
-        completed,
-      });
-    })
-      .then((created) => {
-        this.bulkCreationJobs.set(id, {
-          ...job,
-          status: "completed",
-          completed: count,
-          createdCount: created.length,
-        });
-      })
-      .catch((error: unknown) => {
-        const current = this.bulkCreationJobs.get(id) ?? job;
-        this.bulkCreationJobs.set(id, {
-          ...current,
-          status: "failed",
-          error: characterGenerationFailureMessage(error),
-        });
-      });
-
-    return job;
+    return this.bulkCreationJobs.start(count, createdByUserId);
   }
 
   findBulkCreationJob(id: string): CharacterBulkCreationJobDto | null {
-    return this.bulkCreationJobs.get(id) ?? null;
-  }
-
-  private pruneBulkCreationJobs(): void {
-    const maximumJobs = 100;
-    while (this.bulkCreationJobs.size > maximumJobs) {
-      const oldestId = this.bulkCreationJobs.keys().next().value as string | undefined;
-      if (!oldestId) return;
-      this.bulkCreationJobs.delete(oldestId);
-    }
+    return this.bulkCreationJobs.find(id);
   }
 
   private reserveDemoAvatars(count: number): number {
@@ -465,26 +273,6 @@ export class CharacterService {
 
 function randomProbability(random: () => number): number {
   return Math.round(Math.min(1, Math.max(0, random())) * 100) / 100;
-}
-
-function characterGenerationFailureMessage(error: unknown): string {
-  const cause = error instanceof CharacterGenerationError ? error.cause : error;
-  if (cause instanceof LLMTimeoutError) {
-    return `LLMの応答がタイムアウトしました: ${safeErrorDetail(cause.message)}`;
-  }
-  if (cause instanceof LLMError) {
-    return `LLM APIの呼び出しに失敗しました: ${safeErrorDetail(cause.message)}`;
-  }
-  if (cause instanceof CharacterPersonaParseError) return cause.message;
-  if (cause instanceof Error) {
-    return `キャラクター生成処理でエラーが発生しました: ${safeErrorDetail(cause.message)}`;
-  }
-  return "LLMによるキャラクター生成に失敗しました。";
-}
-
-function safeErrorDetail(message: string): string {
-  const normalized = message.replace(/\s+/gu, " ").trim();
-  return Array.from(normalized).slice(0, 240).join("");
 }
 
 function toSaveCharacter(input: SaveCharacterRequest): SaveCharacter {

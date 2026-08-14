@@ -32,6 +32,13 @@ export type ProviderModelCatalogResult = {
   failures: ProviderModelCatalogFailure[];
 };
 
+/**
+ * Order used by callers that need "a capable provider" rather than a specific
+ * one. The mock is absent on purpose: its replies are placeholders, so a
+ * caller that only wants a summary is better off with its own fallback text.
+ */
+const PREFERRED_PROVIDER_ORDER: readonly ProviderId[] = ["openai", "anthropic", "gemini"];
+
 export class LLMProviderRegistry {
   private readonly providers: Map<ProviderId, LLMProvider>;
 
@@ -61,6 +68,15 @@ export class LLMProviderRegistry {
       if (provider.available) ids.push(id);
     }
     return ids;
+  }
+
+  /** The most preferred available provider, or null when only the mock is configured. */
+  preferred(): LLMProvider | null {
+    for (const id of PREFERRED_PROVIDER_ORDER) {
+      const provider = this.providers.get(id);
+      if (provider?.available === true) return provider;
+    }
+    return null;
   }
 
   /** Fetch each configured provider independently so one failure does not hide the rest. */

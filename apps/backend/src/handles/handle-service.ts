@@ -1,7 +1,7 @@
 import type { HandleOwnerDto } from "@brickr/shared";
 import type { UserAccountRepository } from "../auth/user-account-repository.js";
 import type { CharacterRepository } from "../characters/character-repository.js";
-import { toCharacterDto } from "../characters/character-service.js";
+import { toCharacterDto } from "../characters/character-dto.js";
 import type { HandleRepository } from "./handle-repository.js";
 
 /**

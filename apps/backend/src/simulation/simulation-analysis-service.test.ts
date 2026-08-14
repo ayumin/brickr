@@ -121,7 +121,7 @@ describe("SimulationAnalysisService.analyze ownership (§66.6)", () => {
       simulations,
       posts,
       {} as unknown as LLMClient,
-      { availableIds: () => [] } as unknown as LLMProviderRegistry,
+      { preferred: () => null } as unknown as LLMProviderRegistry,
     );
   }
 

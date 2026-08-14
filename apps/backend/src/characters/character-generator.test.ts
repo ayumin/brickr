@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LLMClient } from "../llm/llm-client.js";
+import { MockProvider } from "../llm/mock-provider.js";
 import type { LLMGenerateRequest } from "../llm/provider.js";
 import type { ModelProfile } from "../model-profiles/model-profile.js";
 import {
@@ -113,6 +114,28 @@ describe("LLMCharacterPersonaGenerator", () => {
         }),
       ]),
     );
+  });
+});
+
+describe("LLMCharacterPersonaGenerator against the real MockProvider (USE_MOCK_LLM regression)", () => {
+  it("generates a full batch of valid, distinctly-named personas", async () => {
+    const mock = new MockProvider();
+    const llm = {
+      generate: (_providerId: string, request: LLMGenerateRequest) => mock.generate(request),
+    } as unknown as LLMClient;
+
+    const generated = await new LLMCharacterPersonaGenerator(llm).generate(7, PROFILE);
+
+    expect(generated).toHaveLength(7);
+    const displayNames = new Set(generated.map((persona) => persona.displayName));
+    expect(displayNames.size).toBe(7);
+    for (const persona of generated) {
+      expect(persona.displayName.trim().length).toBeGreaterThan(0);
+      expect(persona.description.trim().length).toBeGreaterThan(0);
+      expect(persona.rolePrompt.trim().length).toBeGreaterThan(0);
+      expect(persona.tonePrompt.trim().length).toBeGreaterThan(0);
+      expect(persona.interests.length).toBeGreaterThan(0);
+    }
   });
 });
 

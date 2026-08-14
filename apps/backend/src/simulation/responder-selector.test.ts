@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { Character } from "../characters/character.js";
+import type { Post } from "../posts/post.js";
 import type { Rng } from "./responder-selector.js";
-import { selectResponders, shouldRespond } from "./responder-selector.js";
+import { selectCascadeResponders, selectResponders, shouldRespond } from "./responder-selector.js";
 
 /**
  * Deterministic rng: hands out the queued values in order, then clamps to the
@@ -430,5 +431,77 @@ describe("shouldRespond", () => {
     };
 
     expect(countFor(0.9)).toBeGreaterThan(countFor(0.1));
+  });
+});
+
+function makePost(overrides: Partial<Post> & { mentions: string[] }): Post {
+  return {
+    id: "post-1",
+    simulationId: "sim-1",
+    authorId: "author",
+    content: "hello",
+    replyTo: null,
+    quoteOf: null,
+    threadRootId: "post-1",
+    threadActivityAt: new Date("2026-01-01T00:00:00Z"),
+    createdAt: new Date("2026-01-01T00:00:00Z"),
+    ...overrides,
+  };
+}
+
+describe("selectCascadeResponders", () => {
+  it("always includes a mentioned character", () => {
+    // rng() = 1 makes shouldRespond's `rng() < chance` false for everyone, so
+    // only the mention path can produce a result here.
+    const followers = selectCascadeResponders({
+      allCharacters: cast,
+      producedPost: makePost({ mentions: ["skeptic"] }),
+      author: architect,
+      depth: 0,
+      rng: makeRng([1]),
+    });
+
+    expect(ids(followers)).toEqual(["c-skeptic"]);
+  });
+
+  it("never lets the author react to itself, even if self-mentioned", () => {
+    const followers = selectCascadeResponders({
+      allCharacters: cast,
+      producedPost: makePost({ mentions: ["architect"] }),
+      author: architect,
+      depth: 0,
+      rng: makeRng([1]),
+    });
+
+    expect(followers).toEqual([]);
+  });
+
+  it("caps opportunistic reactions at MAX_CASCADE_RESPONDERS", () => {
+    // rng() = 0 makes shouldRespond's `rng() < chance` true for anyone with a
+    // positive chance, so every non-author character is a candidate.
+    const followers = selectCascadeResponders({
+      allCharacters: cast,
+      producedPost: makePost({ mentions: [] }),
+      author: architect,
+      depth: 0,
+      rng: makeRng([0]),
+    });
+
+    expect(followers).toHaveLength(2);
+  });
+
+  it("does not double-count a mentioned character as an opportunistic one too", () => {
+    const followers = selectCascadeResponders({
+      allCharacters: cast,
+      producedPost: makePost({ mentions: ["skeptic"] }),
+      author: architect,
+      depth: 0,
+      rng: makeRng([0]),
+    });
+
+    const skepticCount = followers.filter((character) => character.id === "c-skeptic").length;
+    expect(skepticCount).toBe(1);
+    // The mention plus at most MAX_CASCADE_RESPONDERS opportunistic reactions.
+    expect(followers.length).toBeLessThanOrEqual(3);
   });
 });
