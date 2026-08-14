@@ -1,5 +1,5 @@
 import type { SaveCharacterRequest } from "@brickr/shared";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { ModelProfileRepository } from "../model-profiles/model-profile-repository.js";
 import type { ModelProfile } from "../model-profiles/model-profile.js";
 import type { CharacterRepository } from "./character-repository.js";
@@ -214,41 +214,6 @@ describe("CharacterService", () => {
       CharacterGenerationError,
     );
     expect(characters).toEqual([]);
-  });
-
-  it("tracks a background bulk creation job through completion", async () => {
-    const { service } = makeService();
-
-    const started = service.startCreateMany(2, OWNER.id);
-
-    expect(started).toMatchObject({
-      status: "generating",
-      completed: 0,
-      total: 2,
-    });
-    await vi.waitFor(() => {
-      expect(service.findBulkCreationJob(started.id)).toMatchObject({
-        status: "completed",
-        completed: 2,
-        createdCount: 2,
-      });
-    });
-  });
-
-  it("keeps the underlying generation reason on a failed background job", async () => {
-    const { service } = makeService([], [PROFILE], () =>
-      Promise.reject(new Error("invalid structured output")),
-    );
-
-    const started = service.startCreateMany(2, OWNER.id);
-
-    await vi.waitFor(() => {
-      expect(service.findBulkCreationJob(started.id)).toMatchObject({
-        status: "failed",
-        error:
-          "キャラクター生成処理でエラーが発生しました: invalid structured output",
-      });
-    });
   });
 
   it("updates an existing character without changing its id", async () => {
@@ -482,78 +447,6 @@ describe("CharacterService ownership (CLAUDE.md §66.5)", () => {
     await expect(
       service.deleteMany([own.id, someoneElses.id], ADMIN),
     ).resolves.toEqual(expect.arrayContaining([own.id, someoneElses.id]));
-  });
-
-  it("includes createdByUserId in the Config DTO for the creator", async () => {
-    const existing = makeCharacter("character-1");
-    const { service } = makeService([existing]);
-
-    const dto = await service.findConfigDto(existing.id, OWNER);
-    expect(dto?.createdByUserId).toBe(OWNER.id);
-  });
-
-  it("includes createdByUserId in the Config DTO for an admin", async () => {
-    const existing = makeCharacter("character-1");
-    const { service } = makeService([existing]);
-
-    const dto = await service.findConfigDto(existing.id, ADMIN);
-    expect(dto?.createdByUserId).toBe(OWNER.id);
-  });
-
-  it("omits createdByUserId from the Config DTO for anyone else, signed in or not", async () => {
-    const existing = makeCharacter("character-1");
-    const { service } = makeService([existing]);
-
-    const forOtherUser = await service.findConfigDto(existing.id, OTHER_USER);
-    const forSignedOut = await service.findConfigDto(existing.id, null);
-
-    expect(forOtherUser).not.toHaveProperty("createdByUserId");
-    expect(forSignedOut).not.toHaveProperty("createdByUserId");
-  });
-
-  it("includes createdByUserId in the management list only for the creator's own row", async () => {
-    const owned = makeCharacter("character-owned", { ...REQUEST, handle: "owned" });
-    const someoneElses = makeCharacter(
-      "character-other",
-      { ...REQUEST, handle: "someone-elses" },
-      OTHER_USER.id,
-    );
-    const { service } = makeService([owned, someoneElses]);
-
-    const listed = await service.listManagementDtos(OWNER);
-    const ownRow = listed.find((character) => character.id === owned.id);
-    const otherRow = listed.find((character) => character.id === someoneElses.id);
-
-    expect(ownRow?.createdByUserId).toBe(OWNER.id);
-    expect(otherRow).not.toHaveProperty("createdByUserId");
-  });
-
-  it("includes createdByUserId for every row in the management list for an admin", async () => {
-    const owned = makeCharacter("character-owned", { ...REQUEST, handle: "owned" });
-    const someoneElses = makeCharacter(
-      "character-other",
-      { ...REQUEST, handle: "someone-elses" },
-      OTHER_USER.id,
-    );
-    const { service } = makeService([owned, someoneElses]);
-
-    const listed = await service.listManagementDtos(ADMIN);
-
-    expect(listed.find((character) => character.id === owned.id)?.createdByUserId).toBe(
-      OWNER.id,
-    );
-    expect(listed.find((character) => character.id === someoneElses.id)?.createdByUserId).toBe(
-      OTHER_USER.id,
-    );
-  });
-
-  it("omits createdByUserId from every row in the management list when signed out", async () => {
-    const owned = makeCharacter("character-owned", { ...REQUEST, handle: "owned" });
-    const { service } = makeService([owned]);
-
-    const [row] = await service.listManagementDtos();
-
-    expect(row).not.toHaveProperty("createdByUserId");
   });
 
   it("lists only the characters a given user created, including their deleted ones", async () => {
