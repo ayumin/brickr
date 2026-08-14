@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { PostAuthorDto, PostDto } from "@brickr/shared";
+import type { FeedThreadDto, PostAuthorDto, PostDto } from "@brickr/shared";
 
 import {
   buildReplyIndex,
@@ -8,6 +8,8 @@ import {
   countReposts,
   flattenReplies,
   selectAuthorTimeline,
+  selectFeedReplyOverflowCount,
+  selectFeedReplyPreview,
   selectRoomTimeline,
   selectSeparateDetailReferenceId,
   selectReposts,
@@ -409,5 +411,96 @@ describe("selectAuthorTimeline", () => {
 
   it("returns an empty array for an author with no posts", () => {
     expect(selectAuthorTimeline([makePost("a", 1)], "nobody")).toEqual([]);
+  });
+});
+
+const FULL_CAPABILITIES: FeedThreadDto["capabilities"] = {
+  canOpenAuthor: true,
+  canOpenRoom: true,
+  canOpenThread: true,
+  canReply: true,
+  canQuote: true,
+  canLoadMoreReplies: true,
+};
+
+function makeThread(
+  root: PostDto,
+  latestReplies: PostDto[],
+  overrides: { replyCount?: number; capabilities?: FeedThreadDto["capabilities"] } = {},
+): FeedThreadDto {
+  return {
+    root,
+    room: { id: root.simulationId, title: "ルーム", isFeed: false },
+    latestReplies,
+    replyCount: overrides.replyCount ?? latestReplies.length,
+    lastActivityAt: root.createdAt,
+    capabilities: overrides.capabilities ?? FULL_CAPABILITIES,
+  };
+}
+
+describe("selectFeedReplyPreview", () => {
+  it("returns an empty array when the thread has no previewed replies", () => {
+    const thread = makeThread(makePost("root", 0, { author: userAuthor }), []);
+    expect(selectFeedReplyPreview(thread)).toEqual([]);
+  });
+
+  it("resolves a direct reply to the root's handle", () => {
+    const root = makePost("root", 0, { author: userAuthor });
+    const reply = makePost("reply", 1, { replyTo: "root", author: characterAuthor("skeptic") });
+    const thread = makeThread(root, [reply]);
+
+    const [entry] = selectFeedReplyPreview(thread);
+    expect(entry?.post.id).toBe("reply");
+    expect(entry?.replyToHandle).toBe(TEST_USER_HANDLE);
+  });
+
+  it("resolves a reply-to-reply to the other previewed reply's handle, not the root's", () => {
+    const root = makePost("root", 0, { author: userAuthor });
+    const first = makePost("first", 1, { replyTo: "root", author: characterAuthor("architect") });
+    const second = makePost("second", 2, { replyTo: "first", author: characterAuthor("skeptic") });
+    const thread = makeThread(root, [first, second]);
+
+    const preview = selectFeedReplyPreview(thread);
+    expect(preview.map((entry) => entry.replyToHandle)).toEqual([TEST_USER_HANDLE, "architect"]);
+  });
+
+  it("does not guess a target outside the preview window", () => {
+    // "second" actually replies to an earlier reply that did not make the
+    // newest-two cut, so the feed cannot know whose handle to show.
+    const root = makePost("root", 0, { author: userAuthor });
+    const second = makePost("second", 5, { replyTo: "an-earlier-reply-not-previewed" });
+    const thread = makeThread(root, [second]);
+
+    expect(selectFeedReplyPreview(thread)[0]?.replyToHandle).toBeNull();
+  });
+
+  it("preserves the given oldest-to-newest order rather than re-sorting", () => {
+    // Deliberately out of chronological order: the function must trust the
+    // server's selection/ordering, not recompute it.
+    const root = makePost("root", 0, { author: userAuthor });
+    const newer = makePost("newer", 5, { replyTo: "root" });
+    const older = makePost("older", 1, { replyTo: "root" });
+    const thread = makeThread(root, [newer, older]);
+
+    expect(selectFeedReplyPreview(thread).map((entry) => entry.post.id)).toEqual(["newer", "older"]);
+  });
+});
+
+describe("selectFeedReplyOverflowCount", () => {
+  it("is zero when every reply is already previewed", () => {
+    const root = makePost("root", 0, { author: userAuthor });
+    const reply = makePost("reply", 1, { replyTo: "root" });
+    expect(selectFeedReplyOverflowCount(makeThread(root, [reply]))).toBe(0);
+  });
+
+  it("counts replies beyond the previewed two", () => {
+    const root = makePost("root", 0, { author: userAuthor });
+    const previewed = [makePost("a", 1, { replyTo: "root" }), makePost("b", 2, { replyTo: "root" })];
+    expect(selectFeedReplyOverflowCount(makeThread(root, previewed, { replyCount: 5 }))).toBe(3);
+  });
+
+  it("never goes negative", () => {
+    const root = makePost("root", 0, { author: userAuthor });
+    expect(selectFeedReplyOverflowCount(makeThread(root, [], { replyCount: 0 }))).toBe(0);
   });
 });

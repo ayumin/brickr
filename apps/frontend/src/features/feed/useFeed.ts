@@ -116,11 +116,10 @@ export function useFeed(scope: FeedScope, filter: FeedFilter, enabled: boolean =
   }, []);
 
   const upsertThread = useCallback((thread: FeedThreadDto) => {
-    // Always applied regardless of `filter`: a thread this account just
-    // authored always "concerns" it (§12.3), so the SSE-only mine-restriction
-    // in `feed-reducer` (§4 論点2(iii)) must not suppress it here.
-    dispatch({ kind: "upsertThread", thread, filter: "all" });
-  }, []);
+    // Pass the active filter so the reducer's mine-guard (§4 論点2(iii)) can
+    // reject a brand-new thread that doesn't satisfy the current scope.
+    dispatch({ kind: "upsertThread", thread, filter });
+  }, [filter]);
 
   const dismissGenerationWarning = useCallback(() => {
     dispatch({ kind: "dismissGenerationWarning" });
