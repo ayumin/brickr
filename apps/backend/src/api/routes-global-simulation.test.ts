@@ -40,6 +40,8 @@ function makeServices(): AppServices {
       submitUserPost: () => Promise.resolve({ id: "p1" }),
     },
     posts: { toDto: () => Promise.resolve({ id: "p1" }) },
+    // The create-post response carries the thread as well as the post (§13.4).
+    feed: { buildThreadForReader: () => Promise.resolve({ root: { id: "p1" } }) },
     simulationAnalysis: { analyze: refuse },
   } as unknown as AppServices;
 }
@@ -113,5 +115,12 @@ describe("global simulation over HTTP (§8.2)", () => {
     });
 
     expect(response.statusCode).toBe(201);
+    // The thread travels with the post (§13.4). Without it the feed would have to
+    // rebuild the reply preview, the count and capabilities to show your own post,
+    // which is the server's feed logic implemented a second time (§11.3).
+    expect(response.json()).toMatchObject({
+      post: { id: "p1" },
+      thread: { root: { id: "p1" } },
+    });
   });
 });

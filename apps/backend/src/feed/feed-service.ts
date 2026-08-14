@@ -21,6 +21,7 @@ import type { ThreadActivityEvent } from "../simulation/public-events.js";
 import { toFeedCapabilities } from "./feed-capabilities.js";
 import { decodeFeedCursor, encodeFeedCursor } from "./feed-cursor.js";
 import type { FeedRepository, FeedRoom, FeedThreadRow } from "./feed-repository.js";
+import { withReaderCapabilities } from "./public-events.js";
 
 /**
  * A thread's root post could not be resolved — the id given is not a root, its
@@ -196,6 +197,22 @@ export class FeedService {
     });
 
     return { type: "thread.activity", simulationId: root.simulationId, room, thread };
+  }
+
+  /**
+   * The thread a just-created post belongs to, as its author may see it (§13.4).
+   *
+   * Built from `buildThreadActivity`, so the response to a post and the event the
+   * stream sends for that same post are the one thread described once. The feed
+   * keys both on `thread.root.id`, which is what lets the echo update the entry
+   * this response created rather than adding a second copy of it.
+   */
+  async buildThreadForReader(
+    post: Post,
+    reader: NonNullable<FeedReader>,
+  ): Promise<FeedThreadDto> {
+    const activity = await this.buildThreadActivity(post);
+    return withReaderCapabilities(activity.thread, activity.room, reader);
   }
 
   /**
