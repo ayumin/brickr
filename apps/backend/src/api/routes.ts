@@ -18,7 +18,7 @@ import {
   serializeSessionCookie,
   type SessionCookieOptions,
 } from "../auth/session-cookie.js";
-import { toAuthUserDto, toUserManagementDto } from "../auth/user-account.js";
+import { toAuthUserDto, toUserManagementDto, type UserAccount } from "../auth/user-account.js";
 import { env } from "../config/env.js";
 import type { AppServices } from "../services.js";
 import { InvalidApplicationSettingError } from "../settings/runtime-settings.js";

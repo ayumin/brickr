@@ -45,6 +45,7 @@ export type AppServices = {
   modelProfiles: ModelProfileService;
   userProfile: UserProfileService;
   posts: PostService;
+  feed: FeedService;
   simulations: SimulationService;
   simulationAnalysis: SimulationAnalysisService;
   events: EventHub;

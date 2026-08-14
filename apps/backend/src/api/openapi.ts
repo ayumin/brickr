@@ -25,13 +25,41 @@ const jsonResponse = (
   content: { "application/json": { schema } },
 });
 
-const idParameter = (description: string): OpenAPIV3.ParameterObject => ({
-  name: "id",
+const pathParameter = (
+  name: string,
+  description: string,
+): OpenAPIV3.ParameterObject => ({
+  name,
   in: "path",
   required: true,
   description,
   schema: { type: "string", minLength: 1, maxLength: 64 },
 });
+
+const idParameter = (description: string): OpenAPIV3.ParameterObject =>
+  pathParameter("id", description);
+
+/**
+ * Paging is server-owned (§9.4): the page size is fixed and the cursor is opaque,
+ * so only `filter` and a previously issued cursor are accepted.
+ */
+const feedParameters: OpenAPIV3.ParameterObject[] = [
+  {
+    name: "filter",
+    in: "query",
+    required: false,
+    description:
+      "`all` (default) or `mine` — threads whose root is yours, that reply to a post of yours, or that mention your handle. `mine` requires a session.",
+    schema: { type: "string", enum: ["all", "mine"], default: "all" },
+  },
+  {
+    name: "cursor",
+    in: "query",
+    required: false,
+    description: "Opaque cursor returned as `nextCursor` by the previous page.",
+    schema: { type: "string", maxLength: 512 },
+  },
+];
 
 const errorResponses = {
   "400": { $ref: "#/components/responses/BadRequest" },
