@@ -14,10 +14,24 @@ const generatedPersonaSchema = z.object({
   rolePrompt: z.string().trim().min(1).max(4_000),
   tonePrompt: z.string().trim().min(1).max(4_000),
   dialectPrompt: z.string().trim().max(2_000).nullable().optional(),
-  interests: z.array(z.string().trim().min(1).max(80)).max(20),
+  // The system prompt asks for 1〜5 interests; a 0-length array was never a
+  // valid response, just an unenforced gap between this and the JSON Schema
+  // sent to the LLM (which already required minItems: 1).
+  interests: z.array(z.string().trim().min(1).max(80)).min(1).max(20),
 });
 
 export type GeneratedCharacterPersona = z.infer<typeof generatedPersonaSchema>;
+
+/**
+ * The shape requested from the LLM's structured output, not the shape parsed
+ * back (`generatedPersonaSchema`). `dialectPrompt` becomes a required plain
+ * string here because every `character_N` key must have all properties
+ * present (CLAUDE.md §50) — parsing still accepts a missing/null value
+ * unchanged, so this is deliberately not the same schema both ways.
+ */
+const characterWireSchema = generatedPersonaSchema.extend({
+  dialectPrompt: z.string().trim().max(2_000),
+});
 
 export class CharacterPersonaParseError extends Error {
   constructor(message: string, options?: { cause?: unknown }) {
@@ -190,32 +204,20 @@ export function parseGeneratedPersonas(
   return generated as GeneratedCharacterPersona[];
 }
 
+/**
+ * Derived from `characterWireSchema` (CLAUDE.md §50: Anthropic rejects
+ * `minItems > 1`, so `characters` is a fixed-key object rather than an array)
+ * so the length limits requested from the LLM can never drift from the ones
+ * `parseGeneratedPersonas` enforces on the way back.
+ */
 export function characterGenerationJsonSchema(count: number): Record<string, unknown> {
   const keys = characterKeys(count);
-  const characterSchema = {
-    type: "object",
-    additionalProperties: false,
-    properties: {
-      displayName: { type: "string" },
-      description: { type: "string" },
-      rolePrompt: { type: "string" },
-      tonePrompt: { type: "string" },
-      dialectPrompt: { type: "string" },
-      interests: {
-        type: "array",
-        minItems: 1,
-        items: { type: "string" },
-      },
-    },
-    required: [
-      "displayName",
-      "description",
-      "rolePrompt",
-      "tonePrompt",
-      "dialectPrompt",
-      "interests",
-    ],
+  const characterSchema: Record<string, unknown> = {
+    ...z.toJSONSchema(characterWireSchema, { unrepresentable: "any" }),
   };
+  // `$schema` is meaningful only at a document's root; embedded as a nested
+  // property value here, it is noise some providers' strict validators reject.
+  delete characterSchema.$schema;
   return {
     type: "object",
     additionalProperties: false,
