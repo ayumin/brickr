@@ -193,6 +193,8 @@ erDiagram
   SIMULATION {
     string id PK
     string status
+    string scope
+    datetime lastActivityAt
     string createdByUserId FK
   }
   POST {
@@ -201,6 +203,8 @@ erDiagram
     string authorId
     string replyTo FK
     string quoteOf FK
+    string threadRootId
+    datetime threadActivityAt
   }
   USER_PROFILE {
     string id PK
@@ -240,6 +244,16 @@ erDiagram
 重要な判断:
 
 - `Post.authorId`はUserProfile/Characterへの外部キーではありません。UserとCharacterが同じPostを使うためです。
+  公開Post DTOは`author`だけを返し、種別（人間かAIか）を示すfieldも重複した`authorId`も含みません。
+  投稿の自分判定は`post.author.id`で行います。
+- `Post.threadRootId`と`Post.threadActivityAt`は統合Feedのための非正規化値です。`replyTo`の再帰探索では
+  全Simulation横断の20スレッドPagingが実用速度になりません。Top-level PostはID生成後に自身をRootとして
+  記録し、ReplyはParentのRootを継承してRootの`threadActivityAt`を更新します。ParentのRootは書き込み
+  Transaction内で読み取るため、Serviceが先に読んだ古いRootを書き込むことはありません。Quote Postは
+  独立Rootのため引用元の順位を変えません。
+- `Simulation.scope`は内部専用です。`scope = "global"`の予約Simulation（固定ID）が統合Feedの投稿先で、
+  Room一覧には出さず、改名・停止・再開・分析をService層で拒否します。`lastActivityAt`はRoom一覧の
+  活動順並びに使います。
 - UserとCharacterのhandle一意性は`HandleOwner.handle`で横断的に保証します。予約語はShared Packageと
   Frontend Routerでも共通利用します。
 - `Session`はCookieの生TokenではなくSHA-256 hashだけを保存します。期限切れ・未知・停止UserのSessionは
@@ -251,11 +265,21 @@ erDiagram
 - Characterの論理削除は`deletedAt`を設定し、過去Postを維持します。完全削除では、外部キーを
   持たない`Post.authorId`をCharacter削除前に明示的に削除します。この2操作は同一Transactionで
   実行され、対象Postを参照する他のReply/QuoteはSelf Relationの`onDelete: SetNull`に従います。
+  他Accountの返信は巻き添え削除しないため、同一Transaction内で`threadRootId`を修復します。親を失った
+  残存Postを新Rootにし、その子孫のRootを付け替え、新Rootの`threadActivityAt`とSimulationの
+  `lastActivityAt`を再計算します。切り離された側が残存する元Rootの`threadActivityAt`も、残ったSubtreeから
+  再計算します。押し上げられた活動が別Threadへ移った後もFeed上位に留まらないためです。孤児となった
+  残存Postが存在しないRoot IDを指すことはありません。
 - ReplyとQuoteはPostのSelf Relationです。Quote専用テーブルやRepost Entityはありません。
 - `quotedPost`はDTO生成時に1階層だけ平坦化します。再帰的な巨大Payloadを防ぎます。
 - Avatarと投稿画像は現在Data URLとしてText列へ保存します。
 
-Seedは再実行可能なupsertで、互換用User Profile、ModelProfile、初期Characterと共有handleを投入します。
+「ReplyのRoot ID解決」「Post作成」「Root Postの`threadActivityAt`更新」「Simulationの`lastActivityAt`更新」は
+`PostRepository.createWithThreadActivity`の単一Transactionで原子的に実行します。途中で失敗すると
+Feedの並び順が実際の投稿と食い違い、以後のPagingで重複・欠落が発生します。
+
+Seedは再実行可能なupsertで、予約Global Simulation、ModelProfile、初期Characterと共有handleを投入します。
+未ログイン投稿用の固定User（識別子`you`）は廃止され、Postの著者は必ず認証済みAccountかCharacterです。
 `ADMIN_EMAIL`と`ADMIN_PASSWORD`があれば最初のAdminも作成しますが、既存AccountのPasswordや権限は
 上書きしません。Docker Backendは起動時にSchema適用、Prisma Client生成、Seedを実行します。
 

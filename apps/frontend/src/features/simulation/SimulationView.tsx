@@ -187,9 +187,7 @@ export function SimulationView({
       if (character) return character.handle;
       // Not a character we know about: fall back to any post we've already
       // loaded that names this author, the same way `authorHandle` does below.
-      const post = events.posts.find(
-        (item) => item.authorId === targetAuthorId || item.author.id === targetAuthorId,
-      );
+      const post = events.posts.find((item) => item.author.id === targetAuthorId);
       return post?.author.handle ?? null;
     },
     [characters, events.posts, userProfile.id, userProfile.handle],
@@ -397,7 +395,7 @@ export function SimulationView({
   );
 
   const userPostCount = useMemo(
-    () => events.posts.filter((post) => post.authorId === userProfile.id).length,
+    () => events.posts.filter((post) => post.author.id === userProfile.id).length,
     [events.posts, userProfile.id],
   );
 
@@ -419,9 +417,7 @@ export function SimulationView({
     () =>
       authorId === null
         ? undefined
-        : events.posts.find(
-            (post) => post.authorId === authorId || post.author.id === authorId,
-          ),
+        : events.posts.find((post) => post.author.id === authorId),
     [authorId, events.posts],
   );
 
@@ -439,9 +435,7 @@ export function SimulationView({
     () =>
       authorId === null
         ? 0
-        : events.posts.filter(
-            (post) => post.authorId === authorId || post.author.id === authorId,
-          ).length,
+        : events.posts.filter((post) => post.author.id === authorId).length,
     [authorId, events.posts],
   );
 

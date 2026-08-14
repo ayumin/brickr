@@ -28,10 +28,37 @@ function characterRow(id: string) {
   };
 }
 
-/** Mocks the interactive transaction client the repository now asks for. */
-function makeDb() {
+type PostFindManyArgs = {
+  where: { authorId?: { in?: string[]; notIn?: string[] }; replyTo?: { in: string[] } };
+};
+
+/**
+ * Mocks the interactive transaction client the repository now asks for.
+ *
+ * `postFindMany` answers by intent rather than by call order, so a change in the
+ * number of queries the repair walk makes does not silently rewire the test.
+ */
+function makeDb(
+  postFindMany: (
+    args: PostFindManyArgs,
+  ) => Array<{ id: string; simulationId?: string; threadRootId?: string }> = () => [],
+) {
   const tx = {
-    post: { deleteMany: vi.fn(() => Promise.resolve({ count: 3 })) },
+    post: {
+      deleteMany: vi.fn(() => Promise.resolve({ count: 3 })),
+      findMany: vi.fn((args: PostFindManyArgs) => Promise.resolve(postFindMany(args))),
+      updateMany: vi.fn(() => Promise.resolve({ count: 0 })),
+      update: vi.fn(() => Promise.resolve({})),
+      aggregate: vi.fn(() =>
+        Promise.resolve({ _max: { createdAt: null, threadActivityAt: null } }),
+      ),
+    },
+    simulation: {
+      update: vi.fn(() => Promise.resolve({})),
+      findUnique: vi.fn(() =>
+        Promise.resolve({ createdAt: new Date("2026-08-01T00:00:00Z") }),
+      ),
+    },
     character: {
       create: vi.fn(({ data }: { data: { id: string } }) =>
         Promise.resolve(characterRow(data.id)),
@@ -124,5 +151,78 @@ describe("CharacterRepository hard deletion", () => {
       where: { ownerType: "character", ownerId: { in: ["character-1"] } },
     });
     expect(db.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * The ordering is the whole trick (§8.5): the database nulls `replyTo` on the
+   * surviving replies, so once the delete has run there is nothing left to
+   * identify the posts that just lost their parent.
+   */
+  it("reads the replies it orphans before deleting, and repairs them after", async () => {
+    const calls: string[] = [];
+    const { db, tx } = makeDb((args) => {
+      if (args.where.authorId?.in) {
+        calls.push("read-doomed");
+        return [{ id: "root-1", simulationId: "sim-1", threadRootId: "root-1" }];
+      }
+      if (args.where.authorId?.notIn) {
+        calls.push("read-orphans");
+        return [{ id: "reply-1" }];
+      }
+      calls.push("walk-subtree");
+      return [];
+    });
+    tx.post.deleteMany.mockImplementation(() => {
+      calls.push("delete");
+      return Promise.resolve({ count: 1 });
+    });
+
+    await new CharacterRepository(db).hardDeleteMany(["character-1"]);
+
+    expect(calls.slice(0, 3)).toEqual(["read-doomed", "read-orphans", "delete"]);
+    expect(tx.post.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ["reply-1"] } },
+      data: { threadRootId: "reply-1" },
+    });
+    // Other accounts' replies survive; only the deleted character's posts go.
+    expect(tx.post.deleteMany).toHaveBeenCalledWith({
+      where: { authorId: { in: ["character-1"] } },
+    });
+    expect(tx.simulation.update).toHaveBeenCalledWith({
+      where: { id: "sim-1" },
+      data: { lastActivityAt: new Date("2026-08-01T00:00:00Z") },
+    });
+  });
+
+  /**
+   * The thread a deleted reply belonged to is only recorded on the reply itself,
+   * so its root has to be read before the delete as well — otherwise the root
+   * keeps the activity time the now-detached subtree earned it (§8.5).
+   */
+  it("reads the root of each deleted post, so a surviving root can be re-dated", async () => {
+    const { db, tx } = makeDb((args) => {
+      if (args.where.authorId?.in) {
+        return [{ id: "reply-1", simulationId: "sim-1", threadRootId: "root-1" }];
+      }
+      if (args.where.authorId?.notIn) return [{ id: "reply-2" }];
+      return [];
+    });
+
+    await new CharacterRepository(db).hardDeleteMany(["character-1"]);
+
+    expect(tx.post.findMany).toHaveBeenCalledWith({
+      where: { authorId: { in: ["character-1"] } },
+      select: { id: true, simulationId: true, threadRootId: true },
+    });
+    // The surviving root is walked for what is left of its thread, the deleted
+    // reply is not.
+    expect(tx.post.findMany).toHaveBeenCalledWith({
+      where: { replyTo: { in: ["root-1"] } },
+      select: { id: true },
+    });
+    expect(tx.post.findMany).not.toHaveBeenCalledWith({
+      where: { replyTo: { in: ["reply-1"] } },
+      select: { id: true },
+    });
   });
 });

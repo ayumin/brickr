@@ -36,11 +36,13 @@ function makeCharacter(overrides: Partial<Character> & { id: string }): Characte
 function makePost(overrides: Partial<Post> & { id: string }): Post {
   return {
     simulationId: "sim-1",
-    authorId: "you",
+    authorId: "user-1",
     content: "RAGって本当に必要？",
     mentions: [],
     replyTo: null,
     quoteOf: null,
+    threadRootId: overrides.id,
+    threadActivityAt: new Date("2026-01-01T00:00:00Z"),
     createdAt: new Date("2026-01-01T00:00:00Z"),
     ...overrides,
   };

@@ -1,4 +1,4 @@
-import type { SimulationStatus } from "@brickr/shared";
+import type { SimulationScope, SimulationStatus } from "@brickr/shared";
 import type { Db } from "../persistence/prisma.js";
 import type { Simulation, SimulationSummary } from "./simulation.js";
 
@@ -6,7 +6,9 @@ type SimulationRow = {
   id: string;
   title: string | null;
   status: string;
+  scope: string;
   createdAt: Date;
+  lastActivityAt: Date;
   createdByUserId: string | null;
 };
 
@@ -15,7 +17,9 @@ function toSimulation(row: SimulationRow): Simulation {
     id: row.id,
     title: row.title,
     status: row.status as SimulationStatus,
+    scope: row.scope as SimulationScope,
     createdAt: row.createdAt,
+    lastActivityAt: row.lastActivityAt,
     ...(row.createdByUserId ? { createdByUserId: row.createdByUserId } : {}),
   };
 }
@@ -23,15 +27,31 @@ function toSimulation(row: SimulationRow): Simulation {
 export class SimulationRepository {
   constructor(private readonly db: Db) {}
 
+  /**
+   * A room, always. The global row is seeded, never created here (§8.2).
+   *
+   * `lastActivityAt` starts at the creation time so an empty room still sorts
+   * sensibly in an activity-ordered list.
+   */
   async create(title: string | null, createdByUserId: string): Promise<Simulation> {
+    const createdAt = new Date();
     const row = await this.db.simulation.create({
-      data: { title, status: "active", createdByUserId },
+      data: {
+        title,
+        status: "active",
+        scope: "room",
+        createdByUserId,
+        createdAt,
+        lastActivityAt: createdAt,
+      },
     });
     return toSimulation(row);
   }
 
+  /** Rooms only: the global simulation is the feed, not an entry in the room list (§8.2). */
   async findAll(): Promise<SimulationSummary[]> {
     const rows = await this.db.simulation.findMany({
+      where: { scope: "room" },
       include: { _count: { select: { posts: true } } },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     });

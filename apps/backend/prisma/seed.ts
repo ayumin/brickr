@@ -1,31 +1,40 @@
 import { CHARACTER_SEEDS } from "../src/characters/character-seeds.js";
 import { MODEL_PROFILE_SEEDS } from "../src/model-profiles/model-profile-seeds.js";
 import { prisma } from "../src/persistence/prisma.js";
-import { USER_AUTHOR_ID, USER_DISPLAY_NAME, USER_HANDLE } from "@brickr/shared";
+import { GLOBAL_SIMULATION_ID, GLOBAL_SIMULATION_TITLE } from "@brickr/shared";
 import { demoAvatarDataUrl } from "../src/characters/demo-avatar.js";
 import { bootstrapAdmin, describeAdminBootstrap } from "../src/auth/admin-bootstrap.js";
 import { UserAccountRepository } from "../src/auth/user-account-repository.js";
 import { env } from "../src/config/env.js";
 
 /**
- * Idempotent seed: model profiles first, then characters.
+ * Idempotent seed: the global simulation, model profiles, then characters.
  *
  * Runs on every container start, so it upserts rather than inserts.
+ *
+ * There is no pre-login account any more (§8.2): posting requires a session, so
+ * every post author is a real signed-in account or a character.
  */
 async function main(): Promise<void> {
-  await prisma.userProfile.upsert({
-    where: { id: USER_AUTHOR_ID },
+  // The room behind the unified feed. `update` deliberately restores the title
+  // and scope, so a stray rename cannot leave the feed looking like a room.
+  await prisma.simulation.upsert({
+    where: { id: GLOBAL_SIMULATION_ID },
     create: {
-      id: USER_AUTHOR_ID,
-      displayName: USER_DISPLAY_NAME,
-      description: "",
-      handle: USER_HANDLE,
+      id: GLOBAL_SIMULATION_ID,
+      title: GLOBAL_SIMULATION_TITLE,
+      status: "active",
+      scope: "global",
+      createdByUserId: null,
     },
-    // Backfills the handle of the pre-login singleton without touching the
-    // profile fields the user may already have edited.
-    update: { handle: USER_HANDLE },
+    update: {
+      title: GLOBAL_SIMULATION_TITLE,
+      status: "active",
+      scope: "global",
+      createdByUserId: null,
+    },
   });
-  await claimHandle(USER_HANDLE, "user", USER_AUTHOR_ID);
+  console.log("seeded the global simulation");
 
   for (const profile of MODEL_PROFILE_SEEDS) {
     await prisma.modelProfile.upsert({

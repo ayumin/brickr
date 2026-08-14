@@ -20,8 +20,7 @@ function post(
   return {
     id,
     simulationId: "simulation-1",
-    authorId: "you",
-    author: overrides.author ?? { id: "you", kind: "user", handle: "you", displayName: "あなた" },
+    author: overrides.author ?? { id: "user-1", handle: "hanako", displayName: "花子" },
     content: `${id} content`,
     mentions: [],
     replyTo: overrides.replyTo ?? null,
@@ -51,7 +50,6 @@ describe("simulation author ranking", () => {
   it("ranks authors by authored posts and includes activity breakdowns", () => {
     const character = {
       id: "character-1",
-      kind: "character" as const,
       handle: "alice",
       displayName: "Alice",
     };
@@ -64,7 +62,7 @@ describe("simulation author ranking", () => {
 
     expect(ranking).toEqual([
       expect.objectContaining({
-        author: expect.objectContaining({ id: "you" }),
+        author: expect.objectContaining({ id: "user-1" }),
         postCount: 2,
         replyCount: 1,
         repostCount: 0,
@@ -106,7 +104,9 @@ describe("SimulationAnalysisService.analyze ownership (§66.6)", () => {
     id: "sim-1",
     title: null,
     status: "active",
+    scope: "room",
     createdAt: new Date("2026-08-10T00:00:00Z"),
+    lastActivityAt: new Date("2026-08-10T00:00:00Z"),
     createdByUserId: "user-1",
   };
 

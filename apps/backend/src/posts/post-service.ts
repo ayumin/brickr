@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { PostDto } from "@brickr/shared";
 import type { CharacterRepository } from "../characters/character-repository.js";
 import type { Character } from "../characters/character.js";
@@ -40,7 +41,12 @@ export class PostService {
       [...userHandles, ...known.map((character) => character.handle)],
     );
 
+    // The id is minted here, before the insert, so a top-level post can store
+    // `threadRootId = id` in one write instead of an insert plus an update (§8.3).
+    const id = randomUUID();
+
     const newPost: NewPost = {
+      id,
       simulationId: input.simulationId,
       authorId: input.authorId,
       content: input.content,
@@ -50,7 +56,10 @@ export class PostService {
       quoteOf: input.quoteOf ?? null,
     };
 
-    return this.posts.create(newPost);
+    // The thread root and both activity timestamps are resolved inside the write
+    // transaction (§8.4), so nothing here can describe a thread that has since
+    // changed.
+    return this.posts.createWithThreadActivity(newPost);
   }
 
   async findById(id: string): Promise<Post | null> {

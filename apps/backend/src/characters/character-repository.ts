@@ -1,4 +1,5 @@
 import { claimHandle, releaseHandles } from "../handles/handle-claim.js";
+import { repairThreads } from "../posts/thread-repair.js";
 import type { Db } from "../persistence/prisma.js";
 import type { Character, SaveCharacter } from "./character.js";
 
@@ -205,14 +206,52 @@ export class CharacterRepository {
   /**
    * The only path that frees a handle. Soft deletion keeps it reserved, because
    * the character still appears as the author of past posts (§48).
+   *
+   * Only this character's posts go: replies written by other accounts stay, as
+   * they always have. That is why the thread information has to be repaired
+   * afterwards (§8.5) — `threadRootId` is denormalised, so a deleted root would
+   * otherwise leave its surviving replies pointing at an id that no longer
+   * exists, and those threads would vanish from the feed.
    */
   async hardDeleteMany(ids: string[]): Promise<void> {
     if (ids.length === 0) return;
     await this.db.$transaction(
       async (tx) => {
+        // `threadRootId` is read here for the same reason: a deleted reply is the
+        // only record of which thread it was pushing forward.
+        const doomed = await tx.post.findMany({
+          where: { authorId: { in: ids } },
+          select: { id: true, simulationId: true, threadRootId: true },
+        });
+        const doomedIds = new Set(doomed.map((post) => post.id));
+
+        // Read before the delete: `replyTo` is set to null by the database, so
+        // afterwards there is no way to tell which posts just lost their parent.
+        const orphans =
+          doomed.length === 0
+            ? []
+            : await tx.post.findMany({
+                where: {
+                  replyTo: { in: doomed.map((post) => post.id) },
+                  authorId: { notIn: ids },
+                },
+                select: { id: true },
+              });
+
         await tx.post.deleteMany({ where: { authorId: { in: ids } } });
         await tx.character.deleteMany({ where: { id: { in: ids } } });
         await releaseHandles(tx, "character", ids);
+
+        await repairThreads(tx, {
+          newRootIds: orphans.map((post) => post.id),
+          // A root that outlives the reply deleted under it keeps crediting
+          // activity that has just moved to another thread, so it is re-dated
+          // too. Roots deleted in this same call have nothing left to repair.
+          detachedRootIds: [...new Set(doomed.map((post) => post.threadRootId))].filter(
+            (rootId) => !doomedIds.has(rootId),
+          ),
+          simulationIds: [...new Set(doomed.map((post) => post.simulationId))],
+        });
       },
       { timeout: BULK_TRANSACTION_TIMEOUT_MS },
     );

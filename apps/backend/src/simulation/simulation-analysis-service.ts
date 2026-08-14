@@ -11,6 +11,7 @@ import type { LLMProviderRegistry } from "../llm/provider-registry.js";
 import type { PostService } from "../posts/post-service.js";
 import type { SimulationRepository } from "./simulation-repository.js";
 import {
+  assertNotGlobalSimulation,
   assertSimulationOwnerOrAdmin,
   SimulationNotFoundError,
   toSimulationDto,
@@ -40,6 +41,8 @@ export class SimulationAnalysisService {
   async analyze(id: string, actor: SimulationActor): Promise<SimulationAnalysisDto> {
     const simulation = await this.simulations.findById(id);
     if (!simulation) throw new SimulationNotFoundError(id);
+    // The feed is not a room, so it has no room analysis (§8.2).
+    assertNotGlobalSimulation(simulation);
     assertSimulationOwnerOrAdmin(simulation, actor);
 
     const posts = await this.posts.listBySimulation(id);

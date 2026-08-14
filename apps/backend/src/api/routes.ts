@@ -30,7 +30,9 @@ import {
   CharacterNotFoundError,
   ModelProfileNotFoundError,
 } from "../characters/character-service.js";
+import { ReplyTargetNotFoundError } from "../posts/post-repository.js";
 import {
+  GlobalSimulationMutationError,
   PostNotFoundError,
   SimulationForbiddenError,
   SimulationNotFoundError,
@@ -695,7 +697,13 @@ function handleDomainError(reply: FastifyReply, error: unknown): FastifyReply {
   if (error instanceof CharacterNotFoundError || error instanceof ModelProfileNotFoundError) {
     return sendError(reply, 404, "not_found", error.message);
   }
-  if (error instanceof CharacterForbiddenError || error instanceof SimulationForbiddenError) {
+  if (
+    error instanceof CharacterForbiddenError ||
+    error instanceof SimulationForbiddenError ||
+    // Managing the global feed as if it were a room: refused for everyone,
+    // admins included (§8.2).
+    error instanceof GlobalSimulationMutationError
+  ) {
     return sendError(reply, 403, "forbidden", error.message);
   }
   if (error instanceof CharacterHandleConflictError) {
@@ -710,7 +718,7 @@ function handleDomainError(reply: FastifyReply, error: unknown): FastifyReply {
   if (error instanceof SimulationNotFoundError) {
     return sendError(reply, 404, "not_found", error.message);
   }
-  if (error instanceof PostNotFoundError) {
+  if (error instanceof PostNotFoundError || error instanceof ReplyTargetNotFoundError) {
     return sendError(reply, 404, "not_found", error.message);
   }
   if (error instanceof SimulationStoppedError) {

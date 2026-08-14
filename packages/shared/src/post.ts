@@ -1,14 +1,16 @@
-/** Where a post came from. The user and characters share one post model. */
-export type AuthorKind = "user" | "character";
+import type { PublicAccountDto } from "./public-profile.js";
 
-/** Denormalised author info so the timeline can render without extra lookups. */
-export type PostAuthorDto = {
-  id: string;
-  kind: AuthorKind;
-  handle: string;
-  displayName: string;
-  avatarUrl?: string;
-};
+/**
+ * Denormalised author info so the timeline can render without extra lookups.
+ *
+ * Derived from `PublicAccountDto` so a post author and a public profile can
+ * never drift apart: whether the account is a person or a character is
+ * deliberately absent from both (Brickr-ux-refine §9.1).
+ */
+export type PostAuthorDto = Pick<
+  PublicAccountDto,
+  "id" | "handle" | "displayName" | "avatarUrl"
+>;
 
 /** A quoted post, flattened one level deep (no recursive quoting in the UI). */
 export type QuotedPostDto = {
@@ -22,7 +24,10 @@ export type QuotedPostDto = {
 export type PostDto = {
   id: string;
   simulationId: string;
-  authorId: string;
+  /**
+   * No sibling `authorId`: the id lives on `author` alone, so "is this mine?" is
+   * always `post.author.id === sessionUser.id` (§9.1).
+   */
   author: PostAuthorDto;
   content: string;
   /** Optional image attachment. Only allowed on a top-level user post. */

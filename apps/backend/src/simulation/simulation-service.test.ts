@@ -1,4 +1,4 @@
-import { USER_AUTHOR_ID, type PostDto, type SseEvent } from "@brickr/shared";
+import { GLOBAL_SIMULATION_ID, type PostDto, type SseEvent } from "@brickr/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentService, GenerateRequest, GeneratedPost } from "../agents/agent-service.js";
 import type { CharacterRepository } from "../characters/character-repository.js";
@@ -10,6 +10,7 @@ import type { ThreadContext, ThreadService } from "../posts/thread-service.js";
 import { EventHub } from "./event-hub.js";
 import type { SimulationRepository } from "./simulation-repository.js";
 import {
+  GlobalSimulationMutationError,
   SimulationForbiddenError,
   SimulationService,
   type SimulationActor,
@@ -17,11 +18,19 @@ import {
 } from "./simulation-service.js";
 import type { Simulation } from "./simulation.js";
 
+/**
+ * The signed-in person who starts every submission in these tests. A UUID, not
+ * the retired `you` singleton: posting always belongs to a real account (§8.2).
+ */
+const USER_AUTHOR_ID = "11111111-1111-4111-8111-111111111111";
+
 const SIMULATION: Simulation = {
   id: "sim-1",
   title: "test",
   status: "active",
+  scope: "room",
   createdAt: new Date("2026-01-01T00:00:00Z"),
+  lastActivityAt: new Date("2026-01-01T00:00:00Z"),
   createdByUserId: USER_AUTHOR_ID,
 };
 
@@ -48,6 +57,8 @@ function makeCharacter(id: string, overrides: Partial<Character> = {}): Characte
 
 type HarnessOptions = {
   characters: Character[];
+  /** Defaults to an ordinary room owned by `USER_AUTHOR_ID`. */
+  simulation?: Simulation;
   generate?: (request: GenerateRequest) => Promise<GeneratedPost>;
   maxConcurrentCharacters?: number;
   maxCascadeDepth?: number;
@@ -78,14 +89,16 @@ function makeHarness(options: HarnessOptions): Harness {
   const tokenUsageRecords: TokenUsageRecord[] = [];
   let nextPostId = 1;
 
+  const simulation = options.simulation ?? SIMULATION;
+
   const simulationRepository = {
-    create: (): Promise<Simulation> => Promise.resolve(SIMULATION),
+    create: (): Promise<Simulation> => Promise.resolve(simulation),
     findById: (id: string): Promise<Simulation | null> =>
-      Promise.resolve(id === SIMULATION.id ? SIMULATION : null),
+      Promise.resolve(id === simulation.id ? simulation : null),
     updateStatus: (_id: string, status: Simulation["status"]): Promise<Simulation> =>
-      Promise.resolve({ ...SIMULATION, status }),
+      Promise.resolve({ ...simulation, status }),
     updateTitle: (_id: string, title: string): Promise<Simulation> =>
-      Promise.resolve({ ...SIMULATION, title }),
+      Promise.resolve({ ...simulation, title }),
   } as unknown as SimulationRepository;
 
   const characterRepository = {
@@ -99,18 +112,13 @@ function makeHarness(options: HarnessOptions): Harness {
     return {
       id: post.id,
       simulationId: post.simulationId,
-      authorId: post.authorId,
+      // One shape for both: nothing in a public post says whether its author is
+      // a person or a character (§9.1).
       author:
         post.authorId === USER_AUTHOR_ID
-          ? {
-              id: USER_AUTHOR_ID,
-              kind: "user",
-              handle: "you",
-              displayName: "あなた",
-            }
+          ? { id: USER_AUTHOR_ID, handle: "hanako", displayName: "花子" }
           : {
               id: post.authorId,
-              kind: "character",
               handle: character?.handle ?? post.authorId,
               displayName: character?.displayName ?? post.authorId,
             },
@@ -125,15 +133,24 @@ function makeHarness(options: HarnessOptions): Harness {
 
   const postService = {
     publish(input: PublishInput): Promise<Post> {
+      const id = `post-${String(nextPostId)}`;
+      const createdAt = new Date(`2026-01-01T00:00:${String(nextPostId).padStart(2, "0")}Z`);
+      const parent = input.replyTo
+        ? posts.find((candidate) => candidate.id === input.replyTo)
+        : undefined;
       const post: Post = {
-        id: `post-${String(nextPostId)}`,
+        id,
         simulationId: input.simulationId,
         authorId: input.authorId,
         content: input.content,
         mentions: knownMentions(input.content, options.characters),
         replyTo: input.replyTo ?? null,
         quoteOf: input.quoteOf ?? null,
-        createdAt: new Date(`2026-01-01T00:00:${String(nextPostId).padStart(2, "0")}Z`),
+        // Mirrors the real service: a reply joins its parent's thread, anything
+        // else — a quote repost included — starts its own (§8.3).
+        threadRootId: parent?.threadRootId ?? id,
+        threadActivityAt: createdAt,
+        createdAt,
       };
       nextPostId += 1;
       posts.push(post);
@@ -464,6 +481,52 @@ describe("SimulationService ownership (CLAUDE.md §66.6)", () => {
     await expect(
       harness.service.rename(SIMULATION.id, "new title", OTHER_USER),
     ).rejects.toBeInstanceOf(SimulationForbiddenError);
+  });
+});
+
+/**
+ * The reserved global simulation is the feed. Managing it as a room would break
+ * every screen at once, so it is refused in the service rather than only in the
+ * UI, which an API call goes straight past (§8.2).
+ */
+describe("SimulationService global feed protection (§8.2)", () => {
+  const GLOBAL: Simulation = {
+    id: GLOBAL_SIMULATION_ID,
+    title: "フィード",
+    status: "active",
+    scope: "global",
+    createdAt: new Date("2026-01-01T00:00:00Z"),
+    lastActivityAt: new Date("2026-01-01T00:00:00Z"),
+  };
+
+  const ADMIN: SimulationActor = { id: "admin-1", isAdmin: true };
+
+  it("refuses rename, stop and resume — for an admin too, since it has no owner", async () => {
+    const harness = makeHarness({ characters: [makeCharacter("alpha")], simulation: GLOBAL });
+
+    await expect(harness.service.rename(GLOBAL.id, "世界", ADMIN)).rejects.toBeInstanceOf(
+      GlobalSimulationMutationError,
+    );
+    await expect(harness.service.stop(GLOBAL.id, ADMIN)).rejects.toBeInstanceOf(
+      GlobalSimulationMutationError,
+    );
+    await expect(harness.service.resume(GLOBAL.id, ADMIN)).rejects.toBeInstanceOf(
+      GlobalSimulationMutationError,
+    );
+  });
+
+  it("still accepts posts, because posting into the feed is the point of the row", async () => {
+    const harness = makeHarness({ characters: [makeCharacter("alpha")], simulation: GLOBAL });
+
+    const post = await harness.service.submitUserPost({
+      simulationId: GLOBAL.id,
+      authorId: USER_AUTHOR_ID,
+      content: "フィードへの投稿",
+      responderIds: [],
+    });
+
+    expect(post.simulationId).toBe(GLOBAL.id);
+    expect(post.threadRootId).toBe(post.id);
   });
 });
 

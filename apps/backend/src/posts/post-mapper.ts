@@ -9,6 +9,11 @@ import type { Post } from "./post.js";
  * Users are looked up by id like characters are, rather than compared against a
  * fixed id: several people can post in one simulation (CLAUDE.md §66.3).
  *
+ * Both halves resolve to the identical shape, with nothing saying which one it
+ * was: telling a person from a character is what the feed must not reveal
+ * (Brickr-ux-refine §9.1). Hiding it in the UI would not be enough, so the field
+ * does not exist in the response at all.
+ *
  * Unknown ids fall back to a placeholder rather than throwing — a deleted
  * character must not break an existing timeline.
  */
@@ -21,7 +26,6 @@ export function toAuthorDto(
   if (user) {
     return {
       id: user.id,
-      kind: "user",
       handle: user.handle,
       displayName: user.displayName,
       ...(user.avatarUrl ? { avatarUrl: user.avatarUrl } : {}),
@@ -30,12 +34,11 @@ export function toAuthorDto(
 
   const character = charactersById.get(authorId);
   if (!character) {
-    return { id: authorId, kind: "character", handle: authorId, displayName: authorId };
+    return { id: authorId, handle: authorId, displayName: authorId };
   }
 
   return {
     id: character.id,
-    kind: "character",
     handle: character.handle,
     displayName: character.displayName,
     ...(character.avatarUrl ? { avatarUrl: character.avatarUrl } : {}),
@@ -65,7 +68,6 @@ export function toPostDto(
   return {
     id: post.id,
     simulationId: post.simulationId,
-    authorId: post.authorId,
     author: toAuthorDto(post.authorId, charactersById, usersById),
     content: post.content,
     ...(post.imageUrl ? { imageUrl: post.imageUrl } : {}),

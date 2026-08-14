@@ -11,8 +11,10 @@ describe("SimulationRepository history", () => {
           id: "simulation-1",
           title: "履歴",
           status: "active",
+          scope: "room",
           createdAt,
           updatedAt: createdAt,
+          lastActivityAt: createdAt,
           _count: { posts: 42 },
         },
       ]),
@@ -24,11 +26,16 @@ describe("SimulationRepository history", () => {
         id: "simulation-1",
         title: "履歴",
         status: "active",
+        scope: "room",
         createdAt,
+        lastActivityAt: createdAt,
         postCount: 42,
       },
     ]);
+    // Rooms only: the reserved global simulation is the feed itself, never an
+    // entry in the room list (§8.2).
     expect(findMany).toHaveBeenCalledWith({
+      where: { scope: "room" },
       include: { _count: { select: { posts: true } } },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     });

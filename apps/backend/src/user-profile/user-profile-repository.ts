@@ -1,4 +1,3 @@
-import { USER_HANDLE } from "@brickr/shared";
 import { isRecordNotFoundError, type Db } from "../persistence/prisma.js";
 import type { SaveUserProfile, UserProfile } from "./user-profile.js";
 
@@ -10,12 +9,27 @@ type UserProfileRow = {
   avatarUrl: string | null;
 };
 
+/**
+ * Every account gets its handle at signup (§66.1), and the seeded pre-login row
+ * that used to lack one is gone (§8.2) — but the column is still nullable, so a
+ * read has to render something.
+ *
+ * Whatever it renders has to be shaped like a handle: a profile lives at a bare
+ * `/{handle}` (§66.2), and both `GET /api/handles/:handle` and the frontend route
+ * accept only `HANDLE_PATTERN`. A raw id is a 36-character UUID with hyphens, so
+ * it could never be reached through its own URL. Dropping the hyphens leaves 32
+ * lower-case hex characters: a valid handle, derived from the row rather than
+ * invented, and one no signup would plausibly hand out. `padEnd` only matters for
+ * an id that is not a UUID, where the 3-character floor could otherwise be missed.
+ */
+function toFallbackHandle(id: string): string {
+  return id.toLowerCase().replace(/[^a-z0-9_]/gu, "").slice(0, 32).padEnd(3, "0");
+}
+
 function toUserProfile(row: UserProfileRow): UserProfile {
   return {
     id: row.id,
-    // Only the pre-login row can lack a handle, and the seed backfills it to
-    // `you`. Falling back keeps an un-seeded database renderable.
-    handle: row.handle ?? USER_HANDLE,
+    handle: row.handle ?? toFallbackHandle(row.id),
     displayName: row.displayName,
     description: row.description,
     ...(row.avatarUrl ? { avatarUrl: row.avatarUrl } : {}),

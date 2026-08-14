@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
-import { USER_DISPLAY_NAME, type UserProfileDto } from "@brickr/shared";
+import type { UserProfileDto } from "@brickr/shared";
 import { api, isAbortError, isUnauthorizedError, toErrorMessage } from "../services/api-client";
 
 // `id`/`handle` are deliberately empty, not the seeded pre-login singleton
 // (CLAUDE.md §66.14) - that account is real and owns real posts, so reusing
 // its id as a "nobody" placeholder would make a signed-out visitor (or one
 // whose profile hasn't loaded yet) appear to own its posts and mentions.
+/** Local, not shared: this is a placeholder label, not a real account (§8.2). */
+const PLACEHOLDER_DISPLAY_NAME = "あなた";
+
 const DEFAULT_PROFILE: UserProfileDto = {
   id: "",
   handle: "",
-  displayName: USER_DISPLAY_NAME,
+  displayName: PLACEHOLDER_DISPLAY_NAME,
   description: "",
 };
 

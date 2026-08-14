@@ -10,11 +10,13 @@ function at(second: number): Date {
 function makePost(overrides: Partial<Post> & { id: string }): Post {
   return {
     simulationId: "sim-1",
-    authorId: "you",
+    authorId: "user-1",
     content: `content of ${overrides.id}`,
     mentions: [],
     replyTo: null,
     quoteOf: null,
+    threadRootId: overrides.id,
+    threadActivityAt: at(0),
     createdAt: at(0),
     ...overrides,
   };

@@ -13,23 +13,22 @@ import {
   selectUserTimeline,
 } from "./thread-utils";
 
-// A distinct fixture identity, not the seeded pre-login singleton
-// (`USER_AUTHOR_ID`/`USER_HANDLE`, CLAUDE.md §66.14) - `selectUserTimeline`/
-// `selectAuthorTimeline` take the signed-in user's id/handle as parameters
-// now, so these tests must not accidentally pass by matching a shared
-// constant instead of the argument actually under test.
+// `selectUserTimeline`/`selectAuthorTimeline` take the signed-in user's
+// id/handle as parameters, so these fixtures use their own identity: a test must
+// not pass by matching some shared constant instead of the argument under test.
 const TEST_USER_ID = "test-user-id";
 const TEST_USER_HANDLE = "testuser";
 
+// Both fixtures are the same shape on purpose: a public post says nothing about
+// whether its author is a person or a character (§9.1).
 const userAuthor: PostAuthorDto = {
   id: TEST_USER_ID,
-  kind: "user",
   handle: TEST_USER_HANDLE,
   displayName: "あなた",
 };
 
 function characterAuthor(id: string): PostAuthorDto {
-  return { id, kind: "character", handle: id, displayName: id.toUpperCase() };
+  return { id, handle: id, displayName: id.toUpperCase() };
 }
 
 type PostOverrides = {
@@ -52,7 +51,6 @@ function makePost(
   return {
     id,
     simulationId: "sim_1",
-    authorId: author.id,
     author,
     content: overrides.content ?? `post ${id}`,
     mentions: overrides.mentions ?? [],

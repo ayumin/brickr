@@ -8,6 +8,12 @@ import { PostImage } from "./PostImage";
 
 export type PostCardProps = {
   post: PostDto;
+  /**
+   * Signed-in account id, used to tint the reader's own posts. Compared against
+   * `author.id` because that is the only ownership signal a public post carries
+   * (§9.1); empty or absent means nobody is signed in.
+   */
+  currentUserId?: string;
   /** Handle of the post this one replies to, when we have it loaded. */
   replyToHandle?: string | null;
   /** Handles we recognise (characters + the user), for mention highlighting. */
@@ -38,6 +44,7 @@ export type PostCardProps = {
 
 export function PostCard({
   post,
+  currentUserId,
   replyToHandle,
   knownHandles,
   onOpenAuthor,
@@ -54,7 +61,7 @@ export function PostCard({
   dense = false,
   showQuotedPost = true,
 }: PostCardProps) {
-  const isUser = post.author.kind === "user";
+  const isOwnPost = currentUserId !== undefined && currentUserId !== "" && post.author.id === currentUserId;
   const isRepost = post.quoteOf !== null;
   const openAuthor = onOpenAuthor
     ? () => {
@@ -66,7 +73,7 @@ export function PostCard({
     <article
       className={`brickr-post-in flex gap-3 border-b border-line transition-colors ${
         dense ? "px-4 py-2.5" : "px-4 py-3.5"
-      } ${isUser ? "bg-accent-soft/50" : "hover:bg-surface-hover/60"}`}
+      } ${isOwnPost ? "bg-accent-soft/50" : "hover:bg-surface-hover/60"}`}
     >
       <button
         type="button"
@@ -117,7 +124,7 @@ export function PostCard({
               @{post.author.handle}
             </span>
           </button>
-          {isUser ? (
+          {isOwnPost ? (
             <span className="rounded-full bg-accent/20 px-1.5 py-px text-[10px] font-medium text-accent">
               あなた
             </span>
