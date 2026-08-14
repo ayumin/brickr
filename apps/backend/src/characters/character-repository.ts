@@ -123,7 +123,19 @@ export class CharacterRepository {
     return new Map(rows.map((row) => [row.authorId, row._count._all]));
   }
 
-  /** Admin drilldown onto one user's Characters (§66.5, §66.15), including their deleted ones. */
+  /** One user's live Characters — an ordinary caller's whole scope (§10.7). */
+  async findAllByCreatedByUserId(userId: string): Promise<Character[]> {
+    const rows = await this.db.character.findMany({
+      where: { createdByUserId: userId, deletedAt: null },
+      orderBy: { id: "asc" },
+    });
+    return rows.map(toCharacter);
+  }
+
+  /**
+   * One user's Characters including the deleted ones, for their management list
+   * (§10.7) and for an admin drilldown onto that user (§66.5, §66.15).
+   */
   async findAllIncludingDeletedByCreatedByUserId(userId: string): Promise<Character[]> {
     const rows = await this.db.character.findMany({
       where: { createdByUserId: userId },
@@ -258,15 +270,29 @@ export class CharacterRepository {
     );
   }
 
+  /**
+   * `createdByUserId` is written on create only, never on update: ownership is
+   * decided when a character comes into existence, and an import must not be a
+   * way to hand one over (§10.7).
+   */
   async importMany(
-    entries: Array<{ id: string; input: SaveCharacter; isDeleted: boolean }>,
+    entries: Array<{
+      id: string;
+      input: SaveCharacter;
+      isDeleted: boolean;
+      createdByUserId: string | null;
+    }>,
   ): Promise<void> {
     if (entries.length === 0) return;
     await this.db.$transaction(
       async (tx) => {
-        for (const { id, input, isDeleted } of entries) {
+        for (const { id, input, isDeleted, createdByUserId } of entries) {
           const data = { ...toWriteData(input), deletedAt: isDeleted ? new Date() : null };
-          await tx.character.upsert({ where: { id }, create: { id, ...data }, update: data });
+          await tx.character.upsert({
+            where: { id },
+            create: { id, createdByUserId, ...data },
+            update: data,
+          });
           // An import may rename an existing character, so this has to claim
           // rather than assume the handle is still free.
           await claimHandle(tx, { handle: input.handle, ownerType: "character", ownerId: id });

@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { ModelProfileRepository } from "../model-profiles/model-profile-repository.js";
 import type { ModelProfile } from "../model-profiles/model-profile.js";
 import { CharacterCsvError, exportCharactersCsv, parseCharactersCsv } from "./character-csv.js";
+import type { CharacterActor } from "./character-dto.js";
 import type { CharacterRepository } from "./character-repository.js";
 import type { SaveCharacter } from "./character.js";
 
@@ -18,9 +19,12 @@ export class CharacterCsvService {
     private readonly modelProfiles: ModelProfileRepository,
   ) {}
 
-  async exportCsv(): Promise<ExportCharactersCsvResponse> {
+  /** Scoped like the management list it mirrors: your own, everything for an admin (§10.7). */
+  async exportCsv(actor: CharacterActor): Promise<ExportCharactersCsvResponse> {
     const [characters, profiles] = await Promise.all([
-      this.characters.findAllIncludingDeleted(),
+      actor.isAdmin
+        ? this.characters.findAllIncludingDeleted()
+        : this.characters.findAllIncludingDeletedByCreatedByUserId(actor.id),
       this.modelProfiles.findAll(),
     ]);
     const postCounts = await this.characters.countPostsByCharacterIds(
@@ -36,7 +40,25 @@ export class CharacterCsvService {
     };
   }
 
-  async importCsv(csv: string): Promise<ImportCharactersCsvResponse> {
+  /**
+   * Imports characters, creating or updating by id-or-handle match (§10.7).
+   *
+   * The match is deliberately made against **every** character, not just the
+   * caller's: two accounts cannot hold the same handle (§66.13), so narrowing the
+   * lookup would turn somebody else's handle into a "new" row and fail on the
+   * handle claim instead of saying what is wrong.
+   *
+   * That is also why the ownership check below exists. Matching by id or handle
+   * across the whole table is what made this endpoint the widest hole in the
+   * management API: any signed-in caller could rewrite a System seed, or another
+   * user's character, by naming its handle in a CSV. A row the caller may not
+   * touch now rejects the whole import rather than being skipped, because a
+   * partial import that silently ignored half the file would look like it worked.
+   */
+  async importCsv(
+    csv: string,
+    actor: CharacterActor,
+  ): Promise<ImportCharactersCsvResponse> {
     const rows = parseCharactersCsv(csv);
     const [existingCharacters, existingProfiles] = await Promise.all([
       this.characters.findAllIncludingDeleted(),
@@ -46,7 +68,12 @@ export class CharacterCsvService {
     const byHandle = new Map(existingCharacters.map((character) => [character.handle, character]));
     const profiles = new Map(existingProfiles.map((profile) => [profile.id, profile]));
     const missingProfiles = new Map<string, ModelProfile>();
-    const entries: Array<{ id: string; input: SaveCharacter; isDeleted: boolean }> = [];
+    const entries: Array<{
+      id: string;
+      input: SaveCharacter;
+      isDeleted: boolean;
+      createdByUserId: string | null;
+    }> = [];
     let createdCount = 0;
 
     for (const row of rows) {
@@ -58,6 +85,11 @@ export class CharacterCsvService {
         );
       }
       const existing = idMatch ?? handleMatch;
+      if (existing && !(actor.isAdmin || existing.createdByUserId === actor.id)) {
+        throw new CharacterCsvError(
+          `handle「@${row.handle}」は他のユーザーまたはSystemが所有するキャストです。上書きできません。`,
+        );
+      }
       const id = existing?.id ?? (row.id || randomUUID());
       if (!existing) createdCount += 1;
 
@@ -71,6 +103,10 @@ export class CharacterCsvService {
       entries.push({
         id,
         isDeleted: row.isDeleted,
+        // Only used when the row turns out to be new: an update must never move a
+        // character to a different owner, or importing would become a way to take
+        // one over.
+        createdByUserId: actor.id,
         input: {
           handle: row.handle,
           displayName: row.displayName,

@@ -229,13 +229,15 @@ export function SimulationView({
     let cancelled = false;
     setHandleResolution({ status: "loading", handle: route.handle });
     api
-      .resolveHandle(route.handle)
-      .then((owner) => {
+      .resolveProfile(route.handle)
+      .then((profile) => {
         if (cancelled) return;
         setHandleResolution({
           status: "resolved",
           handle: route.handle,
-          authorId: owner.ownerType === "user" ? owner.user.id : owner.character.id,
+          // One id, whoever holds the handle: the profile response deliberately
+          // does not say whether this is a person or a cast member (§10.6).
+          authorId: profile.id,
         });
       })
       .catch((cause: unknown) => {

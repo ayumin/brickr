@@ -5,9 +5,17 @@ import { parseOr400, withSimulation } from "./route-helpers.js";
 import { createSimulationSchema, updateSimulationSchema } from "./schemas.js";
 
 export function registerSimulationRoutes(app: FastifyInstance, services: AppServices): void {
-  app.get("/api/simulations", async () => ({
-    simulations: await services.simulations.list(),
-  }));
+  /**
+   * Login required (§10.3). Rooms are not part of the public surface: an anonymous
+   * visitor reads the unified feed and nothing else (§5.1), which keeps the
+   * surface that has to be audited for leaks down to `/api/feed`.
+   */
+  app.get("/api/simulations", async (request, reply) => {
+    const user = requireUser(request, reply);
+    if (!user) return reply;
+
+    return { simulations: await services.simulations.list(user) };
+  });
 
   app.post("/api/simulations", async (request, reply) => {
     const user = requireUser(request, reply);
@@ -26,9 +34,17 @@ export function registerSimulationRoutes(app: FastifyInstance, services: AppServ
     return reply.status(201).send({ simulation });
   });
 
-  app.get("/api/simulations/:id", async (request, reply) =>
-    withSimulation(request, reply, async (id) => services.simulations.get(id)),
-  );
+  /**
+   * Basics only, and login required (§10.4). A stopped room the caller neither
+   * created nor administers answers 404, so this cannot be used to find out that
+   * somebody else's room exists.
+   */
+  app.get("/api/simulations/:id", async (request, reply) => {
+    const user = requireUser(request, reply);
+    if (!user) return reply;
+
+    return withSimulation(request, reply, async (id) => services.simulations.get(id, user));
+  });
 
   app.put("/api/simulations/:id", async (request, reply) => {
     const user = requireUser(request, reply);

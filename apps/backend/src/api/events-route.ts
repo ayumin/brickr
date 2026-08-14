@@ -141,7 +141,7 @@ export function registerEventsRoute(app: FastifyInstance, services: AppServices)
     const simulationId = params.data.id;
 
     try {
-      await services.feed.assertRoomReadable(simulationId, reader);
+      await services.feed.assertRoomFeedReadable(simulationId, reader);
     } catch (error) {
       if (error instanceof SimulationNotFoundError) {
         return sendError(reply, 404, "not_found", error.message);

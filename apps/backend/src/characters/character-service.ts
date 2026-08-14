@@ -1,5 +1,6 @@
 import type {
   CharacterConfigDto,
+  CharacterCreatorDto,
   CharacterDto,
   CharacterBulkCreationJobDto,
   CharacterManagementDto,
@@ -58,6 +59,16 @@ export class ModelProfileNotFoundError extends DomainError {
   }
 }
 
+/**
+ * Just enough of the account repository to label who owns a character (§20.3).
+ *
+ * Narrowed to one method so this service cannot grow into reading accounts for
+ * anything else — ownership is the only thing it has any business knowing.
+ */
+export type CharacterCreatorLookup = {
+  findByIds(ids: string[]): Promise<Array<{ id: string; handle: string; displayName: string }>>;
+};
+
 export class CharacterService {
   private readonly bulkCreationJobs: CharacterBulkCreationJobs;
   private readonly csv: CharacterCsvService;
@@ -68,6 +79,7 @@ export class CharacterService {
     private readonly characters: CharacterRepository,
     private readonly modelProfiles: ModelProfileRepository,
     private readonly personaGenerator: CharacterPersonaGenerator,
+    private readonly creators: CharacterCreatorLookup,
     private readonly random: () => number = Math.random,
   ) {
     // Assigned here, not as field initializers: under this project's
@@ -80,18 +92,64 @@ export class CharacterService {
     this.csv = new CharacterCsvService(characters, modelProfiles);
   }
 
-  async listDtos(): Promise<CharacterDto[]> {
+  /**
+   * All active characters, for any authenticated caller.
+   *
+   * This is the roster the composer and character picker use for @mention and
+   * responder selection. Every signed-in user needs the full cast to be able to
+   * mention or interact with system-seeded characters they did not create
+   * themselves. Ownership scoping belongs to the management endpoints
+   * (`listManagementDtos`, `findConfigDto`), not here.
+   */
+  async listDtos(_actor: CharacterActor): Promise<CharacterDto[]> {
     const all = await this.characters.findAll();
     return all.map(toCharacterDto);
   }
 
-  async listManagementDtos(viewer: CharacterActor | null = null): Promise<CharacterManagementDto[]> {
-    const all = await this.characters.findAllIncludingDeleted();
+  /**
+   * The management list, scoped to what this caller may manage (§10.7, §20.1).
+   *
+   * Soft-deleted characters are included on purpose: the screen has a filter for
+   * them, and restoring one is only possible if it can be listed first.
+   *
+   * The administrator's list is the only one that spans other people, so it is
+   * the only one that resolves `creator` — in one batched lookup, never one query
+   * per character.
+   */
+  async listManagementDtos(actor: CharacterActor): Promise<CharacterManagementDto[]> {
+    const all = actor.isAdmin
+      ? await this.characters.findAllIncludingDeleted()
+      : await this.characters.findAllIncludingDeletedByCreatedByUserId(actor.id);
     const postCounts = await this.characters.countPostsByCharacterIds(
       all.map((character) => character.id),
     );
+    const creators = actor.isAdmin ? await this.resolveCreators(all) : null;
+
     return all.map((character) =>
-      toCharacterManagementDto(character, postCounts.get(character.id) ?? 0, viewer),
+      toCharacterManagementDto(character, postCounts.get(character.id) ?? 0, actor, creators),
+    );
+  }
+
+  /**
+   * Owners of a batch of characters, keyed by user id (§20.3).
+   *
+   * A System-owned character has no owner id to look up (§66.14), so a list of
+   * nothing but seeds costs no query at all.
+   */
+  private async resolveCreators(
+    characters: Character[],
+  ): Promise<Map<string, CharacterCreatorDto>> {
+    const ids = [
+      ...new Set(characters.flatMap((character) => character.createdByUserId ?? [])),
+    ];
+    if (ids.length === 0) return new Map();
+
+    const users = await this.creators.findByIds(ids);
+    return new Map(
+      users.map((user) => [
+        user.id,
+        { id: user.id, handle: user.handle, displayName: user.displayName },
+      ]),
     );
   }
 
@@ -109,25 +167,41 @@ export class CharacterService {
     );
   }
 
-  async exportCsv(): Promise<ExportCharactersCsvResponse> {
-    return this.csv.exportCsv();
+  async exportCsv(actor: CharacterActor): Promise<ExportCharactersCsvResponse> {
+    return this.csv.exportCsv(actor);
   }
 
-  async importCsv(csv: string): Promise<ImportCharactersCsvResponse> {
-    return this.csv.importCsv(csv);
+  async importCsv(csv: string, actor: CharacterActor): Promise<ImportCharactersCsvResponse> {
+    return this.csv.importCsv(csv, actor);
   }
 
-  async findDto(id: string): Promise<CharacterDto | null> {
+  /**
+   * One character, for the caller who may manage it (§10.7).
+   *
+   * A character the caller does not own reads as absent rather than forbidden,
+   * for the same reason the config below does: see `findConfigDto`.
+   */
+  async findDto(id: string, actor: CharacterActor): Promise<CharacterDto | null> {
     const character = await this.characters.findById(id);
-    return character ? toCharacterDto(character) : null;
+    if (!character || !this.isOwnerOrAdmin(character, actor)) return null;
+    return toCharacterDto(character);
   }
 
-  async findConfigDto(
-    id: string,
-    viewer: CharacterActor | null,
-  ): Promise<CharacterConfigDto | null> {
+  /**
+   * The editor's view of one character: creator or administrator only (§10.7).
+   *
+   * Returns `null` — a 404, not a 403 — when the caller may not have it. A 403
+   * here would confirm that the id belongs to a character, and since ids are
+   * shared between accounts on the public surface, that answer alone would let
+   * anyone sort handles into people and AI (§25).
+   *
+   * This is the only path to a model profile, provider, system prompt or persona,
+   * and none of them may ever be reachable through a public profile (§10.7).
+   */
+  async findConfigDto(id: string, actor: CharacterActor): Promise<CharacterConfigDto | null> {
     const character = await this.characters.findByIdIncludingDeleted(id);
-    return character ? toCharacterConfigDto(character, viewer) : null;
+    if (!character || !this.isOwnerOrAdmin(character, actor)) return null;
+    return toCharacterConfigDto(character, actor);
   }
 
   async create(input: SaveCharacterRequest, actor: CharacterActor): Promise<CharacterConfigDto> {

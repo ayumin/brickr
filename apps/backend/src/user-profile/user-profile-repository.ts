@@ -22,8 +22,12 @@ type UserProfileRow = {
  * lower-case hex characters: a valid handle, derived from the row rather than
  * invented, and one no signup would plausibly hand out. `padEnd` only matters for
  * an id that is not a UUID, where the 3-character floor could otherwise be missed.
+ *
+ * Exported so the room list can label a creator read through its own join
+ * (§10.3) with the same handle this repository would have produced, rather than
+ * inventing a second fallback that could disagree with it.
  */
-function toFallbackHandle(id: string): string {
+export function toFallbackHandle(id: string): string {
   return id.toLowerCase().replace(/[^a-z0-9_]/gu, "").slice(0, 32).padEnd(3, "0");
 }
 

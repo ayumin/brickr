@@ -19,12 +19,25 @@
  *
  * To restore the original spread once OpenAI is funded, set these five back to
  * `openai-default` (each one is marked with a TEMPORARY comment below) and
- * re-run the seed:
+ * re-run the seed. They are named here by handle:
  *
  *   architect, kansai, lawyer, pessimist, influencer
  *
  * Nothing else has to change: `openai-default` is still registered in
  * `model-profile-seeds.ts`, and personas are independent of the provider.
+ *
+ * IDS ARE UUIDS, AND DELIBERATELY UNPATTERNED
+ *
+ * These ids used to be readable slugs equal to the handle (`architect`, `kansai`,
+ * …). A post's author id is public, so such an id announced "this account is a
+ * seeded AI character" however carefully the DTOs avoided saying so (§25). The
+ * handle keeps the readable name as its own field — a handle is public by design,
+ * and a person's looks exactly the same.
+ *
+ * The UUIDs are random rather than a tidy sequence for that same reason: a
+ * recognisable block of ids would give the game away just as the slugs did. They
+ * are hard-coded rather than generated so that re-running the seed updates these
+ * characters instead of inserting new ones every time.
  */
 import type { CharacterSeed } from "./character.js";
 
@@ -33,7 +46,7 @@ const p = (...lines: string[]): string => lines.join("\n");
 
 export const CHARACTER_SEEDS: CharacterSeed[] = [
   {
-    id: "architect",
+    id: "93898346-8cc0-4deb-a25f-51d1b003c522",
     handle: "architect",
     displayName: "設計屋タカハシ",
     description: "論点を整理し、技術・事業・運用を横断して見る設計者。",
@@ -60,7 +73,7 @@ export const CHARACTER_SEEDS: CharacterSeed[] = [
     modelProfileId: "anthropic-default",
   },
   {
-    id: "skeptic",
+    id: "947c2f27-ee52-4175-a2b7-d2c9f22ec865",
     handle: "skeptic",
     displayName: "疑い屋クロサワ",
     description: "前提と例外を先に探す、慎重で分析的な批判者。",
@@ -86,7 +99,7 @@ export const CHARACTER_SEEDS: CharacterSeed[] = [
     modelProfileId: "anthropic-default",
   },
   {
-    id: "explorer",
+    id: "26241436-02b7-4d7b-9174-70c60f0b1171",
     handle: "explorer",
     displayName: "探索するミナト",
     description: "誰も触れていない角度を探し、第三の選択肢を出す人。",
@@ -112,7 +125,7 @@ export const CHARACTER_SEEDS: CharacterSeed[] = [
     modelProfileId: "gemini-default",
   },
   {
-    id: "kansai",
+    id: "ee567776-447d-482e-950a-a04ca5f317df",
     handle: "kansai",
     displayName: "なにわのシゲさん",
     description: "地に足のついた現実派。軽くツッコミを入れるおっちゃん。",
@@ -145,7 +158,7 @@ export const CHARACTER_SEEDS: CharacterSeed[] = [
     modelProfileId: "anthropic-default",
   },
   {
-    id: "ceo",
+    id: "1cbe3222-40b7-4bda-ac86-dedd5b567904",
     handle: "ceo",
     displayName: "経営者ホシノ",
     description: "数字と速度と市場で語る経営者。決断が早い。",
@@ -171,7 +184,7 @@ export const CHARACTER_SEEDS: CharacterSeed[] = [
     modelProfileId: "anthropic-default",
   },
   {
-    id: "engineer",
+    id: "bc5296bf-62f2-4ee5-98ea-bf4d45816501",
     handle: "engineer",
     displayName: "現場エンジニアあおい",
     description: "実装と運用の現実を見る現場の人。歯に衣着せぬ。",
@@ -197,7 +210,7 @@ export const CHARACTER_SEEDS: CharacterSeed[] = [
     modelProfileId: "gemini-default",
   },
   {
-    id: "lawyer",
+    id: "b8d2753e-b774-4e0f-9ef1-ccd877838a89",
     handle: "lawyer",
     displayName: "法務のフジワラ",
     description: "契約・責任・規制の観点から慎重に見る法務担当。",
@@ -224,7 +237,7 @@ export const CHARACTER_SEEDS: CharacterSeed[] = [
     modelProfileId: "gemini-default",
   },
   {
-    id: "beginner",
+    id: "f169da11-4790-4524-902d-250137b6687f",
     handle: "beginner",
     displayName: "はじめてのユイ",
     description: "よく分からないので素直に聞く初心者。専門用語に弱い。",
@@ -250,7 +263,7 @@ export const CHARACTER_SEEDS: CharacterSeed[] = [
     modelProfileId: "anthropic-default",
   },
   {
-    id: "optimist",
+    id: "0364aa48-8f0b-48f1-9072-f89a98caf907",
     handle: "optimist",
     displayName: "まえむきハルカ",
     description: "良い面を見つけて背中を押す、明るい前向き派。",
@@ -276,7 +289,7 @@ export const CHARACTER_SEEDS: CharacterSeed[] = [
     modelProfileId: "gemini-default",
   },
   {
-    id: "pessimist",
+    id: "49280e2d-a51c-4741-a5d9-1d54678f92f0",
     handle: "pessimist",
     displayName: "心配性のナオ",
     description: "最悪のケースを先に想像してしまう、静かな心配性。",
@@ -303,7 +316,7 @@ export const CHARACTER_SEEDS: CharacterSeed[] = [
     modelProfileId: "gemini-default",
   },
   {
-    id: "contrarian",
+    id: "7a5ca756-1e4b-49cb-b041-0cd7a704600c",
     handle: "contrarian",
     displayName: "逆張りのリク",
     description: "多数派になった意見の逆側に立つ、挑発的な逆張り屋。",
@@ -329,7 +342,7 @@ export const CHARACTER_SEEDS: CharacterSeed[] = [
     modelProfileId: "anthropic-default",
   },
   {
-    id: "oldtimer",
+    id: "0f7d8df3-585b-4c27-81eb-ba210507b05e",
     handle: "oldtimer",
     displayName: "昔からいるサトウ",
     description: "昔の事例を覚えている古参。過去の失敗をよく語る。",
@@ -355,7 +368,7 @@ export const CHARACTER_SEEDS: CharacterSeed[] = [
     modelProfileId: "gemini-default",
   },
   {
-    id: "influencer",
+    id: "fc62d766-6de2-4182-8248-534680ce2b61",
     handle: "influencer",
     displayName: "バズ職人MIKA",
     description: "世間からどう見えるかだけを考えるバズ職人。言葉が短い。",
@@ -382,7 +395,7 @@ export const CHARACTER_SEEDS: CharacterSeed[] = [
     modelProfileId: "gemini-default",
   },
   {
-    id: "researcher",
+    id: "3a41c7c0-ca27-45b7-b61e-e948abfe8e78",
     handle: "researcher",
     displayName: "研究者アマノ",
     description: "定義と根拠とサンプル数を求める、乾いた研究者。",

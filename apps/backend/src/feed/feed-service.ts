@@ -12,6 +12,7 @@ import type { Post } from "../posts/post.js";
 import { isGlobalSimulation } from "../simulation/simulation.js";
 import type { SimulationRepository } from "../simulation/simulation-repository.js";
 import {
+  assertRoomReadable,
   isSimulationOwnerOrAdmin,
   SimulationNotFoundError,
   type SimulationActor,
@@ -110,7 +111,7 @@ export class FeedService {
     simulationId: string,
     request: FeedPageRequest & { reader: NonNullable<FeedReader> },
   ): Promise<FeedPageDto> {
-    await this.assertRoomReadable(simulationId, request.reader);
+    await this.assertRoomFeedReadable(simulationId, request.reader);
     return this.buildPage(request, { simulationId });
   }
 
@@ -120,17 +121,40 @@ export class FeedService {
    * Shared with the room event stream (§11.1), so a subscription can never observe
    * a room the equivalent request would refuse.
    */
-  async assertRoomReadable(
+  async assertRoomFeedReadable(
     simulationId: string,
     reader: NonNullable<FeedReader>,
   ): Promise<void> {
     const simulation = await this.simulations.findById(simulationId);
-    if (!simulation || isGlobalSimulation(simulation)) {
-      throw new SimulationNotFoundError(simulationId);
-    }
+    if (!simulation) throw new SimulationNotFoundError(simulationId);
+    assertRoomReadable(simulation, reader);
+  }
+
+  /**
+   * One post as the feed would show it, for the thread detail (§10.8).
+   *
+   * Returns `null` both when the post does not exist and when its room is
+   * stopped and the reader is neither its creator nor an administrator, so the
+   * route has a single 404 path and cannot accidentally distinguish "hidden"
+   * from "absent" — the distinction is what makes a 403 a discovery tool.
+   *
+   * A post in the global feed row is readable by every signed-in caller: unlike
+   * a room, the feed is where all history stays visible (§10.8).
+   */
+  async findVisiblePost(
+    id: string,
+    reader: NonNullable<FeedReader>,
+  ): Promise<PostDto | null> {
+    const post = await this.posts.findById(id);
+    if (!post) return null;
+
+    const simulation = await this.simulations.findById(post.simulationId);
+    if (!simulation) return null;
     if (simulation.status === "stopped" && !isSimulationOwnerOrAdmin(simulation, reader)) {
-      throw new SimulationNotFoundError(simulationId);
+      return null;
     }
+
+    return this.posts.toDto(post);
   }
 
   /**

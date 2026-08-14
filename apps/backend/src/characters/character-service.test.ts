@@ -70,6 +70,12 @@ function makeService(
     findAll: (): Promise<Character[]> =>
       Promise.resolve(characters.filter((character) => !character.deletedAt)),
     findAllIncludingDeleted: (): Promise<Character[]> => Promise.resolve([...characters]),
+    findAllByCreatedByUserId: (userId: string): Promise<Character[]> =>
+      Promise.resolve(
+        characters.filter(
+          (character) => character.createdByUserId === userId && !character.deletedAt,
+        ),
+      ),
     findAllIncludingDeletedByCreatedByUserId: (userId: string): Promise<Character[]> =>
       Promise.resolve(characters.filter((character) => character.createdByUserId === userId)),
     findById: (id: string): Promise<Character | null> =>
@@ -155,11 +161,20 @@ function makeService(
       ),
   };
 
+  // Only the administrator's management list ever asks for creators (§20.3).
+  const creators = {
+    findByIds: (ids: string[]) =>
+      Promise.resolve(
+        ids.map((id) => ({ id, handle: `handle_${id}`, displayName: `User ${id}` })),
+      ),
+  };
+
   return {
     service: new CharacterService(
       characterRepository,
       modelProfileRepository,
       personaGenerator,
+      creators,
       () => 0.37,
     ),
     characters,
@@ -235,7 +250,7 @@ describe("CharacterService", () => {
     const existing = makeCharacter("character-1");
     const { service } = makeService([existing]);
 
-    const publicDto = await service.findDto(existing.id);
+    const publicDto = await service.findDto(existing.id, OWNER);
     const configDto = await service.findConfigDto(existing.id, OWNER);
 
     expect(publicDto).not.toHaveProperty("rolePrompt");
@@ -251,7 +266,7 @@ describe("CharacterService", () => {
       new Map([[existing.id, 7]]),
     );
 
-    const [managementDto] = await service.listManagementDtos();
+    const [managementDto] = await service.listManagementDtos(OWNER);
 
     expect(managementDto).toMatchObject({
       id: existing.id,
@@ -276,8 +291,8 @@ describe("CharacterService", () => {
     };
     const { service } = makeService([active, stopped]);
 
-    await expect(service.listDtos()).resolves.toHaveLength(1);
-    await expect(service.listManagementDtos()).resolves.toEqual(
+    await expect(service.listDtos(OWNER)).resolves.toHaveLength(1);
+    await expect(service.listManagementDtos(OWNER)).resolves.toEqual(
       expect.arrayContaining([
         expect.objectContaining({ id: active.id, isDeleted: false }),
         expect.objectContaining({ id: stopped.id, isDeleted: true }),
@@ -335,7 +350,7 @@ describe("CharacterService", () => {
 
     await expect(service.restore(stopped.id, OWNER)).resolves.toBe(stopped.id);
     expect(characters[0]?.deletedAt).toBeUndefined();
-    await expect(service.listDtos()).resolves.toHaveLength(1);
+    await expect(service.listDtos(OWNER)).resolves.toHaveLength(1);
   });
 
   it("bulk deletes existing unique ids and ignores missing ids", async () => {
@@ -476,5 +491,84 @@ describe("CharacterService ownership (CLAUDE.md §66.5)", () => {
     const [row] = await service.listManagementDtosByCreator(OWNER.id, ADMIN);
 
     expect(row?.createdByUserId).toBe(OWNER.id);
+  });
+});
+
+/**
+ * `listDtos` returns all active characters to every authenticated caller so
+ * that the composer and character picker can populate @mention and responder
+ * selection with the full cast (including system-seeded characters).
+ * Ownership scoping belongs to the management endpoints only (§10.7).
+ */
+describe("CharacterService list scope", () => {
+  const someoneElses = () =>
+    makeCharacter("character-other", { ...REQUEST, handle: "someone_elses" }, OTHER_USER.id);
+  const systemOwned = () =>
+    makeCharacter("character-system", { ...REQUEST, handle: "system_owned" }, null);
+
+  it("returns all active characters to any authenticated caller, including other users' and System-owned", async () => {
+    const own = makeCharacter("character-own", { ...REQUEST, handle: "own" });
+    const { service } = makeService([own, someoneElses(), systemOwned()]);
+
+    await expect(service.listDtos(OWNER)).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: own.id }),
+        expect.objectContaining({ id: "character-other" }),
+        expect.objectContaining({ id: "character-system" }),
+      ]),
+    );
+    await expect(service.listManagementDtos(OWNER)).resolves.toEqual([
+      expect.objectContaining({ id: own.id }),
+    ]);
+  });
+
+  it("shows an administrator every character, System-owned included", async () => {
+    const own = makeCharacter("character-own", { ...REQUEST, handle: "own" });
+    const { service } = makeService([own, someoneElses(), systemOwned()]);
+
+    const listed = await service.listManagementDtos(ADMIN);
+
+    expect(listed.map((character) => character.id).sort()).toEqual(
+      ["character-other", "character-own", "character-system"].sort(),
+    );
+  });
+
+  it("labels the creator for an administrator, with null standing for System-owned", async () => {
+    const { service } = makeService([someoneElses(), systemOwned()]);
+
+    const listed = await service.listManagementDtos(ADMIN);
+
+    expect(listed.find((row) => row.id === "character-other")?.creator).toEqual({
+      id: OTHER_USER.id,
+      handle: `handle_${OTHER_USER.id}`,
+      displayName: `User ${OTHER_USER.id}`,
+    });
+    expect(listed.find((row) => row.id === "character-system")?.creator).toBeNull();
+  });
+
+  it("omits creator entirely for an ordinary caller, whose list is their own by definition", async () => {
+    const own = makeCharacter("character-own", { ...REQUEST, handle: "own" });
+    const { service } = makeService([own]);
+
+    const [row] = await service.listManagementDtos(OWNER);
+
+    expect(row).not.toHaveProperty("creator");
+  });
+
+  it("hides another user's character behind a 404 rather than a 403, for both reads", async () => {
+    const { service } = makeService([someoneElses()]);
+
+    // Not `CharacterForbiddenError`: a 403 would confirm the id belongs to a
+    // character, and that alone sorts accounts into people and AI (§25).
+    await expect(service.findDto("character-other", OWNER)).resolves.toBeNull();
+    await expect(service.findConfigDto("character-other", OWNER)).resolves.toBeNull();
+  });
+
+  it("still gives the creator and an administrator the config they may edit", async () => {
+    const own = makeCharacter("character-own", { ...REQUEST, handle: "own" });
+    const { service } = makeService([own]);
+
+    await expect(service.findConfigDto(own.id, OWNER)).resolves.toMatchObject({ id: own.id });
+    await expect(service.findConfigDto(own.id, ADMIN)).resolves.toMatchObject({ id: own.id });
   });
 });

@@ -58,3 +58,14 @@ export type CreatePostResponse = {
 export type PostsResponse = {
   posts: PostDto[];
 };
+
+/**
+ * A cursor-paged slice of one account's posts (§10.6).
+ *
+ * The cursor is opaque and server-issued, exactly like the feed's (§9.4):
+ * `null` means there is nothing older left to read.
+ */
+export type PostsPageResponse = {
+  posts: PostDto[];
+  nextCursor: string | null;
+};

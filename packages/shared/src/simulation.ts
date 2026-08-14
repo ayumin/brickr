@@ -33,8 +33,32 @@ export type SimulationDto = {
   createdByUserId?: string;
 };
 
+/**
+ * Who created a room, as the room list shows it (§10.3).
+ *
+ * Room ownership is public, unlike a character's (§66.6), so this travels with
+ * every entry. It is a public account shape rather than a raw id because an id
+ * says nothing to a reader — and `null` means the room has no owner at all.
+ */
+export type SimulationCreatorDto = {
+  id: string;
+  handle: string;
+  displayName: string;
+};
+
 export type SimulationSummaryDto = SimulationDto & {
   postCount: number;
+  /** Newest activity anywhere in the room. The room list orders by it (§10.3). */
+  lastActivityAt: string;
+  creator: SimulationCreatorDto | null;
+  /**
+   * Rename/stop/resume/analysis, decided by the server (§10.3).
+   *
+   * The client must not re-derive this from `createdByUserId` and the session:
+   * duplicating the rule in the frontend is how the two drift apart, and the
+   * server is the only side that can enforce it anyway.
+   */
+  canManage: boolean;
 };
 
 export type SimulationsResponse = {
@@ -93,7 +117,13 @@ export type SimulationAnalysisResponse = {
   analysis: SimulationAnalysisDto;
 };
 
+/**
+ * One room's basics, without its posts (§10.4).
+ *
+ * The posts used to ride along here, which meant opening a room downloaded its
+ * entire history. Reading a room is the feed's job now
+ * (`GET /api/simulations/:id/feed`), which pages instead.
+ */
 export type SimulationResponse = {
   simulation: SimulationDto;
-  posts: PostDto[];
 };

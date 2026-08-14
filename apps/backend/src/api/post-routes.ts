@@ -7,11 +7,22 @@ import { parseOr400, withDomainErrors, withSimulation } from "./route-helpers.js
 import { createPostSchema, idParams, threadRootParams } from "./schemas.js";
 
 export function registerPostRoutes(app: FastifyInstance, services: AppServices): void {
-  app.get("/api/simulations/:id/posts", async (request, reply) =>
-    withSimulation(request, reply, async (id) => ({
-      posts: await services.posts.listBySimulation(id),
-    })),
-  );
+  /**
+   * One room's posts in full. Login required, and under the same room access rule
+   * as the room itself (§10.4, §10.8) — otherwise the 404 the room detail gives
+   * for somebody else's stopped room would be undone by reading its posts here.
+   *
+   * The paged feed (`GET /api/simulations/:id/feed`) is what the UI reads.
+   */
+  app.get("/api/simulations/:id/posts", async (request, reply) => {
+    const user = requireUser(request, reply);
+    if (!user) return reply;
+
+    return withSimulation(request, reply, async (id) => {
+      await services.simulations.requireReadableRoom(id, user);
+      return { posts: await services.posts.listBySimulation(id) };
+    });
+  });
 
   app.post("/api/simulations/:id/posts", async (request, reply) => {
     const user = requireUser(request, reply);
@@ -38,14 +49,28 @@ export function registerPostRoutes(app: FastifyInstance, services: AppServices):
     });
   });
 
+  /**
+   * One post, with the same anonymous author shape the feed uses (§10.8).
+   *
+   * Login required: everything an anonymous reader needs is already in the
+   * `/api/feed` response, so the post detail is not part of the public surface.
+   *
+   * A post in a stopped room is readable by that room's creator and by an
+   * administrator, and is a 404 — not a 403 — for everybody else. The service
+   * returns the same `null` for "no such post" and "not for you", so the two
+   * cannot be told apart from out here.
+   */
   app.get("/api/posts/:id", async (request, reply) => {
+    const user = requireUser(request, reply);
+    if (!user) return reply;
+
     const params = parseOr400(idParams, request.params, reply, "invalid_params", "post id is invalid");
     if (!params) return reply;
 
-    const post = await services.posts.findById(params.id);
+    const post = await services.feed.findVisiblePost(params.id, toFeedReader(user));
     if (!post) return sendError(reply, 404, "not_found", "post not found");
 
-    return { post: await services.posts.toDto(post) };
+    return { post };
   });
 
   /**

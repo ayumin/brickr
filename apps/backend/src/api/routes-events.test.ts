@@ -27,16 +27,16 @@ const user: UserAccount = {
 
 function makeServices(options: { readable?: boolean } = {}) {
   const events = new EventHub();
-  const assertRoomReadable = vi.fn((simulationId: string) =>
+  const assertRoomFeedReadable = vi.fn((simulationId: string) =>
     options.readable === false
       ? Promise.reject(new SimulationNotFoundError(simulationId))
       : Promise.resolve(),
   );
 
   return {
-    services: { events, feed: { assertRoomReadable } } as unknown as AppServices,
+    services: { events, feed: { assertRoomFeedReadable } } as unknown as AppServices,
     events,
-    assertRoomReadable,
+    assertRoomFeedReadable,
   };
 }
 
@@ -108,7 +108,7 @@ describe("GET /api/simulations/:id/events (§11.1, §10.4)", () => {
    * exactly what the REST read refuses to reveal.
    */
   it("refuses an anonymous subscriber", async () => {
-    const { services, events, assertRoomReadable } = makeServices();
+    const { services, events, assertRoomFeedReadable } = makeServices();
     const app = await buildApp(services, null);
     apps.push(app);
 
@@ -116,12 +116,12 @@ describe("GET /api/simulations/:id/events (§11.1, §10.4)", () => {
 
     expect(response.statusCode).toBe(401);
     expect(response.json()).toMatchObject({ error: { code: "unauthenticated" } });
-    expect(assertRoomReadable).not.toHaveBeenCalled();
+    expect(assertRoomFeedReadable).not.toHaveBeenCalled();
     expect(events.subscriberCount("room-1")).toBe(0);
   });
 
   it("subscribes a signed-in reader to a room it may read", async () => {
-    const { services, events, assertRoomReadable } = makeServices();
+    const { services, events, assertRoomFeedReadable } = makeServices();
     const app = await buildApp(services, user);
     apps.push(app);
 
@@ -132,7 +132,7 @@ describe("GET /api/simulations/:id/events (§11.1, §10.4)", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(assertRoomReadable).toHaveBeenCalledWith("room-1", {
+    expect(assertRoomFeedReadable).toHaveBeenCalledWith("room-1", {
       id: "user-1",
       isAdmin: false,
       handle: "hanako",
