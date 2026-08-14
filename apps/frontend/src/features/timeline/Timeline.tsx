@@ -173,7 +173,7 @@ export type TimelineProps = {
   allPosts: PostDto[];
   characters: CharacterDto[];
   userProfile: UserProfileDto;
-  thinking: ThinkingCharacter[];
+  activities: ResponseActivity[];
   loading: boolean;
   emptyTitle: string;
   emptyBody: string;

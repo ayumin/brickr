@@ -28,7 +28,7 @@ export function PostDetail({
   allPosts,
   characters,
   userProfile,
-  thinking,
+  activities,
   canPost,
   onOpenAuthor,
   onOpenPost,

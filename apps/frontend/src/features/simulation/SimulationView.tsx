@@ -830,7 +830,7 @@ export function SimulationView({
                 allPosts={events.posts}
                 characters={characters}
                 userProfile={userProfile}
-                thinking={events.thinking}
+                activities={events.activities}
                 canPost={canPost}
                 onOpenAuthor={openAuthor}
                 onOpenPost={openPost}

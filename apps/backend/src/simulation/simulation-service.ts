@@ -214,8 +214,11 @@ export class SimulationService {
         { simulationId: input.simulationId, err: describe(error) },
         "simulation run failed",
       );
-      this.events.publish({
-        type: "simulation.failed",
+      // Internal only: the reason names the provider or model that failed, which
+      // would say out loud that the author is an AI (§11.2). Subscribers learn
+      // about failures through `response.finished` outcomes instead.
+      this.events.publish(input.simulationId, {
+        type: "generation.failed",
         simulationId: input.simulationId,
         reason: describe(error),
       });
