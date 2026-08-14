@@ -16,7 +16,7 @@
  * into a thread, and the flat expansion has to show it for the reply count to
  * stay consistent with what expanding reveals.
  */
-import type { PostDto } from "@brickr/shared";
+import type { FeedThreadDto, PostDto } from "@brickr/shared";
 
 /** postId → its direct replies, oldest first. */
 export type ReplyIndex = ReadonlyMap<string, readonly PostDto[]>;
@@ -249,4 +249,44 @@ export function selectAuthorTimeline(
   return posts
     .filter((post) => isAuthoredBy(post, authorId) || isMentioned(post, handle))
     .sort(comparePostsNewestFirst);
+}
+
+/** One previewed reply, with the handle it answers when that is knowable (§12.2). */
+export type FeedReplyPreviewEntry = {
+  post: PostDto;
+  /**
+   * `null` when the reply answers a post outside this preview window - an
+   * earlier reply that did not make the newest-two cut. Never guessed: the
+   * feed only shows `→ @handle` when the target is actually visible.
+   */
+  replyToHandle: string | null;
+};
+
+/**
+ * Resolves each previewed reply's `→ @handle` target (§12.2).
+ *
+ * Selection and ordering are already done server-side: `thread.latestReplies`
+ * is at most two entries - the newest two, given oldest-first for display.
+ * This function does not re-select or re-sort them (re-deriving that here
+ * would duplicate backend logic and risk disagreeing with it - the reasoning
+ * that put `thread` on `CreatePostResponse` in the first place, see
+ * `api-client.ts`). It only looks up which handle each reply answers, since a
+ * `PostDto` reply knows its parent's id (`replyTo`) but not that parent's
+ * handle.
+ */
+export function selectFeedReplyPreview(thread: FeedThreadDto): FeedReplyPreviewEntry[] {
+  const handleById = new Map<string, string>([[thread.root.id, thread.root.author.handle]]);
+  for (const reply of thread.latestReplies) {
+    handleById.set(reply.id, reply.author.handle);
+  }
+
+  return thread.latestReplies.map((post) => ({
+    post,
+    replyToHandle: post.replyTo === null ? null : (handleById.get(post.replyTo) ?? null),
+  }));
+}
+
+/** Replies that exist but are not among the previewed ones (never negative). */
+export function selectFeedReplyOverflowCount(thread: FeedThreadDto): number {
+  return Math.max(0, thread.replyCount - thread.latestReplies.length);
 }
