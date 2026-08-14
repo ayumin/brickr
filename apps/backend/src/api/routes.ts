@@ -30,7 +30,7 @@ import {
   CharacterNotFoundError,
   ModelProfileNotFoundError,
 } from "../characters/character-service.js";
-import { ReplyTargetNotFoundError } from "../posts/post-service.js";
+import { ReplyTargetNotFoundError } from "../posts/post-repository.js";
 import {
   GlobalSimulationMutationError,
   PostNotFoundError,

@@ -1,6 +1,22 @@
 import type { DbTransaction } from "../persistence/prisma.js";
 
 /**
+ * What the hard delete has to observe before it runs, because the database nulls
+ * the surviving replies' `replyTo`: afterwards nothing identifies which posts lost
+ * their parent, or which thread the deleted posts belonged to.
+ */
+export type ThreadRepairInput = {
+  /** Surviving posts whose parent was deleted, each now the root of what is left below it. */
+  newRootIds: string[];
+  /**
+   * Roots the deleted posts belonged to, minus the ones deleted themselves. A
+   * root can outlive a reply below it, and then part of its thread leaves.
+   */
+  detachedRootIds: string[];
+  simulationIds: string[];
+};
+
+/**
  * Repairs the denormalised thread information a hard delete leaves behind (§8.5).
  *
  * Deleting a character removes only that character's posts; replies written by
@@ -12,17 +28,9 @@ import type { DbTransaction } from "../persistence/prisma.js";
  *
  * Never an alternative: cascading the delete to other accounts' replies. That
  * would be data loss dressed up as cleanup.
- *
- * `newRootIds` are the surviving posts whose parent was deleted — read before
- * the delete, because the database nulls their `replyTo` and afterwards there is
- * nothing left to identify them by.
  */
-export async function repairThreads(
-  tx: DbTransaction,
-  newRootIds: string[],
-  simulationIds: string[],
-): Promise<void> {
-  for (const rootId of newRootIds) {
+export async function repairThreads(tx: DbTransaction, input: ThreadRepairInput): Promise<void> {
+  for (const rootId of input.newRootIds) {
     const subtree = await collectSubtree(tx, rootId);
 
     await tx.post.updateMany({
@@ -30,28 +38,55 @@ export async function repairThreads(
       data: { threadRootId: rootId },
     });
 
-    // The thread keeps the position its newest surviving post earns it, rather
-    // than jumping to "now" because of an unrelated deletion.
-    const newest = await tx.post.aggregate({
-      where: { id: { in: subtree } },
-      _max: { createdAt: true },
-    });
-    if (newest._max.createdAt) {
-      await tx.post.update({
-        where: { id: rootId },
-        data: { threadActivityAt: newest._max.createdAt },
-      });
-    }
+    await dateRootFromSubtree(tx, rootId, subtree);
   }
 
-  for (const simulationId of simulationIds) {
+  // The root an orphaned subtree was cut from needs the same treatment. Its
+  // `threadActivityAt` was pushed forward by every reply below it, including the
+  // ones that have just become a thread of their own — leaving it credited with
+  // activity its remaining thread no longer contains, which would keep it near
+  // the top of the feed for nothing.
+  //
+  // After the promotions above, so the subtree walked here is only what still
+  // belongs to this thread.
+  const promoted = new Set(input.newRootIds);
+  for (const rootId of input.detachedRootIds) {
+    if (promoted.has(rootId)) continue;
+    await dateRootFromSubtree(tx, rootId, await collectSubtree(tx, rootId));
+  }
+
+  for (const simulationId of input.simulationIds) {
     await recalculateSimulationActivity(tx, simulationId);
   }
 }
 
 /**
- * The new root plus every surviving descendant, walked one level at a time so a
- * deep chain costs a handful of queries instead of one per post.
+ * The thread keeps the position its newest surviving post earns it, rather than
+ * jumping to "now" because of an unrelated deletion.
+ *
+ * A root that was deleted along with the character has no surviving post to
+ * aggregate, and is left alone rather than updated into a `RecordNotFound`.
+ */
+async function dateRootFromSubtree(
+  tx: DbTransaction,
+  rootId: string,
+  subtree: string[],
+): Promise<void> {
+  const newest = await tx.post.aggregate({
+    where: { id: { in: subtree } },
+    _max: { createdAt: true },
+  });
+  if (!newest._max.createdAt) return;
+
+  await tx.post.update({
+    where: { id: rootId },
+    data: { threadActivityAt: newest._max.createdAt },
+  });
+}
+
+/**
+ * A root plus every surviving descendant, walked one level at a time so a deep
+ * chain costs a handful of queries instead of one per post.
  *
  * `seen` is what terminates the walk: `replyTo` always points at an older post,
  * so a cycle cannot occur naturally, but bad data must not loop forever.

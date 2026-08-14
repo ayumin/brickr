@@ -217,10 +217,13 @@ export class CharacterRepository {
     if (ids.length === 0) return;
     await this.db.$transaction(
       async (tx) => {
+        // `threadRootId` is read here for the same reason: a deleted reply is the
+        // only record of which thread it was pushing forward.
         const doomed = await tx.post.findMany({
           where: { authorId: { in: ids } },
-          select: { id: true, simulationId: true },
+          select: { id: true, simulationId: true, threadRootId: true },
         });
+        const doomedIds = new Set(doomed.map((post) => post.id));
 
         // Read before the delete: `replyTo` is set to null by the database, so
         // afterwards there is no way to tell which posts just lost their parent.
