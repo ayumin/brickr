@@ -591,51 +591,53 @@ Job/停止状態の共有Storeが必要です。
 ### 9.1 Bootstrap
 
 `App.tsx`は`AuthProvider`配下に`/login`と`/signup`を独立Routeとして置き、それ以外を
-`SimulationBootstrap`へ渡します。Bootstrapは`localStorage`のSimulation ID、最新Simulation、新規作成の
-順に解決します。公開Simulationがあれば未Loginでも閲覧でき、最初のSimulation作成が必要な場合だけ
-Loginへ誘導します。Theme選択もBrowserへ保存します。
+`SessionGate`経由で`AppShell`へ渡します。`SessionGate`はAuth sessionを解決したあと、
+ログイン済みで`/`かつLocalStorageに保存Room IDがある場合だけアクセス可否を確認し、復元できれば
+`/rooms/:id`へreplaceします。停止中Simulationの自動resumeや、Simulationの自動作成は行いません
+（旧`SimulationBootstrap`の廃止）。Theme選択はBrowserへ保存します。
 
-`SimulationView.tsx`が次のView状態を管理します。
+`AppShell`はFeed（`/`）と開いた各Room（`/rooms/:roomId`、最大同時保持数あり）を`hidden`属性で
+切り替えて常時マウントし続け、SSE購読と読み込み済みページを画面遷移で失わないようにします
+（§13.5の生存期間ポリシー）。Cast管理・ルーム一覧・Settings・Post詳細・Legacy URL redirectは
+`AppRoutes.tsx`が通常の`react-router-dom` `<Route>`としてmount/unmountします。
 
-- Home
-- Character Timeline
-- Character管理テーブル
-- Simulation一覧とOwner/Admin限定の分析
-- Post詳細
-- Admin User管理
-- Character/User編集Modal
-
-`react-router-dom`を使用し、`routes.ts`が`/characters`、`/simulations`、
-`/simulations/:id/analysis`、`/posts/:id`、`/admin/users`、`/:handle`を静的Path優先で解決します。
-`SimulationView`は画面遷移でremountせず、SSE接続とShell状態を維持したままURL・Browser Historyと同期します。
+`routes.ts`は`roomPath` / `castPath` / `settingsPath` / `postPath` / `handlePath`等のPath builderと
+`normalizeHandleParam`（handle解析・予約語判定）を提供するだけの純粋関数集合であり、単一の手動match
+Dispatcherはもう存在しません。
 
 ### 9.2 Network境界
 
 - `api-client.ts`: REST、JSON Error、Abort、Backend URL
 - `sse-client.ts`: EventSource、named event、購読解除。`subscribeToSimulationEvents`（1ルーム）と
   `subscribeToFeedEvents`（統合Feed全体）は内部のEventSource配線を共有する
-- `useSimulationEvents.ts`: REST hydrationとSSEを1ルームのReducerへ統合
-- `features/feed/`: 統合Feedのデータ層。`feed-reducer.ts`がReact非依存のThread dedupe/再ソートを持ち
-  （initial pageは置換、load moreはroot IDでdedupeして末尾追加のみで再ソートしない、SSE
-  upsertは全loaded threadを再ソートする非対称な扱い）、`useFeedEvents.ts`がFeed/ルームどちらの
-  scopeかに応じてEventSourceを選び分けてReducerへdispatchし、`useFeed.ts`が両者とcursorページングを
-  束ねて画面へ渡す
+- `useSimulationEvents.ts`: REST hydrationとSSEを1ルームの全Post配列へ統合するReducer。
+  `PostDetailScreen`専用で、`RoomScreen`はもう使わない（9.3参照）
+- `features/feed/`: FeedとRoomの両方が使うデータ層。`feed-reducer.ts`がReact非依存のThread
+  dedupe/再ソートを持ち（initial pageは置換、load moreはroot IDでdedupeして末尾追加のみで
+  再ソートしない、SSE upsertは全loaded threadを再ソートする非対称な扱い）、`useFeedEvents.ts`が
+  Feed/ルームどちらのscopeかに応じてEventSourceを選び分けてReducerへdispatchし、`useFeed.ts`が
+  両者とcursorページングを束ねて画面へ渡す
 - `useCharacters.ts` / `useUserProfile.ts`: Resource取得と更新
 
 ComponentはNetwork Protocolを知りません。
 
-### 9.3 Timelineの派生状態
+### 9.3 Feed / Room / Post詳細の派生状態
 
-FrontendはSimulation内の全Postを保持し、`thread-utils.ts`の純粋関数で表示を作ります。
+`FeedScreen`（統合Feed）と`RoomScreen`（個別Room）はどちらも`useFeed(scope, filter)`が返す
+`FeedThreadDto[]`（root Post + 最新2件のReplyプレビュー）をSource of Truthとし、
+共通の`FeedThreadList` / `FeedThreadCard` / `ReplyPreview`で描画します。「残りN件を表示」は
+`ReplyPreview`が`GET /api/posts/:threadRootId/replies`を直接呼び、全ReplyをOldest-firstで受け取って
+`thread-utils.ts`の`resolveReplyDisplay`で`→ @handle`表示へ変換します。並び順・ページング・
+Replyプレビューの扱いはFeed/Roomで完全に共通です。
 
-- User Timeline: Login UserのThread Starterと、そのUserの`@handle` Mention
-- Character Timeline: 本人のPostと本人へのMention
-- Reply Index: `replyTo`ごとの直接返信
-- Reply展開: Cycle-safeな探索で全子孫を平坦化
-- Repost Index: `quoteOf`ごとの直接引用
-- Post詳細: 対象Post、全Reply子孫、直接Repost、参照元1件
+`PostDetailScreen`だけは異なるモデルを使います。対象Postが属するRoomの全Postを
+`useSimulationEvents`でhydrateし、`thread-utils.ts`の`buildReplyIndex` / `flattenReplies` /
+`buildRepostIndex`で対象Postの全Reply子孫・直接Repost・参照元1件を導出します（CLAUDE.md §48）。
+Feed/Roomのプレビュー中心の表示と異なり、Post詳細は1つのPostに紐づく会話全体を一度に見せる必要が
+あるためです。
 
-Thread専用APIやFrontend専用Thread Storeはありません。REST/SSEで得た`PostDto[]`がSource of Truthです。
+Thread専用APIやFrontend専用Thread StoreはPost詳細側にはありません。REST/SSEで得た`PostDto[]`が
+Source of Truthです。
 
 ### 9.4 表示とTheme
 
@@ -716,7 +718,7 @@ Vitestを使用し、外部APIやNetworkに依存しない高速なテストを�
 | --- | --- | --- |
 | Backend単一Process | EventHub、Job、停止SetがMemory内 | Redis、Queue、共有Job Store |
 | Data URL画像 | MVPでStorageを単純化 | Object Storage、署名URL、Thumbnail |
-| SPA内の手動Route match | SimulationViewとSSEを維持 | Route Data API、画面単位のCode Split |
+| Feed/Roomを`hidden`属性で常時mount | 画面遷移でSSE購読・読み込み済みページを失わないため | Route Data API、画面単位のCode Split |
 | `prisma db push` | 開発優先 | Versioned Migration |
 | Cookie + boolean Admin | 小規模な招待制運用 | CSRF Token、Rate Limit、Email確認、Role Model |
 | Model Catalog 5分Cache | Provider API負荷抑制 | 明示Refresh、永続Status、Capability metadata |

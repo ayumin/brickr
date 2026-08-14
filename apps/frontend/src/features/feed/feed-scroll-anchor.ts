@@ -10,9 +10,9 @@
  * the same visual spot.
  *
  * Kept free of `window`/`document` so the decision logic is testable without a
- * DOM: the caller (a future `useLayoutEffect` in the feed's list component,
- * Step 7-7) is responsible for all the actual measuring and scrolling, using
- * only the functions here to decide what to do with what it measured.
+ * DOM: the caller (`FeedThreadList`'s `useLayoutEffect`) is responsible for
+ * all the actual measuring and scrolling, using only the functions here to
+ * decide what to do with what it measured.
  */
 
 /** One thread's vertical offset, in viewport-relative pixels (`getBoundingClientRect().top`). */

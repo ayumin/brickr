@@ -7,10 +7,10 @@ import {
   countReplies,
   countReposts,
   flattenReplies,
+  resolveReplyDisplay,
   selectAuthorTimeline,
   selectFeedReplyOverflowCount,
   selectFeedReplyPreview,
-  selectRoomTimeline,
   selectSeparateDetailReferenceId,
   selectReposts,
   selectUserTimeline,
@@ -297,23 +297,6 @@ describe("selectSeparateDetailReferenceId", () => {
   });
 });
 
-describe("selectRoomTimeline", () => {
-  it("keeps every thread starter regardless of author, newest first", () => {
-    const posts = [
-      makePost("root-1", 1),
-      makePost("reply-1", 2, { replyTo: "root-1" }),
-      makePost("root-2", 3, { author: userAuthor }),
-      makePost("repost-1", 4, { quoteOf: "root-1" }),
-    ];
-
-    expect(ids(selectRoomTimeline(posts))).toEqual(["repost-1", "root-2", "root-1"]);
-  });
-
-  it("returns an empty array for a room with no posts", () => {
-    expect(selectRoomTimeline([])).toEqual([]);
-  });
-});
-
 describe("selectUserTimeline", () => {
   it("keeps only user-authored thread starters, newest first", () => {
     const posts = [
@@ -483,6 +466,30 @@ describe("selectFeedReplyPreview", () => {
     const thread = makeThread(root, [newer, older]);
 
     expect(selectFeedReplyPreview(thread).map((entry) => entry.post.id)).toEqual(["newer", "older"]);
+  });
+});
+
+describe("resolveReplyDisplay", () => {
+  it("resolves every reply in a full expansion, since every ancestor is included", () => {
+    // Unlike the two-reply preview, a full expansion (GET
+    // /api/posts/:threadRootId/replies) always contains every transitive
+    // reply, so a reply-to-an-earlier-reply is always resolvable here.
+    const root = makePost("root", 0, { author: userAuthor });
+    const first = makePost("first", 1, { replyTo: "root", author: characterAuthor("architect") });
+    const second = makePost("second", 2, { replyTo: "first", author: characterAuthor("skeptic") });
+    const third = makePost("third", 3, { replyTo: "root", author: characterAuthor("kansai") });
+
+    const display = resolveReplyDisplay(root, [first, second, third]);
+
+    expect(display.map((entry) => entry.replyToHandle)).toEqual([
+      TEST_USER_HANDLE,
+      "architect",
+      TEST_USER_HANDLE,
+    ]);
+  });
+
+  it("returns an empty array for a root with no replies", () => {
+    expect(resolveReplyDisplay(makePost("root", 0, { author: userAuthor }), [])).toEqual([]);
   });
 });
 
