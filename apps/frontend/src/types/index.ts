@@ -7,20 +7,16 @@
  */
 import type { PostDto } from "@brickr/shared";
 
-/** A character the backend told us is currently generating ("考え中"). */
-export type ThinkingCharacter = {
+/**
+ * One response the backend is generating right now.
+ *
+ * Anonymous by design (§11.2): the stream says that a response is on its way and
+ * what it answers, never who is writing it. `activityId` means nothing beyond
+ * matching a finish to its start, so the UI can only ever count activities.
+ */
+export type ResponseActivity = {
+  activityId: string;
   targetPostId: string;
-  characterId: string;
-  handle: string;
-  displayName: string;
-};
-
-/** An expected, non-fatal failure of a single character's LLM call. */
-export type CharacterFailure = {
-  characterId: string;
-  /** Best-known label: display name if we saw a `character.processing` first. */
-  label: string;
-  reason: string;
 };
 
 /** EventSource lifecycle, mapped to something we can show a human. */

@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type { CharacterDto, PostDto, UserProfileDto } from "@brickr/shared";
 
-import type { ThinkingCharacter } from "../../types";
+import type { ResponseActivity } from "../../types";
 import { PostCard } from "./PostCard";
 import { Timeline } from "./Timeline";
 import {

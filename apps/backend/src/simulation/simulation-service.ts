@@ -51,6 +51,17 @@ export type SimulationServiceOptions = {
   maxCascadeDepth: number;
 };
 
+/**
+ * Builds the thread payload a post event carries (§11.3).
+ *
+ * Declared here as the narrow port this service needs, and satisfied by
+ * `FeedService`, so the dependency stays one-way: the feed knows about
+ * simulations, not the other way round.
+ */
+export type ThreadActivitySource = {
+  buildThreadActivity: (post: Post) => Promise<ThreadActivityEvent>;
+};
+
 export class SimulationNotFoundError extends Error {
   constructor(id: string) {
     super(`simulation "${id}" not found`);

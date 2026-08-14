@@ -464,10 +464,6 @@ export function SimulationView({
     return null;
   }, [authorId, authoredPost, selectedCharacter]);
 
-  const failureDetail = events.failures
-    .map((failure) => `${failure.label}: ${failure.reason}`)
-    .join(" / ");
-
   const sidebar = (
     <section className="overflow-hidden rounded-2xl border border-line bg-surface">
       <header className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">

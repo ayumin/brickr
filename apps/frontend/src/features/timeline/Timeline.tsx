@@ -4,7 +4,7 @@ import type { CharacterDto, PostDto, UserProfileDto } from "@brickr/shared";
 import { Avatar } from "../../components/Avatar";
 import { Icon } from "../../components/Icon";
 import { Spinner } from "../../components/Spinner";
-import type { ThinkingCharacter } from "../../types";
+import type { ResponseActivity } from "../../types";
 import { Composer } from "../composer/Composer";
 import { PostCard } from "./PostCard";
 import { PostContent } from "./PostContent";
