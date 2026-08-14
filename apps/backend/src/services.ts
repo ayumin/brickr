@@ -98,6 +98,11 @@ export async function buildServices(db: Db, logger: SimulationLogger): Promise<A
   const events = new EventHub();
   const tokenUsage = new TokenUsageService(tokenUsageRepository);
 
+  // Built before the simulation service, which publishes the thread payload the
+  // feed assembles (§11.3). The dependency runs one way: the feed knows about
+  // simulations, never the other way round.
+  const feed = new FeedService(new FeedRepository(db), postService, simulationRepository);
+
   const simulations = new SimulationService(
     simulationRepository,
     postService,
@@ -108,6 +113,7 @@ export async function buildServices(db: Db, logger: SimulationLogger): Promise<A
     runtime.values.simulation,
     logger,
     tokenUsage,
+    feed,
   );
   const simulationAnalysis = new SimulationAnalysisService(
     simulationRepository,

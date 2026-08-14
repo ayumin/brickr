@@ -15,6 +15,7 @@ import {
   SimulationNotFoundError,
   type SimulationActor,
 } from "../simulation/simulation-service.js";
+import type { ThreadActivityEvent } from "../simulation/public-events.js";
 import { toFeedCapabilities } from "./feed-capabilities.js";
 import { decodeFeedCursor, encodeFeedCursor } from "./feed-cursor.js";
 import type { FeedRepository, FeedRoom, FeedThreadRow } from "./feed-repository.js";

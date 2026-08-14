@@ -1,4 +1,6 @@
+import { randomUUID } from "node:crypto";
 import type {
+  ResponseOutcome,
   SimulationDto,
   SimulationResponse,
   SimulationSummaryDto,

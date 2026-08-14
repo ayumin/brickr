@@ -1,72 +1,60 @@
-import type { PostDto } from "./post.js";
+import type { FeedThreadDto } from "./feed.js";
 
 /**
- * SSE event names sent on GET /api/simulations/:id/events
+ * SSE event names sent on `GET /api/feed/events` and `GET /api/simulations/:id/events`.
+ *
+ * Every one of them is anonymous (§11.2). The old `character.*` events named the
+ * character that was generating, which made the feed's anonymity pointless: a
+ * subscriber could match a name against a post and know its author was an AI.
  */
 export const SSE_EVENT_TYPES = [
-  "post.created",
-  "character.processing",
-  "character.skipped",
-  "character.failed",
-  "simulation.completed",
-  "simulation.failed",
+  "feed.post-created",
+  "response.started",
+  "response.finished",
 ] as const;
 
 export type SseEventType = (typeof SSE_EVENT_TYPES)[number];
 
-/** A post finished generating and was persisted. */
-export type PostCreatedEvent = {
-  type: "post.created";
-  simulationId: string;
-  post: PostDto;
+/** How one response ended. Never why — a reason names models and providers (§11.2). */
+export const RESPONSE_OUTCOMES = ["posted", "skipped", "failed"] as const;
+
+export type ResponseOutcome = (typeof RESPONSE_OUTCOMES)[number];
+
+/**
+ * A post was created, carrying the thread as it now stands.
+ *
+ * The whole thread rather than the single post: reply count, the newest two
+ * replies, `lastActivityAt` and `capabilities` would otherwise have to be
+ * recomputed by every client, which is the same feed logic implemented twice and
+ * guaranteed to drift (§11.3). The server stays the only source of truth.
+ */
+export type FeedPostCreatedEvent = {
+  type: "feed.post-created";
+  thread: FeedThreadDto;
 };
 
-/** A character started working. Used only to render a "考え中" indicator. */
-export type CharacterProcessingEvent = {
-  type: "character.processing";
+/**
+ * A response is being generated. Who is generating it is deliberately absent.
+ *
+ * `activityId` means nothing outside this pair of events: it exists only so a
+ * client can match a finish to a start and say "n responses in flight" (§11.3).
+ */
+export type ResponseStartedEvent = {
+  type: "response.started";
+  activityId: string;
   simulationId: string;
-  /** The post this character is currently preparing a response to. */
   targetPostId: string;
-  characterId: string;
-  handle: string;
-  displayName: string;
+  threadRootId: string;
 };
 
-/** A character decided not to respond, so the UI can drop its indicator. */
-export type CharacterSkippedEvent = {
-  type: "character.skipped";
+/** The end of one `response.started`. Exactly one arrives for every start. */
+export type ResponseFinishedEvent = {
+  type: "response.finished";
+  activityId: string;
   simulationId: string;
-  characterId: string;
+  targetPostId: string;
+  threadRootId: string;
+  outcome: ResponseOutcome;
 };
 
-/** An expected failure: one provider errored or timed out. Others continue. */
-export type CharacterFailedEvent = {
-  type: "character.failed";
-  simulationId: string;
-  characterId: string;
-  reason: string;
-};
-
-/** Every responder for one user post has finished (or failed). */
-export type SimulationCompletedEvent = {
-  type: "simulation.completed";
-  simulationId: string;
-  /** The user post that triggered this round of responses. */
-  triggerPostId: string;
-  generatedPostIds: string[];
-};
-
-/** The whole run could not proceed. */
-export type SimulationFailedEvent = {
-  type: "simulation.failed";
-  simulationId: string;
-  reason: string;
-};
-
-export type SseEvent =
-  | PostCreatedEvent
-  | CharacterProcessingEvent
-  | CharacterSkippedEvent
-  | CharacterFailedEvent
-  | SimulationCompletedEvent
-  | SimulationFailedEvent;
+export type SseEvent = FeedPostCreatedEvent | ResponseStartedEvent | ResponseFinishedEvent;
