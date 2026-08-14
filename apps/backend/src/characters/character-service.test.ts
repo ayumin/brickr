@@ -495,9 +495,10 @@ describe("CharacterService ownership (CLAUDE.md §66.5)", () => {
 });
 
 /**
- * An ordinary caller sees only what they own (§10.7). A complete character list
- * would be a lookup table from handle to "this account is an AI", which is the
- * one thing the public surface must never make obtainable (§25).
+ * `listDtos` returns all active characters to every authenticated caller so
+ * that the composer and character picker can populate @mention and responder
+ * selection with the full cast (including system-seeded characters).
+ * Ownership scoping belongs to the management endpoints only (§10.7).
  */
 describe("CharacterService list scope", () => {
   const someoneElses = () =>
@@ -505,13 +506,17 @@ describe("CharacterService list scope", () => {
   const systemOwned = () =>
     makeCharacter("character-system", { ...REQUEST, handle: "system_owned" }, null);
 
-  it("hides other users' and System-owned characters from an ordinary caller", async () => {
+  it("returns all active characters to any authenticated caller, including other users' and System-owned", async () => {
     const own = makeCharacter("character-own", { ...REQUEST, handle: "own" });
     const { service } = makeService([own, someoneElses(), systemOwned()]);
 
-    await expect(service.listDtos(OWNER)).resolves.toEqual([
-      expect.objectContaining({ id: own.id }),
-    ]);
+    await expect(service.listDtos(OWNER)).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: own.id }),
+        expect.objectContaining({ id: "character-other" }),
+        expect.objectContaining({ id: "character-system" }),
+      ]),
+    );
     await expect(service.listManagementDtos(OWNER)).resolves.toEqual([
       expect.objectContaining({ id: own.id }),
     ]);

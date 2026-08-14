@@ -93,16 +93,16 @@ export class CharacterService {
   }
 
   /**
-   * Characters this caller owns, or all of them for an administrator (§10.7).
+   * All active characters, for any authenticated caller.
    *
-   * Never the whole table for an ordinary caller: a complete character list is a
-   * lookup table from handle to "this one is an AI", which is precisely what the
-   * feed's anonymity depends on not existing (§25).
+   * This is the roster the composer and character picker use for @mention and
+   * responder selection. Every signed-in user needs the full cast to be able to
+   * mention or interact with system-seeded characters they did not create
+   * themselves. Ownership scoping belongs to the management endpoints
+   * (`listManagementDtos`, `findConfigDto`), not here.
    */
-  async listDtos(actor: CharacterActor): Promise<CharacterDto[]> {
-    const all = actor.isAdmin
-      ? await this.characters.findAll()
-      : await this.characters.findAllByCreatedByUserId(actor.id);
+  async listDtos(_actor: CharacterActor): Promise<CharacterDto[]> {
+    const all = await this.characters.findAll();
     return all.map(toCharacterDto);
   }
 
