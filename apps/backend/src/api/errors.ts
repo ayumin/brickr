@@ -1,10 +1,10 @@
-import type { ApiErrorBody } from "@brickr/shared";
+import type { ApiErrorBody, ApiErrorCode } from "@brickr/shared";
 import type { FastifyReply } from "fastify";
 
 export function sendError(
   reply: FastifyReply,
   status: number,
-  code: string,
+  code: ApiErrorCode,
   message: string,
   details?: unknown,
 ): FastifyReply {

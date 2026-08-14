@@ -1,6 +1,7 @@
 import cors from "@fastify/cors";
 import { MAX_IMAGE_DATA_URL_LENGTH } from "@brickr/shared";
 import Fastify, { type FastifyError, type FastifyInstance } from "fastify";
+import { sendError } from "./api/errors.js";
 import { registerOpenApi } from "./api/openapi.js";
 import { registerRoutes } from "./api/routes.js";
 import { registerAuthContext } from "./auth/auth-context.js";
@@ -39,20 +40,18 @@ export async function buildApp(db: Db): Promise<FastifyInstance> {
   registerAuthContext(app, services.auth);
   await registerRoutes(app, services);
 
-  app.setNotFoundHandler((_request, reply) => {
-    reply.status(404).send({ error: { code: "not_found", message: "route not found" } });
-  });
+  app.setNotFoundHandler((_request, reply) => sendError(reply, 404, "not_found", "route not found"));
 
   app.setErrorHandler((error: FastifyError, request, reply) => {
     request.log.error({ err: error }, "unhandled request error");
     const status = error.statusCode ?? 500;
-    reply.status(status).send({
-      error: {
-        code: "internal_error",
-        // Never leak internal failure detail to the client.
-        message: status < 500 ? error.message : "internal error",
-      },
-    });
+    // Never leak internal failure detail to the client.
+    return sendError(
+      reply,
+      status,
+      "internal_error",
+      status < 500 ? error.message : "internal error",
+    );
   });
 
   return app;
