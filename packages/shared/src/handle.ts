@@ -22,8 +22,9 @@ export type HandleResponse = {
  *
  * This list can only ever grow at the cost of breaking whoever already holds a
  * newly-added word, so it is deliberately wider than what the app serves today:
- * the words are cheap now and expensive later. Note the absence of `you` — the
- * pre-login account already holds it (`USER_HANDLE`).
+ * the words are cheap now and expensive later. `you` is absent because it is an
+ * ordinary handle again: the pre-login account that held it is gone, and posting
+ * now always belongs to a signed-in account (§8.2).
  */
 export const RESERVED_HANDLES: readonly string[] = [
   // Routes the app serves today.

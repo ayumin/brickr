@@ -1,18 +1,3 @@
-/**
- * The account that existed before login (CLAUDE.md §66).
- *
- * Posts now carry the id of whichever account wrote them, so these describe one
- * particular account rather than "the user": the row the seed keeps so that
- * posts written before login still resolve to an author.
- */
-export const USER_AUTHOR_ID = "you";
-
-/** Handle of that same pre-login account. */
-export const USER_HANDLE = "you";
-
-/** Display name seeded for that account. */
-export const USER_DISPLAY_NAME = "あなた";
-
 /** Max length accepted for a single post body. */
 export const MAX_POST_LENGTH = 500;
 
