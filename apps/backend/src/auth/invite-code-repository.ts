@@ -1,4 +1,5 @@
 import type { Db } from "../persistence/prisma.js";
+import { optionalField } from "../persistence/repository-mapping.js";
 import type { InviteCode } from "./invite-code.js";
 
 type InviteCodeRow = {
@@ -14,9 +15,9 @@ function toInviteCode(row: InviteCodeRow): InviteCode {
   return {
     code: row.code,
     issuedById: row.issuedById,
-    ...(row.usedById ? { usedById: row.usedById } : {}),
-    ...(row.usedAt ? { usedAt: row.usedAt } : {}),
-    ...(row.expiresAt ? { expiresAt: row.expiresAt } : {}),
+    ...optionalField("usedById", row.usedById),
+    ...optionalField("usedAt", row.usedAt),
+    ...optionalField("expiresAt", row.expiresAt),
     createdAt: row.createdAt,
   };
 }

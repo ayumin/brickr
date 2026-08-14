@@ -2,26 +2,27 @@ import type { ProviderId } from "../llm/provider.js";
 import type { Db } from "../persistence/prisma.js";
 import type { ModelProfile } from "./model-profile.js";
 
+type ModelProfileRow = { id: string; providerId: string; model: string };
+
+function toModelProfile(row: ModelProfileRow): ModelProfile {
+  return {
+    id: row.id,
+    providerId: row.providerId as ProviderId,
+    model: row.model,
+  };
+}
+
 export class ModelProfileRepository {
   constructor(private readonly db: Db) {}
 
   async findById(id: string): Promise<ModelProfile | null> {
     const row = await this.db.modelProfile.findUnique({ where: { id } });
-    if (!row) return null;
-    return {
-      id: row.id,
-      providerId: row.providerId as ProviderId,
-      model: row.model,
-    };
+    return row ? toModelProfile(row) : null;
   }
 
   async findAll(): Promise<ModelProfile[]> {
     const rows = await this.db.modelProfile.findMany({ orderBy: { id: "asc" } });
-    return rows.map((row: { id: string; providerId: string; model: string }) => ({
-      id: row.id,
-      providerId: row.providerId as ProviderId,
-      model: row.model,
-    }));
+    return rows.map(toModelProfile);
   }
 
   /** Persist newly discovered provider/model pairs without duplicating seeds. */

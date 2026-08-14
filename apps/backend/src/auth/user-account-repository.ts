@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { UserStatus } from "@brickr/shared";
 import { claimHandle } from "../handles/handle-claim.js";
 import { isUniqueConstraintError, type Db } from "../persistence/prisma.js";
+import { optionalField } from "../persistence/repository-mapping.js";
 import { EmailTakenError, InviteCodeInvalidError } from "./auth-errors.js";
 import type { NewUserAccount, UserAccountWithSecret } from "./user-account.js";
 
@@ -30,16 +31,16 @@ function toAccount(row: UserRow): UserAccountWithSecret {
     handle: row.handle ?? row.id,
     displayName: row.displayName,
     description: row.description,
-    ...(row.avatarUrl ? { avatarUrl: row.avatarUrl } : {}),
+    ...optionalField("avatarUrl", row.avatarUrl),
     email: row.email ?? "",
     passwordHash: row.passwordHash,
     isAdmin: row.isAdmin,
     status: toStatus(row.status),
-    ...(row.country ? { country: row.country } : {}),
-    ...(row.region ? { region: row.region } : {}),
+    ...optionalField("country", row.country),
+    ...optionalField("region", row.region),
     interests: row.interests,
-    ...(row.occupation ? { occupation: row.occupation } : {}),
-    ...(row.xHandle ? { xHandle: row.xHandle } : {}),
+    ...optionalField("occupation", row.occupation),
+    ...optionalField("xHandle", row.xHandle),
   };
 }
 

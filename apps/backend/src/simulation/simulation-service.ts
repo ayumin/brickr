@@ -11,6 +11,7 @@ import type { CharacterRepository } from "../characters/character-repository.js"
 import type { Character } from "../characters/character.js";
 import { DomainError } from "../domain-error.js";
 import type { TokenUsageService } from "../llm/token-usage-service.js";
+import { optionalField } from "../persistence/repository-mapping.js";
 import type { Post } from "../posts/post.js";
 import type { PostService } from "../posts/post-service.js";
 import type { ThreadContext, ThreadService } from "../posts/thread-service.js";
@@ -567,7 +568,7 @@ export function toSimulationDto(simulation: Simulation): SimulationDto {
     title: simulation.title,
     status: simulation.status,
     createdAt: simulation.createdAt.toISOString(),
-    ...(simulation.createdByUserId ? { createdByUserId: simulation.createdByUserId } : {}),
+    ...optionalField("createdByUserId", simulation.createdByUserId),
   };
 }
 

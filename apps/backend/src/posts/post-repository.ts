@@ -1,5 +1,6 @@
 import { DomainError } from "../domain-error.js";
 import { Prisma, type Db, type DbTransaction } from "../persistence/prisma.js";
+import { optionalField } from "../persistence/repository-mapping.js";
 import type { NewPost, Post } from "./post.js";
 
 /**
@@ -27,7 +28,7 @@ export function toPost(row: PostRow): Post {
     simulationId: row.simulationId,
     authorId: row.authorId,
     content: row.content,
-    ...(row.imageUrl ? { imageUrl: row.imageUrl } : {}),
+    ...optionalField("imageUrl", row.imageUrl),
     mentions: row.mentions,
     replyTo: row.replyTo,
     quoteOf: row.quoteOf,

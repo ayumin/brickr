@@ -5,6 +5,7 @@ import {
   type FeedThreadDto,
   type PostDto,
 } from "@brickr/shared";
+import { optionalField } from "../persistence/repository-mapping.js";
 import type { PostService } from "../posts/post-service.js";
 import type { Post } from "../posts/post.js";
 import { isGlobalSimulation } from "../simulation/simulation.js";
@@ -137,7 +138,7 @@ export class FeedService {
       title: simulation.title,
       status: simulation.status,
       scope: simulation.scope,
-      ...(simulation.createdByUserId ? { createdByUserId: simulation.createdByUserId } : {}),
+      ...optionalField("createdByUserId", simulation.createdByUserId),
     };
 
     const [replyCounts, previews] = await Promise.all([

@@ -1,5 +1,6 @@
 import type { SimulationScope, SimulationStatus } from "@brickr/shared";
 import type { Db } from "../persistence/prisma.js";
+import { optionalField } from "../persistence/repository-mapping.js";
 import type { Simulation, SimulationSummary } from "./simulation.js";
 
 type SimulationRow = {
@@ -12,15 +13,25 @@ type SimulationRow = {
   createdByUserId: string | null;
 };
 
+/** The database column is an unconstrained string; this is the one place that trusts it. */
+export function toSimulationStatus(value: string): SimulationStatus {
+  return value as SimulationStatus;
+}
+
+/** The database column is an unconstrained string; this is the one place that trusts it. */
+export function toSimulationScope(value: string): SimulationScope {
+  return value as SimulationScope;
+}
+
 function toSimulation(row: SimulationRow): Simulation {
   return {
     id: row.id,
     title: row.title,
-    status: row.status as SimulationStatus,
-    scope: row.scope as SimulationScope,
+    status: toSimulationStatus(row.status),
+    scope: toSimulationScope(row.scope),
     createdAt: row.createdAt,
     lastActivityAt: row.lastActivityAt,
-    ...(row.createdByUserId ? { createdByUserId: row.createdByUserId } : {}),
+    ...optionalField("createdByUserId", row.createdByUserId),
   };
 }
 
