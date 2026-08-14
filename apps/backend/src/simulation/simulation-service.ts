@@ -257,8 +257,8 @@ export class SimulationService {
         billingUserId: triggerPost.authorId,
       });
     } finally {
-      this.events.publish({
-        type: "simulation.completed",
+      this.events.publish(triggerPost.simulationId, {
+        type: "generation.completed",
         simulationId: triggerPost.simulationId,
         triggerPostId: triggerPost.id,
         generatedPostIds: generatedIds,

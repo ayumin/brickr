@@ -199,7 +199,7 @@ export function Timeline({
   allPosts,
   characters,
   userProfile,
-  thinking,
+  activities,
   loading,
   emptyTitle,
   emptyBody,

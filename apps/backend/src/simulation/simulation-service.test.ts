@@ -211,6 +211,40 @@ function makeHarness(options: HarnessOptions): Harness {
     },
   } as unknown as TokenUsageService;
 
+  /**
+   * Stands in for the feed, which assembles the thread a post event carries
+   * (§11.3). Only the identity of the thread matters here; the DTO's contents are
+   * fixed in `feed-service.test.ts`.
+   */
+  const threadActivity = {
+    buildThreadActivity: (post: Post): Promise<ThreadActivityEvent> =>
+      Promise.resolve({
+        type: "thread.activity",
+        simulationId: post.simulationId,
+        room: {
+          id: simulation.id,
+          title: simulation.title,
+          status: simulation.status,
+          scope: simulation.scope,
+        },
+        thread: {
+          root: toDto(posts.find((entry) => entry.id === post.threadRootId) ?? post),
+          room: { id: simulation.id, title: simulation.title ?? "", isFeed: false },
+          latestReplies: [],
+          replyCount: 0,
+          lastActivityAt: post.threadActivityAt.toISOString(),
+          capabilities: {
+            canOpenAuthor: false,
+            canOpenRoom: false,
+            canOpenThread: false,
+            canReply: false,
+            canQuote: false,
+            canLoadMoreReplies: false,
+          },
+        },
+      }),
+  };
+
   const events = new EventHub();
   const service = new SimulationService(
     simulationRepository,

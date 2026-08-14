@@ -599,3 +599,104 @@ describe("FeedService thread replies (§12.2, §10.8)", () => {
     ).resolves.toHaveLength(1);
   });
 });
+
+/**
+ * The payload a post event carries (§11.3). Built here rather than in the event
+ * so a live update and a fresh page describe a thread identically.
+ */
+describe("FeedService.buildThreadActivity (§11.3)", () => {
+  const root = post({ id: "root-1", createdAt: at(0) });
+  const replies = [
+    reply({ id: "reply-1", replyTo: "root-1", threadRootId: "root-1", createdAt: at(1) }),
+    reply({ id: "reply-2", replyTo: "root-1", threadRootId: "root-1", createdAt: at(2) }),
+    reply({ id: "reply-3", replyTo: "reply-2", threadRootId: "root-1", createdAt: at(3) }),
+  ];
+
+  it("describes the whole thread, not the post that triggered it", async () => {
+    const { service } = makeHarness({ posts: [root, ...replies] });
+
+    const activity = await service.buildThreadActivity(replies[2] as Post);
+
+    expect(activity.type).toBe("thread.activity");
+    expect(activity.simulationId).toBe(ROOM.id);
+    expect(activity.thread.root.id).toBe("root-1");
+    // Same preview rule as a page: newest two, oldest first (§12.2).
+    expect(activity.thread.latestReplies.map((entry) => entry.id)).toEqual([
+      "reply-2",
+      "reply-3",
+    ]);
+    expect(activity.thread.replyCount).toBe(3);
+  });
+
+  it("works when the new post is the thread root itself", async () => {
+    const { service } = makeHarness({ posts: [root] });
+
+    const activity = await service.buildThreadActivity(root);
+
+    expect(activity.thread.root.id).toBe("root-1");
+    expect(activity.thread.replyCount).toBe(0);
+    expect(activity.thread.lastActivityAt).toBe(root.threadActivityAt.toISOString());
+  });
+
+  /**
+   * Capabilities are the one reader-dependent part of the DTO, so the event
+   * carries the anonymous baseline and each subscriber's are resolved at delivery
+   * (`public-events.ts`). Sending one reader's capabilities to everybody would
+   * hand a stranger somebody else's permissions.
+   */
+  it("leaves capabilities at their anonymous baseline, with the room attached", async () => {
+    const { service } = makeHarness({ posts: [root] });
+
+    const activity = await service.buildThreadActivity(root);
+
+    expect(Object.values(activity.thread.capabilities)).toEqual([
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+    ]);
+    // Enough for the delivery boundary to recompute them without another read.
+    expect(activity.room).toMatchObject({
+      id: ROOM.id,
+      status: "active",
+      scope: "room",
+      createdByUserId: "owner-1",
+    });
+  });
+
+  it("labels a post in the reserved global row as the feed", async () => {
+    const globalPost = post({ id: "root-2", simulationId: GLOBAL_SIMULATION_ID });
+    const { service } = makeHarness({ posts: [globalPost], rooms: [FEED_ROOM] });
+
+    const activity = await service.buildThreadActivity(globalPost);
+
+    expect(activity.thread.room).toEqual({
+      id: GLOBAL_SIMULATION_ID,
+      title: GLOBAL_SIMULATION_TITLE,
+      isFeed: true,
+    });
+  });
+
+  it("refuses to describe a thread whose root is gone", async () => {
+    const orphan = reply({
+      id: "reply-9",
+      replyTo: "missing",
+      threadRootId: "missing",
+      createdAt: at(1),
+    });
+    const { service } = makeHarness({ posts: [orphan] });
+
+    await expect(service.buildThreadActivity(orphan)).rejects.toThrow(PostNotFoundError);
+  });
+
+  it("refuses to describe a thread whose room is gone", async () => {
+    const homeless = post({ id: "root-3", simulationId: "room-missing" });
+    const { service } = makeHarness({ posts: [homeless], rooms: [ROOM] });
+
+    await expect(service.buildThreadActivity(homeless)).rejects.toThrow(
+      SimulationNotFoundError,
+    );
+  });
+});

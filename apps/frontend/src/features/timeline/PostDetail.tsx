@@ -66,7 +66,7 @@ export function PostDetail({
         allPosts={allPosts}
         characters={characters}
         userProfile={userProfile}
-        thinking={thinking}
+        activities={activities}
         loading={false}
         canPost={canPost}
         emptyTitle="投稿が見つかりません"
