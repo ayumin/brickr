@@ -32,8 +32,19 @@ function makePost(overrides: Partial<Post> & { id: string }): Post {
 function harness(existing: Post[] = []) {
   const byId = new Map(existing.map((post) => [post.id, post]));
   const created: NewPost[] = [];
+  /** Which id batches were read, so a lookup per post would show up as a failure. */
+  const reads: { byIds: string[][] } = { byIds: [] };
 
   const posts = {
+    findManyByIds(ids: string[]): Promise<Post[]> {
+      reads.byIds.push(ids);
+      return Promise.resolve(
+        ids.flatMap((id) => {
+          const post = byId.get(id);
+          return post ? [post] : [];
+        }),
+      );
+    },
     createWithThreadActivity(input: NewPost): Promise<Post> {
       created.push(input);
       const parent = input.replyTo ? byId.get(input.replyTo) : undefined;
