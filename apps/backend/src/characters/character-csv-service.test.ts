@@ -1,20 +1,17 @@
 import { describe, expect, it } from "vitest";
 import type { ModelProfileRepository } from "../model-profiles/model-profile-repository.js";
 import type { ModelProfile } from "../model-profiles/model-profile.js";
+import { CharacterCsvService } from "./character-csv-service.js";
 import type { CharacterRepository } from "./character-repository.js";
 import { CHARACTER_CSV_HEADERS, CharacterCsvError, exportCharactersCsv, parseCharactersCsv } from "./character-csv.js";
-import type { CharacterPersonaGenerator } from "./character-generator.js";
-import { CharacterService } from "./character-service.js";
 import type { Character, SaveCharacter } from "./character.js";
 
 /**
- * These tests exercise `CharacterService.exportCsv`/`importCsv` — the
- * orchestration around the pure `character-csv.ts` functions (which
- * `character-csv.test.ts` already covers): the id/handle cross-match check,
- * the blank-id-to-UUID fallback, created/updated accounting, the
- * missing-model-profile collection, and the importMany failure wrap. None of
- * this had a test before, so it doubles as the guard for a later extraction
- * of this orchestration into its own module.
+ * These tests exercise `CharacterCsvService` — the orchestration around the
+ * pure `character-csv.ts` functions (which `character-csv.test.ts` already
+ * covers): the id/handle cross-match check, the blank-id-to-UUID fallback,
+ * created/updated accounting, the missing-model-profile collection, and the
+ * importMany failure wrap.
  */
 
 const PROFILE: ModelProfile = { id: "openai-default", providerId: "openai", model: "gpt-test" };
@@ -70,10 +67,8 @@ function makeService(options: {
     },
   } as unknown as ModelProfileRepository;
 
-  const personaGenerator = {} as CharacterPersonaGenerator;
-
   return {
-    service: new CharacterService(characterRepository, modelProfileRepository, personaGenerator),
+    service: new CharacterCsvService(characterRepository, modelProfileRepository),
     ensureAllCalls,
     importManyCalls,
   };
@@ -117,7 +112,7 @@ function buildCsv(rows: string[][]): string {
   return `\uFEFF${lines.join("\r\n")}`;
 }
 
-describe("CharacterService.importCsv", () => {
+describe("CharacterCsvService.importCsv", () => {
   it("round-trips an exported CSV back through import as an update", async () => {
     const existing = makeCharacter("char-1", "existing1");
     const { service } = makeService({ characters: [existing], profiles: [PROFILE] });
@@ -202,7 +197,7 @@ describe("CharacterService.importCsv", () => {
   });
 });
 
-describe("CharacterService.exportCsv", () => {
+describe("CharacterCsvService.exportCsv", () => {
   it("names the file with today's date and includes soft-deleted rows with their post counts", async () => {
     const active = makeCharacter("char-active", "active1");
     const deleted = {
