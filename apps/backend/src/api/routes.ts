@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import type { FastifyInstance, FastifyReply } from "fastify";
 import { requireAdmin, requireUser } from "../auth/auth-context.js";
 import type { IssuedSession } from "../auth/auth-service.js";
 import { toInviteCodeDto } from "../auth/invite-code.js";
@@ -8,12 +8,13 @@ import {
   serializeSessionCookie,
   type SessionCookieOptions,
 } from "../auth/session-cookie.js";
-import { toAuthUserDto, toUserManagementDto, type UserAccount } from "../auth/user-account.js";
+import { toAuthUserDto, toUserManagementDto } from "../auth/user-account.js";
 import { env } from "../config/env.js";
 import type { AppServices } from "../services.js";
-import type { FeedReader } from "../feed/feed-service.js";
-import { handleDomainError, sendError } from "./errors.js";
+import { sendError } from "./errors.js";
 import { registerEventsRoute } from "./events-route.js";
+import { toFeedReader } from "./feed-reader.js";
+import { parseOr400, withDomainErrors, withSimulation } from "./route-helpers.js";
 import {
   bulkCreateCharactersSchema,
   bulkDeleteCharactersSchema,
@@ -57,18 +58,15 @@ export async function registerRoutes(
   }));
 
   app.post("/api/auth/signup", async (request, reply) => {
-    const body = signupSchema.safeParse(request.body);
-    if (!body.success) {
-      return sendError(reply, 400, "invalid_body", "signup body is invalid", body.error.issues);
-    }
-    try {
-      const issued = await services.auth.signup(body.data);
+    const body = parseOr400(signupSchema, request.body, reply, "invalid_body", "signup body is invalid");
+    if (!body) return reply;
+
+    return withDomainErrors(reply, async () => {
+      const issued = await services.auth.signup(body);
       return replyWithSession(reply, issued, cookieOptions).status(201).send({
         user: toAuthUserDto(issued.user),
       });
-    } catch (error) {
-      return handleDomainError(reply, error);
-    }
+    });
   });
 
   app.post("/api/auth/login", async (request, reply) => {
@@ -77,14 +75,12 @@ export async function registerRoutes(
       // Generic on purpose: a validation error must not reveal which field is wrong.
       return sendError(reply, 401, "invalid_credentials", "email or password is incorrect");
     }
-    try {
+    return withDomainErrors(reply, async () => {
       const issued = await services.auth.login(body.data);
       return replyWithSession(reply, issued, cookieOptions).send({
         user: toAuthUserDto(issued.user),
       });
-    } catch (error) {
-      return handleDomainError(reply, error);
-    }
+    });
   });
 
   /** Idempotent: signing out without a session is a success, not a 401. */
@@ -105,14 +101,18 @@ export async function registerRoutes(
   app.get("/api/users/management", async (request, reply) => {
     if (!requireAdmin(request, reply)) return reply;
 
-    const query = userManagementQuerySchema.safeParse(request.query);
-    if (!query.success) {
-      return sendError(reply, 400, "invalid_query", "query is invalid", query.error.issues);
-    }
+    const query = parseOr400(
+      userManagementQuerySchema,
+      request.query,
+      reply,
+      "invalid_query",
+      "query is invalid",
+    );
+    if (!query) return reply;
 
     const page = await services.userAdmin.listManagement({
-      page: query.data.page ?? 1,
-      ...(query.data.search ? { search: query.data.search } : {}),
+      page: query.page ?? 1,
+      ...(query.search ? { search: query.search } : {}),
     });
     return {
       users: page.accounts.map(toUserManagementDto),
@@ -125,12 +125,10 @@ export async function registerRoutes(
   app.get("/api/users/:id", async (request, reply) => {
     if (!requireAdmin(request, reply)) return reply;
 
-    const params = idParams.safeParse(request.params);
-    if (!params.success) {
-      return sendError(reply, 400, "invalid_params", "user id is invalid");
-    }
+    const params = parseOr400(idParams, request.params, reply, "invalid_params", "user id is invalid");
+    if (!params) return reply;
 
-    const user = await services.userAdmin.findById(params.data.id);
+    const user = await services.userAdmin.findById(params.id);
     if (!user) return sendError(reply, 404, "not_found", "user not found");
     return { user: toUserManagementDto(user) };
   });
@@ -138,74 +136,63 @@ export async function registerRoutes(
   app.post("/api/users/:id/suspend", async (request, reply) => {
     if (!requireAdmin(request, reply)) return reply;
 
-    const params = idParams.safeParse(request.params);
-    if (!params.success) {
-      return sendError(reply, 400, "invalid_params", "user id is invalid");
-    }
-    try {
-      const user = await services.userAdmin.suspend(params.data.id);
+    const params = parseOr400(idParams, request.params, reply, "invalid_params", "user id is invalid");
+    if (!params) return reply;
+
+    return withDomainErrors(reply, async () => {
+      const user = await services.userAdmin.suspend(params.id);
       return { user: toUserManagementDto(user) };
-    } catch (error) {
-      return handleDomainError(reply, error);
-    }
+    });
   });
 
   app.post("/api/users/:id/reactivate", async (request, reply) => {
     if (!requireAdmin(request, reply)) return reply;
 
-    const params = idParams.safeParse(request.params);
-    if (!params.success) {
-      return sendError(reply, 400, "invalid_params", "user id is invalid");
-    }
-    try {
-      const user = await services.userAdmin.reactivate(params.data.id);
+    const params = parseOr400(idParams, request.params, reply, "invalid_params", "user id is invalid");
+    if (!params) return reply;
+
+    return withDomainErrors(reply, async () => {
+      const user = await services.userAdmin.reactivate(params.id);
       return { user: toUserManagementDto(user) };
-    } catch (error) {
-      return handleDomainError(reply, error);
-    }
+    });
   });
 
   /** Returns the temporary password once, in clear text, for the admin to relay (§66.10). */
   app.post("/api/users/:id/reset-password", async (request, reply) => {
     if (!requireAdmin(request, reply)) return reply;
 
-    const params = idParams.safeParse(request.params);
-    if (!params.success) {
-      return sendError(reply, 400, "invalid_params", "user id is invalid");
-    }
-    try {
-      const { temporaryPassword } = await services.userAdmin.resetPassword(params.data.id);
+    const params = parseOr400(idParams, request.params, reply, "invalid_params", "user id is invalid");
+    if (!params) return reply;
+
+    return withDomainErrors(reply, async () => {
+      const { temporaryPassword } = await services.userAdmin.resetPassword(params.id);
       return { temporaryPassword };
-    } catch (error) {
-      return handleDomainError(reply, error);
-    }
+    });
   });
 
   app.get("/api/users/:id/characters", async (request, reply) => {
     const admin = requireAdmin(request, reply);
     if (!admin) return reply;
 
-    const params = idParams.safeParse(request.params);
-    if (!params.success) {
-      return sendError(reply, 400, "invalid_params", "user id is invalid");
-    }
-    const user = await services.userAdmin.findById(params.data.id);
+    const params = parseOr400(idParams, request.params, reply, "invalid_params", "user id is invalid");
+    if (!params) return reply;
+
+    const user = await services.userAdmin.findById(params.id);
     if (!user) return sendError(reply, 404, "not_found", "user not found");
     return {
-      characters: await services.characters.listManagementDtosByCreator(params.data.id, admin),
+      characters: await services.characters.listManagementDtosByCreator(params.id, admin),
     };
   });
 
   app.get("/api/users/:id/token-usage", async (request, reply) => {
     if (!requireAdmin(request, reply)) return reply;
 
-    const params = idParams.safeParse(request.params);
-    if (!params.success) {
-      return sendError(reply, 400, "invalid_params", "user id is invalid");
-    }
-    const user = await services.userAdmin.findById(params.data.id);
+    const params = parseOr400(idParams, request.params, reply, "invalid_params", "user id is invalid");
+    if (!params) return reply;
+
+    const user = await services.userAdmin.findById(params.id);
     if (!user) return sendError(reply, 404, "not_found", "user not found");
-    return services.tokenUsage.getDto(params.data.id);
+    return services.tokenUsage.getDto(params.id);
   });
 
   // -- invite codes -----------------------------------------------------------
@@ -217,11 +204,16 @@ export async function registerRoutes(
 
     // The whole body is optional (OpenAPI marks it so), so an omitted body must
     // parse the same as `{}` rather than fail validation.
-    const body = createInviteCodeSchema.safeParse(request.body ?? {});
-    if (!body.success) {
-      return sendError(reply, 400, "invalid_body", "invite code request is invalid", body.error.issues);
-    }
-    const inviteCode = await services.inviteCodes.issue(admin.id, body.data);
+    const body = parseOr400(
+      createInviteCodeSchema,
+      request.body ?? {},
+      reply,
+      "invalid_body",
+      "invite code request is invalid",
+    );
+    if (!body) return reply;
+
+    const inviteCode = await services.inviteCodes.issue(admin.id, body);
     return reply.status(201).send({ inviteCode: toInviteCodeDto(inviteCode) });
   });
 
@@ -239,12 +231,10 @@ export async function registerRoutes(
    * `/handle` or a reload has to work from (§66.2).
    */
   app.get("/api/handles/:handle", async (request, reply) => {
-    const params = handleParams.safeParse(request.params);
-    if (!params.success) {
-      return sendError(reply, 400, "invalid_params", "handle is invalid");
-    }
+    const params = parseOr400(handleParams, request.params, reply, "invalid_params", "handle is invalid");
+    if (!params) return reply;
 
-    const owner = await services.handles.resolve(params.data.handle);
+    const owner = await services.handles.resolve(params.handle);
     if (!owner) return sendError(reply, 404, "not_found", "handle not found");
 
     return { owner };
@@ -259,15 +249,16 @@ export async function registerRoutes(
   app.put("/api/application-settings", async (request, reply) => {
     if (!requireAdmin(request, reply)) return reply;
 
-    const body = updateApplicationSettingsSchema.safeParse(request.body);
-    if (!body.success) {
-      return sendError(reply, 400, "invalid_body", "application settings are invalid", body.error.issues);
-    }
-    try {
-      return await services.applicationSettings.update(body.data);
-    } catch (error) {
-      return handleDomainError(reply, error);
-    }
+    const body = parseOr400(
+      updateApplicationSettingsSchema,
+      request.body,
+      reply,
+      "invalid_body",
+      "application settings are invalid",
+    );
+    if (!body) return reply;
+
+    return withDomainErrors(reply, () => services.applicationSettings.update(body));
   });
 
   // -- characters -----------------------------------------------------------
@@ -291,25 +282,24 @@ export async function registerRoutes(
       },
     },
     async (request, reply) => {
-      const body = importCharactersCsvSchema.safeParse(request.body);
-      if (!body.success) {
-        return sendError(reply, 400, "invalid_body", "CSV data is invalid", body.error.issues);
-      }
-      try {
-        return await services.characters.importCsv(body.data.csv);
-      } catch (error) {
-        return handleDomainError(reply, error);
-      }
+      const body = parseOr400(
+        importCharactersCsvSchema,
+        request.body,
+        reply,
+        "invalid_body",
+        "CSV data is invalid",
+      );
+      if (!body) return reply;
+
+      return withDomainErrors(reply, () => services.characters.importCsv(body.csv));
     },
   );
 
   app.get("/api/characters/:id", async (request, reply) => {
-    const params = idParams.safeParse(request.params);
-    if (!params.success) {
-      return sendError(reply, 400, "invalid_params", "character id is invalid");
-    }
+    const params = parseOr400(idParams, request.params, reply, "invalid_params", "character id is invalid");
+    if (!params) return reply;
 
-    const character = await services.characters.findDto(params.data.id);
+    const character = await services.characters.findDto(params.id);
     if (!character) {
       return sendError(reply, 404, "not_found", "character not found");
     }
@@ -322,14 +312,10 @@ export async function registerRoutes(
    * (§66.5) without gating the whole endpoint behind a session.
    */
   app.get("/api/characters/:id/config", async (request, reply) => {
-    const params = idParams.safeParse(request.params);
-    if (!params.success) {
-      return sendError(reply, 400, "invalid_params", "character id is invalid");
-    }
-    const character = await services.characters.findConfigDto(
-      params.data.id,
-      request.currentUser,
-    );
+    const params = parseOr400(idParams, request.params, reply, "invalid_params", "character id is invalid");
+    if (!params) return reply;
+
+    const character = await services.characters.findConfigDto(params.id, request.currentUser);
     if (!character) return sendError(reply, 404, "not_found", "character not found");
     return { character };
   });
@@ -338,42 +324,43 @@ export async function registerRoutes(
     const user = requireUser(request, reply);
     if (!user) return reply;
 
-    const body = saveCharacterSchema.safeParse(request.body);
-    if (!body.success) {
-      return sendError(reply, 400, "invalid_body", "character body is invalid", body.error.issues);
-    }
-    try {
-      const character = await services.characters.create(body.data, user);
+    const body = parseOr400(
+      saveCharacterSchema,
+      request.body,
+      reply,
+      "invalid_body",
+      "character body is invalid",
+    );
+    if (!body) return reply;
+
+    return withDomainErrors(reply, async () => {
+      const character = await services.characters.create(body, user);
       return reply.status(201).send({ character });
-    } catch (error) {
-      return handleDomainError(reply, error);
-    }
+    });
   });
 
   app.post("/api/characters/bulk-create", async (request, reply) => {
     const user = requireUser(request, reply);
     if (!user) return reply;
 
-    const body = bulkCreateCharactersSchema.safeParse(request.body);
-    if (!body.success) {
-      return sendError(
-        reply,
-        400,
-        "invalid_body",
-        "character count is invalid",
-        body.error.issues,
-      );
-    }
-    const job = services.characters.startCreateMany(body.data.count, user.id);
+    const body = parseOr400(
+      bulkCreateCharactersSchema,
+      request.body,
+      reply,
+      "invalid_body",
+      "character count is invalid",
+    );
+    if (!body) return reply;
+
+    const job = services.characters.startCreateMany(body.count, user.id);
     return reply.status(202).send({ job });
   });
 
   app.get("/api/character-bulk-jobs/:id", async (request, reply) => {
-    const params = idParams.safeParse(request.params);
-    if (!params.success) {
-      return sendError(reply, 400, "invalid_params", "job id is invalid");
-    }
-    const job = services.characters.findBulkCreationJob(params.data.id);
+    const params = parseOr400(idParams, request.params, reply, "invalid_params", "job id is invalid");
+    if (!params) return reply;
+
+    const job = services.characters.findBulkCreationJob(params.id);
     if (!job) return sendError(reply, 404, "not_found", "bulk creation job not found");
     return { job };
   });
@@ -382,81 +369,69 @@ export async function registerRoutes(
     const user = requireUser(request, reply);
     if (!user) return reply;
 
-    const params = idParams.safeParse(request.params);
-    if (!params.success) {
-      return sendError(reply, 400, "invalid_params", "character id is invalid");
-    }
-    const body = saveCharacterSchema.safeParse(request.body);
-    if (!body.success) {
-      return sendError(reply, 400, "invalid_body", "character body is invalid", body.error.issues);
-    }
-    try {
-      return { character: await services.characters.update(params.data.id, body.data, user) };
-    } catch (error) {
-      return handleDomainError(reply, error);
-    }
+    const params = parseOr400(idParams, request.params, reply, "invalid_params", "character id is invalid");
+    if (!params) return reply;
+    const body = parseOr400(
+      saveCharacterSchema,
+      request.body,
+      reply,
+      "invalid_body",
+      "character body is invalid",
+    );
+    if (!body) return reply;
+
+    return withDomainErrors(reply, async () => ({
+      character: await services.characters.update(params.id, body, user),
+    }));
   });
 
   app.delete("/api/characters/:id", async (request, reply) => {
     const user = requireUser(request, reply);
     if (!user) return reply;
 
-    const params = idParams.safeParse(request.params);
-    if (!params.success) {
-      return sendError(reply, 400, "invalid_params", "character id is invalid");
-    }
-    const query = deleteCharacterQuerySchema.safeParse(request.query);
-    if (!query.success) {
-      return sendError(reply, 400, "invalid_query", "deletion mode is invalid");
-    }
-    try {
-      return {
-        deletedId: await services.characters.delete(
-          params.data.id,
-          user,
-          query.data.mode ?? "soft",
-        ),
-      };
-    } catch (error) {
-      return handleDomainError(reply, error);
-    }
+    const params = parseOr400(idParams, request.params, reply, "invalid_params", "character id is invalid");
+    if (!params) return reply;
+    const query = parseOr400(
+      deleteCharacterQuerySchema,
+      request.query,
+      reply,
+      "invalid_query",
+      "deletion mode is invalid",
+    );
+    if (!query) return reply;
+
+    return withDomainErrors(reply, async () => ({
+      deletedId: await services.characters.delete(params.id, user, query.mode ?? "soft"),
+    }));
   });
 
   app.post("/api/characters/:id/restore", async (request, reply) => {
     const user = requireUser(request, reply);
     if (!user) return reply;
 
-    const params = idParams.safeParse(request.params);
-    if (!params.success) {
-      return sendError(reply, 400, "invalid_params", "character id is invalid");
-    }
-    try {
-      return { restoredId: await services.characters.restore(params.data.id, user) };
-    } catch (error) {
-      return handleDomainError(reply, error);
-    }
+    const params = parseOr400(idParams, request.params, reply, "invalid_params", "character id is invalid");
+    if (!params) return reply;
+
+    return withDomainErrors(reply, async () => ({
+      restoredId: await services.characters.restore(params.id, user),
+    }));
   });
 
   app.post("/api/characters/bulk-delete", async (request, reply) => {
     const user = requireUser(request, reply);
     if (!user) return reply;
 
-    const body = bulkDeleteCharactersSchema.safeParse(request.body);
-    if (!body.success) {
-      return sendError(
-        reply,
-        400,
-        "invalid_body",
-        "character ids are invalid",
-        body.error.issues,
-      );
-    }
+    const body = parseOr400(
+      bulkDeleteCharactersSchema,
+      request.body,
+      reply,
+      "invalid_body",
+      "character ids are invalid",
+    );
+    if (!body) return reply;
+
     return {
-      deletedIds: await services.characters.deleteMany(
-        body.data.ids,
-        user,
-        body.data.mode ?? "soft",
-      ),
+      deletedIds: await services.characters.deleteMany(body.ids, user, body.mode ?? "soft"),
     };
   });
 
@@ -479,12 +454,17 @@ export async function registerRoutes(
     const user = requireUser(request, reply);
     if (!user) return reply;
 
-    const body = saveUserProfileSchema.safeParse(request.body);
-    if (!body.success) {
-      return sendError(reply, 400, "invalid_body", "user profile is invalid", body.error.issues);
-    }
+    const body = parseOr400(
+      saveUserProfileSchema,
+      request.body,
+      reply,
+      "invalid_body",
+      "user profile is invalid",
+    );
+    if (!body) return reply;
+
     // Always the session user's own id, so one account cannot edit another.
-    const profile = await services.userProfile.update(user.id, body.data);
+    const profile = await services.userProfile.update(user.id, body);
     // A live session whose account has gone is not a server fault.
     if (!profile) return sendError(reply, 404, "not_found", "user profile not found");
     return { profile };
@@ -508,12 +488,16 @@ export async function registerRoutes(
     const user = requireUser(request, reply);
     if (!user) return reply;
 
-    const body = createSimulationSchema.safeParse(request.body ?? {});
-    if (!body.success) {
-      return sendError(reply, 400, "invalid_body", "title is invalid", body.error.issues);
-    }
+    const body = parseOr400(
+      createSimulationSchema,
+      request.body ?? {},
+      reply,
+      "invalid_body",
+      "title is invalid",
+    );
+    if (!body) return reply;
 
-    const simulation = await services.simulations.create(body.data.title ?? null, user.id);
+    const simulation = await services.simulations.create(body.title ?? null, user.id);
     return reply.status(201).send({ simulation });
   });
 
@@ -525,12 +509,11 @@ export async function registerRoutes(
     const user = requireUser(request, reply);
     if (!user) return reply;
 
-    const body = updateSimulationSchema.safeParse(request.body);
-    if (!body.success) {
-      return sendError(reply, 400, "invalid_body", "title is invalid", body.error.issues);
-    }
+    const body = parseOr400(updateSimulationSchema, request.body, reply, "invalid_body", "title is invalid");
+    if (!body) return reply;
+
     return withSimulation(request, reply, async (id) => ({
-      simulation: await services.simulations.rename(id, body.data.title, user),
+      simulation: await services.simulations.rename(id, body.title, user),
     }));
   });
 
@@ -569,25 +552,21 @@ export async function registerRoutes(
    * falling back to `all`, which would show a stranger's feed as if it were theirs.
    */
   app.get("/api/feed", async (request, reply) => {
-    const query = feedQuerySchema.safeParse(request.query);
-    if (!query.success) {
-      return sendError(reply, 400, "invalid_query", "feed query is invalid", query.error.issues);
-    }
+    const query = parseOr400(feedQuerySchema, request.query, reply, "invalid_query", "feed query is invalid");
+    if (!query) return reply;
 
-    const filter = query.data.filter ?? "all";
+    const filter = query.filter ?? "all";
     if (filter === "mine" && !request.currentUser) {
       return sendError(reply, 401, "unauthenticated", "sign in to see threads about you");
     }
 
-    try {
-      return await services.feed.getUnifiedFeed({
+    return withDomainErrors(reply, () =>
+      services.feed.getUnifiedFeed({
         reader: request.currentUser ? toFeedReader(request.currentUser) : null,
         filter,
-        ...(query.data.cursor ? { cursor: query.data.cursor } : {}),
-      });
-    } catch (error) {
-      return handleDomainError(reply, error);
-    }
+        ...(query.cursor ? { cursor: query.cursor } : {}),
+      }),
+    );
   });
 
   /** Login required, and a room the caller may not read answers 404 (§10.2, §10.4). */
@@ -595,16 +574,14 @@ export async function registerRoutes(
     const user = requireUser(request, reply);
     if (!user) return reply;
 
-    const query = feedQuerySchema.safeParse(request.query);
-    if (!query.success) {
-      return sendError(reply, 400, "invalid_query", "feed query is invalid", query.error.issues);
-    }
+    const query = parseOr400(feedQuerySchema, request.query, reply, "invalid_query", "feed query is invalid");
+    if (!query) return reply;
 
     return withSimulation(request, reply, async (id) =>
       services.feed.getRoomFeed(id, {
         reader: toFeedReader(user),
-        filter: query.data.filter ?? "all",
-        ...(query.data.cursor ? { cursor: query.data.cursor } : {}),
+        filter: query.filter ?? "all",
+        ...(query.cursor ? { cursor: query.cursor } : {}),
       }),
     );
   });
@@ -621,40 +598,32 @@ export async function registerRoutes(
     const user = requireUser(request, reply);
     if (!user) return reply;
 
-    const params = idParams.safeParse(request.params);
-    if (!params.success) {
-      return sendError(reply, 400, "invalid_params", "simulation id is invalid");
-    }
+    const params = parseOr400(idParams, request.params, reply, "invalid_params", "simulation id is invalid");
+    if (!params) return reply;
 
-    const body = createPostSchema.safeParse(request.body);
-    if (!body.success) {
-      return sendError(reply, 400, "invalid_body", "post body is invalid", body.error.issues);
-    }
+    const body = parseOr400(createPostSchema, request.body, reply, "invalid_body", "post body is invalid");
+    if (!body) return reply;
 
-    try {
+    return withDomainErrors(reply, async () => {
       const post = await services.simulations.submitUserPost({
-        simulationId: params.data.id,
+        simulationId: params.id,
         authorId: user.id,
-        content: body.data.content,
-        imageUrl: body.data.imageUrl,
-        responderIds: body.data.responderIds ?? [],
-        replyTo: body.data.replyTo ?? null,
-        quoteOf: body.data.quoteOf ?? null,
+        content: body.content,
+        imageUrl: body.imageUrl,
+        responderIds: body.responderIds ?? [],
+        replyTo: body.replyTo ?? null,
+        quoteOf: body.quoteOf ?? null,
       });
 
       return reply.status(201).send({ post: await services.posts.toDto(post) });
-    } catch (error) {
-      return handleDomainError(reply, error);
-    }
+    });
   });
 
   app.get("/api/posts/:id", async (request, reply) => {
-    const params = idParams.safeParse(request.params);
-    if (!params.success) {
-      return sendError(reply, 400, "invalid_params", "post id is invalid");
-    }
+    const params = parseOr400(idParams, request.params, reply, "invalid_params", "post id is invalid");
+    if (!params) return reply;
 
-    const post = await services.posts.findById(params.data.id);
+    const post = await services.posts.findById(params.id);
     if (!post) return sendError(reply, 404, "not_found", "post not found");
 
     return { post: await services.posts.toDto(post) };
@@ -668,18 +637,18 @@ export async function registerRoutes(
     const user = requireUser(request, reply);
     if (!user) return reply;
 
-    const params = threadRootParams.safeParse(request.params);
-    if (!params.success) {
-      return sendError(reply, 400, "invalid_params", "thread root id is invalid");
-    }
+    const params = parseOr400(
+      threadRootParams,
+      request.params,
+      reply,
+      "invalid_params",
+      "thread root id is invalid",
+    );
+    if (!params) return reply;
 
-    try {
-      return {
-        posts: await services.feed.listThreadReplies(params.data.threadRootId, toFeedReader(user)),
-      };
-    } catch (error) {
-      return handleDomainError(reply, error);
-    }
+    return withDomainErrors(reply, async () => ({
+      posts: await services.feed.listThreadReplies(params.threadRootId, toFeedReader(user)),
+    }));
   });
 
   // -- sse ------------------------------------------------------------------
@@ -694,30 +663,3 @@ function replyWithSession(
 ): FastifyReply {
   return reply.header("set-cookie", serializeSessionCookie(issued.token, options));
 }
-
-/**
- * The signed-in reader as the feed sees them: an id, an admin flag and a handle,
- * the last one because `filter=mine` matches mentions by handle (§12.3).
- */
-function toFeedReader(user: UserAccount): NonNullable<FeedReader> {
-  return { id: user.id, isAdmin: user.isAdmin, handle: user.handle };
-}
-
-/** Shared param parsing + domain-error mapping for simulation-scoped routes. */
-async function withSimulation<T>(
-  request: FastifyRequest,
-  reply: FastifyReply,
-  handler: (id: string) => Promise<T>,
-): Promise<T | FastifyReply> {
-  const params = idParams.safeParse(request.params);
-  if (!params.success) {
-    return sendError(reply, 400, "invalid_params", "simulation id is invalid");
-  }
-
-  try {
-    return await handler(params.data.id);
-  } catch (error) {
-    return handleDomainError(reply, error);
-  }
-}
-
