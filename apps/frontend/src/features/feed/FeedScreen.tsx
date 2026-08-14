@@ -1,16 +1,16 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { GLOBAL_SIMULATION_ID, type FeedFilter, type FeedThreadDto, type PostDto } from "@brickr/shared";
+import { useCallback, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { GLOBAL_SIMULATION_ID, type FeedFilter } from "@brickr/shared";
 
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { Spinner } from "../../components/Spinner";
 import { useAuth } from "../auth/AuthContext";
 import { Composer } from "../composer/Composer";
-import { PostCard } from "../timeline/PostCard";
 import { useUserProfile } from "../../hooks/useUserProfile";
-import { api, isAbortError, toErrorMessage } from "../../services/api-client";
-import { postPath, roomPath } from "../../routes";
+import { handlePath, postPath } from "../../routes";
 import { readFeedFilter, writeFeedFilter } from "../rooms/feed-filter-storage";
+import { FeedHeader } from "./FeedHeader";
+import { FeedThreadList } from "./FeedThreadList";
 import { useFeed } from "./useFeed";
 
 /** Stable module-level reference for the global feed scope. */
@@ -20,11 +20,12 @@ const GLOBAL_FEED_SCOPE = { kind: "global" } as const;
  * The unified feed (§5.1, §5.2, §16.1, §16.4).
  *
  * Uses `useFeed` for SSE-driven realtime updates, cursor pagination, and the
- * `すべて／自分あて` filter (§16.1). Loading/error/empty states and the
- * reconnecting indicator are all handled here per §16.4.
+ * `すべて／自分あて` filter (§16.1). `FeedThreadList` (shared with `RoomScreen`,
+ * §10.2) renders the threads and owns the scroll-position correction (§12.4).
  */
 export function FeedScreen() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const userProfile = useUserProfile();
   const [filter, setFilter] = useState<FeedFilter>(readFeedFilter);
 
@@ -35,40 +36,41 @@ export function FeedScreen() {
     setFilter(next);
   }, []);
 
+  // Only an author already visible in a loaded thread can be clicked, and
+  // every post already carries its own author's handle (§9.1) - no separate
+  // roster fetch is needed just to resolve an id back to one.
+  const authorHandleById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const thread of feed.threads) {
+      map.set(thread.root.author.id, thread.root.author.handle);
+      for (const reply of thread.latestReplies) {
+        map.set(reply.author.id, reply.author.handle);
+      }
+    }
+    return map;
+  }, [feed.threads]);
+
+  const openAuthor = useCallback(
+    (authorId: string) => {
+      const handle = authorHandleById.get(authorId);
+      if (handle) navigate(handlePath(handle));
+    },
+    [authorHandleById, navigate],
+  );
+
+  const openHandle = useCallback((handle: string) => navigate(handlePath(handle)), [navigate]);
+  const openThread = useCallback((postId: string) => navigate(postPath(postId)), [navigate]);
+
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col">
-      {/* Header (§16.1) */}
-      <header className="border-b border-line px-4 py-3">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h1 className="font-display text-lg font-bold text-ink">フィード</h1>
-            <p className="text-xs text-ink-faint">すべてのルームの投稿</p>
-          </div>
-          {/* Anonymous generation indicator (§16.1) */}
-          {feed.activeResponseCount > 0 ? (
-            <span className="flex shrink-0 items-center gap-1.5 rounded-full border border-line bg-surface-raised px-2.5 py-1 text-[11px] text-ink-muted">
-              <Spinner size="sm" />
-              応答を生成中
-            </span>
-          ) : null}
-        </div>
-
-        {/* すべて／自分あて filter (§16.1) — hidden for unauthenticated users */}
-        {user ? (
-          <div className="mt-2 flex gap-1">
-            <FilterTab
-              label="すべて"
-              active={filter === "all"}
-              onClick={() => handleFilterChange("all")}
-            />
-            <FilterTab
-              label="自分あて"
-              active={filter === "mine"}
-              onClick={() => handleFilterChange("mine")}
-            />
-          </div>
-        ) : null}
-      </header>
+      <FeedHeader
+        title="フィード"
+        subtitle="すべてのルームの投稿"
+        activeResponseCount={feed.activeResponseCount}
+        showFilters={user !== null}
+        filter={filter}
+        onFilterChange={handleFilterChange}
+      />
 
       {/* SSE reconnecting indicator (§16.4) */}
       {feed.connection === "reconnecting" ? (
@@ -136,15 +138,14 @@ export function FeedScreen() {
           ) : null}
         </div>
       ) : (
-        /* Thread list */
         <>
-          <ul>
-            {feed.threads.map((thread) => (
-              <li key={thread.root.id}>
-                <FeedThreadRow thread={thread} currentUserId={user?.id} />
-              </li>
-            ))}
-          </ul>
+          <FeedThreadList
+            threads={feed.threads}
+            {...(user ? { currentUserId: user.id } : {})}
+            onOpenAuthor={openAuthor}
+            onOpenHandle={openHandle}
+            onOpenThread={openThread}
+          />
 
           {/* Load more (§16.4) */}
           {feed.hasMore ? (
@@ -176,126 +177,6 @@ export function FeedScreen() {
           ) : null}
         </>
       )}
-    </div>
-  );
-}
-
-function FilterTab({
-  label,
-  active,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      onClick={onClick}
-      className={`rounded-full px-3 py-1 text-xs font-medium transition ${
-        active
-          ? "bg-accent/15 text-accent"
-          : "text-ink-muted hover:bg-surface-hover hover:text-ink"
-      }`}
-    >
-      {label}
-    </button>
-  );
-}
-
-type RepliesState =
-  | { status: "collapsed" }
-  | { status: "loading" }
-  | { status: "error"; message: string }
-  | { status: "expanded"; posts: PostDto[] };
-
-function FeedThreadRow({
-  thread,
-  currentUserId,
-}: {
-  thread: FeedThreadDto;
-  currentUserId: string | undefined;
-}) {
-  const navigate = useNavigate();
-  const onExpand = thread.capabilities.canOpenThread
-    ? (postId: string) => navigate(postPath(postId))
-    : undefined;
-
-  const hiddenReplyCount = thread.replyCount - thread.latestReplies.length;
-  const canLoadMore = thread.capabilities.canLoadMoreReplies && hiddenReplyCount > 0;
-
-  const [repliesState, setRepliesState] = useState<RepliesState>({ status: "collapsed" });
-
-  const abortControllerRef = useRef<AbortController | null>(null);
-
-  useEffect(() => {
-    return () => {
-      abortControllerRef.current?.abort();
-    };
-  }, []);
-
-  const loadAllReplies = useCallback(() => {
-    abortControllerRef.current?.abort();
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
-    setRepliesState({ status: "loading" });
-    api
-      .getThreadReplies(thread.root.id, controller.signal)
-      .then((posts) => setRepliesState({ status: "expanded", posts }))
-      .catch((cause: unknown) => {
-        if (isAbortError(cause)) return;
-        setRepliesState({ status: "error", message: toErrorMessage(cause) });
-      });
-  }, [thread.root.id]);
-
-  const visibleReplies =
-    repliesState.status === "expanded" ? repliesState.posts : thread.latestReplies;
-
-  return (
-    <div>
-      <div className="px-4 pt-2.5 text-xs text-ink-faint">
-        {thread.capabilities.canOpenRoom ? (
-          <Link to={roomPath(thread.root.simulationId)} className="hover:underline">
-            {thread.room.title}
-          </Link>
-        ) : (
-          <span>{thread.room.title}</span>
-        )}
-      </div>
-      <PostCard
-        post={thread.root}
-        currentUserId={currentUserId}
-        showQuotedPost
-        {...(onExpand ? { onExpand } : {})}
-      />
-      {visibleReplies.map((reply) => (
-        <PostCard key={reply.id} post={reply} currentUserId={currentUserId} dense />
-      ))}
-
-      {/* 残りN件を表示 */}
-      {canLoadMore && repliesState.status === "collapsed" ? (
-        <button
-          type="button"
-          onClick={loadAllReplies}
-          className="w-full border-b border-line px-4 py-2 text-left text-xs text-accent transition hover:bg-surface-hover/60"
-        >
-          残り{hiddenReplyCount}件を表示
-        </button>
-      ) : repliesState.status === "loading" ? (
-        <div className="flex justify-center border-b border-line py-2">
-          <Spinner size="sm" />
-        </div>
-      ) : repliesState.status === "error" ? (
-        <div className="border-b border-line px-4 py-2">
-          <ErrorBanner
-            message="返信を取得できませんでした"
-            detail={repliesState.message}
-            onRetry={loadAllReplies}
-          />
-        </div>
-      ) : null}
     </div>
   );
 }
