@@ -463,15 +463,40 @@ export const api = {
   },
 
   /**
-   * The unified feed's first page, unauthenticated-friendly (§10.1). Only
+   * One page of the unified feed, unauthenticated-friendly (§10.1). Only
    * `filter: "mine"` needs a session - the backend 401s if one is missing.
    *
-   * Cursor pagination is Step 7's concern; this fetches page one only.
+   * `cursor` is the previous page's `nextCursor`, handed straight back: only the
+   * server encodes and decodes it (§9.4), so the ordering it describes can change
+   * without breaking a client that stored one.
    */
-  getFeed(filter: FeedFilter, signal?: AbortSignal): Promise<FeedPageDto> {
+  getFeed(
+    filter: FeedFilter,
+    cursor?: string | null,
+    signal?: AbortSignal,
+  ): Promise<FeedPageDto> {
     const query = new URLSearchParams({ filter });
+    if (cursor) query.set("cursor", cursor);
     return request<FeedPageDto>(
       `/api/feed?${query.toString()}`,
+      signal ? { signal } : {},
+    );
+  },
+
+  /**
+   * One page of a single room's feed (§10.2). Login required, and the reserved
+   * global row is not addressable here - the unified feed is what serves it.
+   */
+  getRoomFeed(
+    roomId: string,
+    filter: FeedFilter,
+    cursor?: string | null,
+    signal?: AbortSignal,
+  ): Promise<FeedPageDto> {
+    const query = new URLSearchParams({ filter });
+    if (cursor) query.set("cursor", cursor);
+    return request<FeedPageDto>(
+      `/api/simulations/${encodeURIComponent(roomId)}/feed?${query.toString()}`,
       signal ? { signal } : {},
     );
   },
