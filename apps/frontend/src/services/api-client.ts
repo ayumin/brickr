@@ -27,6 +27,8 @@ import type {
   CreateSimulationResponse,
   DeleteCharacterResponse,
   ExportCharactersCsvResponse,
+  FeedFilter,
+  FeedPageDto,
   ImportCharactersCsvResponse,
   InviteCodeDto,
   InviteCodesResponse,
@@ -444,6 +446,20 @@ export const api = {
       ...(signal ? { signal } : {}),
     });
     return data.simulation;
+  },
+
+  /**
+   * The unified feed's first page, unauthenticated-friendly (§10.1). Only
+   * `filter: "mine"` needs a session - the backend 401s if one is missing.
+   *
+   * Cursor pagination is Step 7's concern; this fetches page one only.
+   */
+  getFeed(filter: FeedFilter, signal?: AbortSignal): Promise<FeedPageDto> {
+    const query = new URLSearchParams({ filter });
+    return request<FeedPageDto>(
+      `/api/feed?${query.toString()}`,
+      signal ? { signal } : {},
+    );
   },
 
   async getSimulations(signal?: AbortSignal): Promise<SimulationSummaryDto[]> {
