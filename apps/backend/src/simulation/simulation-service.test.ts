@@ -453,11 +453,7 @@ describe("SimulationService orchestration", () => {
     expect(harness.generationCalls[1]?.target.id).toBe("post-2");
     expect(harness.posts[2]).toMatchObject({ authorId: beta.id });
     expect(stream.received).toContainEqual(
-      expect.objectContaining({
-        type: "character.processing",
-        targetPostId: "post-2",
-        characterId: beta.id,
-      }),
+      expect.objectContaining({ type: "response.started", targetPostId: "post-2" }),
     );
     expect(completed.generatedPostIds).toEqual(["post-2", "post-3"]);
   });
