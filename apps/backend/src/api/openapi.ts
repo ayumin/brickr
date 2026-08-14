@@ -1494,12 +1494,15 @@ export const openApiDocument: OpenAPIV3.Document = {
           receivedReactionCount: { type: "integer", minimum: 0 },
         },
       },
+      /**
+       * One shape for people and characters alike: no field says which, because
+       * that is exactly what the feed must not reveal (Brickr-ux-refine §9.1).
+       */
       PostAuthor: {
         type: "object",
-        required: ["id", "kind", "handle", "displayName"],
+        required: ["id", "handle", "displayName"],
         properties: {
           id: { type: "string" },
-          kind: { type: "string", enum: ["user", "character"] },
           handle: { type: "string" },
           displayName: { type: "string" },
           avatarUrl: ref("AvatarUrl"),
@@ -1521,7 +1524,6 @@ export const openApiDocument: OpenAPIV3.Document = {
         required: [
           "id",
           "simulationId",
-          "authorId",
           "author",
           "content",
           "mentions",
@@ -1533,7 +1535,6 @@ export const openApiDocument: OpenAPIV3.Document = {
         properties: {
           id: { type: "string" },
           simulationId: { type: "string" },
-          authorId: { type: "string" },
           author: ref("PostAuthor"),
           content: { type: "string" },
           imageUrl: ref("PostImageUrl"),

@@ -17,7 +17,7 @@ import type { EventHub } from "./event-hub.js";
 import { selectResponders, shouldRespond } from "./responder-selector.js";
 import type { UserProfile } from "../user-profile/user-profile.js";
 import type { SimulationRepository } from "./simulation-repository.js";
-import type { Simulation } from "./simulation.js";
+import { isGlobalSimulation, type Simulation } from "./simulation.js";
 
 /** Hard ceiling on character posts generated from one user post. */
 const MAX_POSTS_PER_SUBMISSION = 24;
@@ -78,6 +78,28 @@ export class PostNotFoundError extends Error {
 }
 
 /**
+ * The reserved global simulation is the feed itself (§8.2), so renaming,
+ * stopping, resuming or analysing it would break every screen at once.
+ *
+ * Refused here rather than only in the UI, because a UI guard is bypassed by
+ * calling the API directly.
+ */
+export class GlobalSimulationMutationError extends Error {
+  constructor(id: string) {
+    super(`simulation "${id}" is the global feed and cannot be managed as a room`);
+    this.name = "GlobalSimulationMutationError";
+  }
+}
+
+export function assertNotGlobalSimulation(
+  simulation: Pick<Simulation, "id" | "scope">,
+): void {
+  if (isGlobalSimulation(simulation)) {
+    throw new GlobalSimulationMutationError(simulation.id);
+  }
+}
+
+/**
  * Orchestrates a round of character reactions to a post.
  *
  * There is no round or wave model (CLAUDE.md §31): every character reads the
@@ -122,12 +144,16 @@ export class SimulationService {
 
   async rename(id: string, title: string, actor: SimulationActor): Promise<SimulationDto> {
     const simulation = await this.requireSimulation(id);
+    // Before the ownership check: the global row has no creator, so an admin
+    // would otherwise be allowed through (§8.2).
+    assertNotGlobalSimulation(simulation);
     assertSimulationOwnerOrAdmin(simulation, actor);
     return toSimulationDto(await this.simulations.updateTitle(id, title));
   }
 
   async stop(id: string, actor: SimulationActor): Promise<SimulationDto> {
     const simulation = await this.requireSimulation(id);
+    assertNotGlobalSimulation(simulation);
     assertSimulationOwnerOrAdmin(simulation, actor);
     this.stopped.add(id);
     const stoppedSimulation = await this.simulations.updateStatus(id, "stopped");
@@ -136,6 +162,7 @@ export class SimulationService {
 
   async resume(id: string, actor: SimulationActor): Promise<SimulationDto> {
     const simulation = await this.requireSimulation(id);
+    assertNotGlobalSimulation(simulation);
     assertSimulationOwnerOrAdmin(simulation, actor);
     this.stopped.delete(id);
     const resumedSimulation = await this.simulations.updateStatus(id, "active");
