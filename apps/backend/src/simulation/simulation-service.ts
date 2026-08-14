@@ -422,7 +422,7 @@ export class SimulationService {
 
       // Recorded even if publishing fails below: the tokens were already
       // spent. A tracking hiccup is logged, not surfaced as a failed response —
-      // it must never turn a successful generation into a `character.failed` event.
+      // it must never turn a successful generation into a failed outcome.
       if (generated.usage) {
         try {
           await this.tokenUsage.record(billingUserId, generated.usage);

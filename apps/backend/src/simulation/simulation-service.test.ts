@@ -275,23 +275,28 @@ function knownMentions(content: string, characters: Character[]): string[] {
     .filter((handle, index, all) => known.has(handle) && all.indexOf(handle) === index);
 }
 
+type CompletedEvent = Extract<InternalSseEvent, { type: "generation.completed" }>;
+
+/**
+ * Collects what the hub carried, and resolves when the run reports itself done.
+ *
+ * `generation.completed` is internal (§11.4): it never reaches a subscriber — the
+ * public conversion drops it — but it is the signal a test can wait on, since
+ * `submitUserPost` returns before generation starts.
+ */
 function collectUntilCompleted(events: EventHub): {
-  received: SseEvent[];
-  completed: Promise<Extract<SseEvent, { type: "simulation.completed" }>>;
+  received: InternalSseEvent[];
+  completed: Promise<CompletedEvent>;
 } {
-  const received: SseEvent[] = [];
-  let resolveCompleted:
-    | ((event: Extract<SseEvent, { type: "simulation.completed" }>) => void)
-    | undefined;
-  const completed = new Promise<Extract<SseEvent, { type: "simulation.completed" }>>(
-    (resolve) => {
-      resolveCompleted = resolve;
-    },
-  );
+  const received: InternalSseEvent[] = [];
+  let resolveCompleted: ((event: CompletedEvent) => void) | undefined;
+  const completed = new Promise<CompletedEvent>((resolve) => {
+    resolveCompleted = resolve;
+  });
 
   events.subscribe(SIMULATION.id, (event) => {
     received.push(event);
-    if (event.type === "simulation.completed") resolveCompleted?.(event);
+    if (event.type === "generation.completed") resolveCompleted?.(event);
   });
 
   return { received, completed };

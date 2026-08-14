@@ -269,7 +269,7 @@ export function Timeline({
       }
       return changed ? next : current;
     });
-  }, [thinking, postsById, visibleRootPosts]);
+  }, [activities, postsById, visibleRootPosts]);
 
   const knownHandles = useMemo(() => {
     const handles = new Set<string>([userProfile.handle]);
