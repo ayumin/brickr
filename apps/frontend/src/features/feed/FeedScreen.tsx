@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { GLOBAL_SIMULATION_ID, type FeedFilter, type FeedThreadDto, type PostDto } from "@brickr/shared";
 
@@ -160,9 +160,19 @@ function FeedThreadRow({
 
   const [repliesState, setRepliesState] = useState<RepliesState>({ status: "collapsed" });
 
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort();
+    };
+  }, []);
+
   const loadAllReplies = useCallback(() => {
-    setRepliesState({ status: "loading" });
+    abortControllerRef.current?.abort();
     const controller = new AbortController();
+    abortControllerRef.current = controller;
+    setRepliesState({ status: "loading" });
     api
       .getThreadReplies(thread.root.id, controller.signal)
       .then((posts) => setRepliesState({ status: "expanded", posts }))
