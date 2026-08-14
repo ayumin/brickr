@@ -66,7 +66,14 @@ export const createPostSchema = z
   .object({
     content: z.string().trim().max(MAX_POST_LENGTH),
     imageUrl: imageDataUrl.optional(),
-    responderIds: z.array(id).max(20).optional(),
+    responderIds: z
+      .array(id)
+      .max(20)
+      .meta({
+        deprecated: true,
+        description: "Retained for API compatibility; mentions select responders in the UI.",
+      })
+      .optional(),
     replyTo: id.optional(),
     quoteOf: id.optional(),
   })
@@ -115,11 +122,11 @@ export const saveCharacterSchema = z.object({
 
 export const bulkDeleteCharactersSchema = z.object({
   ids: z.array(id).min(1).max(100),
-  mode: z.enum(["soft", "hard"]).optional(),
+  mode: z.enum(["soft", "hard"]).meta({ default: "soft" }).optional(),
 });
 
 export const deleteCharacterQuerySchema = z.object({
-  mode: z.enum(["soft", "hard"]).optional(),
+  mode: z.enum(["soft", "hard"]).meta({ default: "soft" }).optional(),
 });
 
 export const importCharactersCsvSchema = z.object({
@@ -159,8 +166,17 @@ export const threadRootParams = z.object({ threadRootId: id });
  * one answers 400 from there rather than being validated into a different shape.
  */
 export const feedQuerySchema = z.object({
-  filter: z.enum(FEED_FILTERS).optional(),
-  cursor: z.string().trim().min(1).max(512).optional(),
+  // The default lives here only as documentation: the handler applies it via
+  // `?? "all"` rather than Zod, since an absent filter and an absent query
+  // parameter are the same request either way.
+  filter: z.enum(FEED_FILTERS).meta({ default: "all" }).optional(),
+  cursor: z
+    .string()
+    .trim()
+    .min(1)
+    .max(512)
+    .meta({ description: "Opaque cursor returned as `nextCursor` by the previous page." })
+    .optional(),
 });
 
 // -- auth ------------------------------------------------------------------
@@ -182,7 +198,11 @@ const email = z.string().trim().toLowerCase().email().max(254);
 const password = z.string().min(MIN_PASSWORD_LENGTH).max(MAX_PASSWORD_LENGTH);
 
 /** Calendar validity and the 18+ gate are checked in the auth service (§66.1). */
-const birthdate = z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/u);
+const birthdate = z
+  .string()
+  .trim()
+  .regex(/^\d{4}-\d{2}-\d{2}$/u)
+  .meta({ description: "Self-declared. Signup is refused below 18. Never returned." });
 
 export const signupSchema = z.object({
   inviteCode: z.string().trim().min(1).max(64),
@@ -238,5 +258,11 @@ export const userManagementQuerySchema = z.object({
 });
 
 export const createInviteCodeSchema = z.object({
-  expiresInDays: z.number().int().min(1).max(365).optional(),
+  expiresInDays: z
+    .number()
+    .int()
+    .min(1)
+    .max(365)
+    .meta({ description: "Omit for a code that never expires." })
+    .optional(),
 });

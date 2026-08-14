@@ -1,7 +1,26 @@
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
+import { EDITABLE_APPLICATION_SETTING_NAMES } from "@brickr/shared";
 import type { FastifyInstance } from "fastify";
 import type { OpenAPIV3 } from "openapi-types";
+import { propertySchema, requestSchema } from "./openapi-schemas.js";
+import {
+  bulkCreateCharactersSchema,
+  bulkDeleteCharactersSchema,
+  createInviteCodeSchema,
+  createPostSchema,
+  createSimulationSchema,
+  deleteCharacterQuerySchema,
+  feedQuerySchema,
+  idParams,
+  importCharactersCsvSchema,
+  loginSchema,
+  saveCharacterSchema,
+  saveUserProfileSchema,
+  signupSchema,
+  updateApplicationSettingsSchema,
+  updateSimulationSchema,
+} from "./schemas.js";
 
 type Schema = OpenAPIV3.ReferenceObject | OpenAPIV3.SchemaObject;
 
@@ -33,7 +52,7 @@ const pathParameter = (
   in: "path",
   required: true,
   description,
-  schema: { type: "string", minLength: 1, maxLength: 64 },
+  schema: propertySchema(idParams, "id"),
 });
 
 const idParameter = (description: string): OpenAPIV3.ParameterObject =>
@@ -50,14 +69,13 @@ const feedParameters: OpenAPIV3.ParameterObject[] = [
     required: false,
     description:
       "`all` (default) or `mine` — threads whose root is yours, that reply to a post of yours, or that mention your handle. `mine` requires a session.",
-    schema: { type: "string", enum: ["all", "mine"], default: "all" },
+    schema: propertySchema(feedQuerySchema, "filter"),
   },
   {
     name: "cursor",
     in: "query",
     required: false,
-    description: "Opaque cursor returned as `nextCursor` by the previous page.",
-    schema: { type: "string", maxLength: 512 },
+    schema: propertySchema(feedQuerySchema, "cursor"),
   },
 ];
 
@@ -495,11 +513,7 @@ export const openApiDocument: OpenAPIV3.Document = {
         summary: "Create or update characters from an exported CSV",
         description:
           "Requires a signed-in user. Matches existing characters by ID or handle and ignores the postCount column. The current import service is a trusted bulk-maintenance operation: it does not apply per-row owner checks and imported new rows are system-owned.",
-        requestBody: jsonBody({
-          type: "object",
-          required: ["csv"],
-          properties: { csv: { type: "string" } },
-        }),
+        requestBody: jsonBody(requestSchema(importCharactersCsvSchema)),
         responses: {
           "200": jsonResponse("Import summary", {
             type: "object",
@@ -562,7 +576,7 @@ export const openApiDocument: OpenAPIV3.Document = {
             name: "mode",
             in: "query",
             required: false,
-            schema: { type: "string", enum: ["soft", "hard"], default: "soft" },
+            schema: propertySchema(deleteCharacterQuerySchema, "mode"),
           },
         ],
         responses: {
@@ -623,11 +637,7 @@ export const openApiDocument: OpenAPIV3.Document = {
         summary: "Start bulk character generation",
         description:
           "The signed-in caller becomes createdByUserId for every generated character (CLAUDE.md 66.5).",
-        requestBody: jsonBody({
-          type: "object",
-          required: ["count"],
-          properties: { count: { type: "integer", minimum: 1, maximum: 100 } },
-        }),
+        requestBody: jsonBody(requestSchema(bulkCreateCharactersSchema)),
         responses: {
           "202": jsonResponse("Bulk creation job accepted", {
             type: "object",
@@ -664,19 +674,7 @@ export const openApiDocument: OpenAPIV3.Document = {
         summary: "Delete multiple characters",
         description:
           "Silently drops any id the caller did not create and is not an admin for, rather than rejecting the whole batch (CLAUDE.md 66.5).",
-        requestBody: jsonBody({
-          type: "object",
-          required: ["ids"],
-          properties: {
-            ids: {
-              type: "array",
-              minItems: 1,
-              maxItems: 100,
-              items: { type: "string", minLength: 1, maxLength: 64 },
-            },
-            mode: { type: "string", enum: ["soft", "hard"], default: "soft" },
-          },
-        }),
+        requestBody: jsonBody(requestSchema(bulkDeleteCharactersSchema)),
         responses: {
           "200": jsonResponse("Deleted character IDs", {
             type: "object",
@@ -780,13 +778,7 @@ export const openApiDocument: OpenAPIV3.Document = {
         security: sessionSecurity,
         tags: ["Simulations"],
         summary: "Create a simulation",
-        requestBody: jsonBody(
-          {
-            type: "object",
-            properties: { title: { type: "string", minLength: 1, maxLength: 120 } },
-          },
-          false,
-        ),
+        requestBody: jsonBody(requestSchema(createSimulationSchema), false),
         responses: {
           "201": jsonResponse("Created simulation", {
             type: "object",
@@ -824,11 +816,7 @@ export const openApiDocument: OpenAPIV3.Document = {
         summary: "Rename a simulation",
         description: "Creator or admin only (CLAUDE.md 66.6).",
         parameters: [idParameter("Simulation ID")],
-        requestBody: jsonBody({
-          type: "object",
-          required: ["title"],
-          properties: { title: { type: "string", minLength: 1, maxLength: 120 } },
-        }),
+        requestBody: jsonBody(requestSchema(updateSimulationSchema)),
         responses: {
           "200": jsonResponse("Renamed simulation", {
             type: "object",
@@ -1197,43 +1185,7 @@ export const openApiDocument: OpenAPIV3.Document = {
           },
         ],
       },
-      SaveCharacter: {
-        type: "object",
-        required: [
-          "handle",
-          "displayName",
-          "description",
-          "rolePrompt",
-          "tonePrompt",
-          "interests",
-          "activityLevel",
-          "responseProbability",
-          "replyProbability",
-          "quoteProbability",
-          "influence",
-          "modelProfileId",
-        ],
-        properties: {
-          handle: { type: "string", pattern: "^[a-z0-9_]{3,32}$" },
-          displayName: { type: "string", minLength: 1, maxLength: 80 },
-          description: { type: "string", minLength: 1, maxLength: 500 },
-          rolePrompt: { type: "string", minLength: 1, maxLength: 4000 },
-          tonePrompt: { type: "string", minLength: 1, maxLength: 4000 },
-          dialectPrompt: { type: "string", maxLength: 2000 },
-          interests: {
-            type: "array",
-            maxItems: 20,
-            items: { type: "string", minLength: 1, maxLength: 80 },
-          },
-          activityLevel: { type: "number", minimum: 0, maximum: 1 },
-          responseProbability: { type: "number", minimum: 0, maximum: 1 },
-          replyProbability: { type: "number", minimum: 0, maximum: 1 },
-          quoteProbability: { type: "number", minimum: 0, maximum: 1 },
-          influence: { type: "number", minimum: 0, maximum: 1 },
-          modelProfileId: { type: "string", minLength: 1, maxLength: 64 },
-          avatarUrl: ref("AvatarUrl"),
-        },
-      },
+      SaveCharacter: requestSchema(saveCharacterSchema),
       CharacterBulkCreationJob: {
         type: "object",
         required: ["id", "status", "completed", "total", "createdCount"],
@@ -1333,27 +1285,22 @@ export const openApiDocument: OpenAPIV3.Document = {
         },
       },
       UpdateApplicationSettingsRequest: {
-        type: "object",
-        required: ["overrides"],
+        ...requestSchema(updateApplicationSettingsSchema),
         properties: {
           overrides: {
-            type: "object",
-            minProperties: 1,
-            additionalProperties: false,
+            ...propertySchema(updateApplicationSettingsSchema, "overrides"),
+            // z.partialRecord's converted shape only has `additionalProperties`;
+            // enumerating each valid setting name here — derived from the same
+            // constant the schema itself validates against — documents them
+            // individually without a second, independently maintained list.
+            properties: Object.fromEntries(
+              EDITABLE_APPLICATION_SETTING_NAMES.map((name) => [
+                name,
+                { type: "string", nullable: true, maxLength: 200 },
+              ]),
+            ),
             description:
               "A string saves an override; null removes it and restores the environment value. Numeric settings are represented as decimal strings.",
-            properties: {
-              OPENAI_MODEL: { type: "string", nullable: true, maxLength: 200 },
-              ANTHROPIC_MODEL: { type: "string", nullable: true, maxLength: 200 },
-              GEMINI_MODEL: { type: "string", nullable: true, maxLength: 200 },
-              LLM_TIMEOUT_MS: { type: "string", nullable: true, maxLength: 200 },
-              LLM_MAX_RETRIES: { type: "string", nullable: true, maxLength: 200 },
-              MIN_RESPONDERS: { type: "string", nullable: true, maxLength: 200 },
-              MAX_RESPONDERS: { type: "string", nullable: true, maxLength: 200 },
-              CONTEXT_POST_LIMIT: { type: "string", nullable: true, maxLength: 200 },
-              MAX_CONCURRENT_CHARACTERS: { type: "string", nullable: true, maxLength: 200 },
-              MAX_CASCADE_DEPTH: { type: "string", nullable: true, maxLength: 200 },
-            },
           },
         },
       },
@@ -1387,36 +1334,8 @@ export const openApiDocument: OpenAPIV3.Document = {
         required: ["user"],
         properties: { user: { allOf: [ref("AuthUser")], nullable: true } },
       },
-      SignupRequest: {
-        type: "object",
-        required: ["inviteCode", "email", "password", "handle", "displayName", "birthdate"],
-        properties: {
-          inviteCode: { type: "string", minLength: 1, maxLength: 64 },
-          email: { type: "string", format: "email", maxLength: 254 },
-          password: { type: "string", minLength: 12, maxLength: 128 },
-          handle: { type: "string", pattern: "^[a-z0-9_]{3,32}$" },
-          displayName: { type: "string", minLength: 1, maxLength: 50 },
-          birthdate: {
-            type: "string",
-            format: "date",
-            description: "Self-declared. Signup is refused below 18. Never returned.",
-          },
-          description: { type: "string", maxLength: 280 },
-          country: { type: "string", maxLength: 60 },
-          region: { type: "string", maxLength: 60 },
-          interests: { type: "array", items: { type: "string" }, maxItems: 20 },
-          occupation: { type: "string", maxLength: 60 },
-          xHandle: { type: "string", pattern: "^[A-Za-z0-9_]{1,15}$" },
-        },
-      },
-      LoginRequest: {
-        type: "object",
-        required: ["email", "password"],
-        properties: {
-          email: { type: "string", format: "email" },
-          password: { type: "string" },
-        },
-      },
+      SignupRequest: requestSchema(signupSchema),
+      LoginRequest: requestSchema(loginSchema),
       UserManagement: {
         type: "object",
         description:
@@ -1491,17 +1410,7 @@ export const openApiDocument: OpenAPIV3.Document = {
           status: { type: "string", enum: ["unused", "used", "expired"] },
         },
       },
-      CreateInviteCodeRequest: {
-        type: "object",
-        properties: {
-          expiresInDays: {
-            type: "integer",
-            minimum: 1,
-            maximum: 365,
-            description: "Omit for a code that never expires.",
-          },
-        },
-      },
+      CreateInviteCodeRequest: requestSchema(createInviteCodeSchema),
       CreateInviteCodeResponse: {
         type: "object",
         required: ["inviteCode"],
@@ -1525,15 +1434,7 @@ export const openApiDocument: OpenAPIV3.Document = {
           avatarUrl: ref("AvatarUrl"),
         },
       },
-      SaveUserProfile: {
-        type: "object",
-        required: ["displayName", "description"],
-        properties: {
-          displayName: { type: "string", minLength: 1, maxLength: 80 },
-          description: { type: "string", maxLength: 500 },
-          avatarUrl: ref("AvatarUrl"),
-        },
-      },
+      SaveUserProfile: requestSchema(saveUserProfileSchema),
       Simulation: {
         type: "object",
         required: ["id", "title", "status", "createdAt"],
@@ -1734,27 +1635,7 @@ export const openApiDocument: OpenAPIV3.Document = {
           },
         },
       },
-      CreatePost: {
-        type: "object",
-        required: ["content"],
-        properties: {
-          content: { type: "string", maxLength: 500 },
-          imageUrl: ref("PostImageUrl"),
-          responderIds: {
-            type: "array",
-            maxItems: 20,
-            deprecated: true,
-            description: "Retained for API compatibility; mentions select responders in the UI.",
-            items: { type: "string", minLength: 1, maxLength: 64 },
-          },
-          replyTo: { type: "string", minLength: 1, maxLength: 64 },
-          quoteOf: { type: "string", minLength: 1, maxLength: 64 },
-        },
-        anyOf: [
-          { required: ["content"], properties: { content: { minLength: 1 } } },
-          { required: ["imageUrl"] },
-        ],
-      },
+      CreatePost: requestSchema(createPostSchema),
     },
   },
 };
