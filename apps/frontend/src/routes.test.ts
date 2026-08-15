@@ -33,9 +33,16 @@ describe("normalizeHandleParam", () => {
   });
 
   it("rejects every reserved word this app now routes above the /:handle catch-all", () => {
-    for (const reserved of ["login", "admin", "characters", "simulations", "rooms", "cast", "settings", "posts"]) {
+    for (const reserved of [
+      "login", "characters", "simulations", "rooms", "cast", "settings", "posts",
+      "profile", "appearance", "usage", "runtime", "users", "invites",
+    ]) {
       expect(normalizeHandleParam(reserved)).toBeNull();
     }
+  });
+
+  it("does not reject 'admin': there is no /admin route, and it collides with ADMIN_HANDLE's default (CLAUDE.md §66.9)", () => {
+    expect(normalizeHandleParam("admin")).toBe("admin");
   });
 
   it("rejects undefined and an empty string", () => {

@@ -157,6 +157,53 @@ export class FeedRepository {
   }
 
   /**
+   * The single newest reply per thread that concerns this reader - answers
+   * them or mentions them - regardless of whether it is among that thread's
+   * top `REPLY_PREVIEW_COUNT` most-recent replies (§12.3).
+   *
+   * Same "top N per group" shape as `findLatestRepliesByThread`, but ranked
+   * by a concern condition instead of plain recency, and capped at one per
+   * thread: the caller only needs this to backfill a preview the reply would
+   * otherwise have been pushed out of by newer, unrelated replies, not a
+   * second full preview list.
+   */
+  async findConcerningReplyByThread(
+    rootIds: string[],
+    mine: FeedMineScope,
+  ): Promise<Map<string, Post>> {
+    if (rootIds.length === 0) return new Map();
+
+    const rows = await this.db.$queryRaw<PostRow[]>(Prisma.sql`
+      SELECT ranked.id,
+             ranked.simulation_id AS "simulationId",
+             ranked.author_id AS "authorId",
+             ranked.content,
+             ranked.image_url AS "imageUrl",
+             ranked.mentions,
+             ranked.reply_to AS "replyTo",
+             ranked.quote_of AS "quoteOf",
+             ranked.thread_root_id AS "threadRootId",
+             ranked.thread_activity_at AS "threadActivityAt",
+             ranked.created_at AS "createdAt"
+      FROM (
+        SELECT p.*,
+               row_number() OVER (
+                 PARTITION BY p.thread_root_id
+                 ORDER BY p.created_at DESC, p.id DESC
+               ) AS concern_rank
+        FROM posts p
+        LEFT JOIN posts parent ON parent.id = p.reply_to
+        WHERE p.thread_root_id IN (${Prisma.join(rootIds)})
+          AND p.reply_to IS NOT NULL
+          AND (parent.author_id = ${mine.userId} OR ${mine.handle} = ANY(p.mentions))
+      ) ranked
+      WHERE ranked.concern_rank = 1
+    `);
+
+    return new Map(rows.map((row) => [row.threadRootId, toPost(row)]));
+  }
+
+  /**
    * Every reply in one thread, oldest first (§12.2).
    *
    * `threadRootId` is what makes this a single indexed read instead of walking
@@ -174,18 +221,21 @@ export class FeedRepository {
   /**
    * The `mine` filter as a root condition (§12.3).
    *
-   * The first two arms are properties of the root itself. The third cannot be:
-   * "a reply in this thread answers a post of mine" and "a reply mentions me" are
-   * facts about other rows, and `threadRootId` has no Prisma relation to join
-   * through (§8.3), so the thread ids are collected first and matched by id.
+   * The first two OR arms below (`authorId`/`mentions`) are properties of the
+   * root itself. Everything else cannot be: "a reply in this thread answers a
+   * post of mine", "a reply mentions me", and "this root quotes a post of
+   * mine" are all facts about other rows relative to the root (a reply, or —
+   * for the quote arm — the root row itself referencing a different post via
+   * `quoteOf`), and `threadRootId` has no Prisma relation to join through
+   * (§8.3), so the qualifying thread ids are collected first and matched by id.
    *
-   * Two queries regardless of page size, and none of them per thread.
+   * Three queries regardless of page size, and none of them per thread.
    *
-   * A room-scoped caller narrows both lookups to that room as well. It changes no
+   * A room-scoped caller narrows every lookup to that room as well. It changes no
    * result — a thread never spans simulations, since a reply is refused unless its
    * target belongs to the same one (§10.5) — but without it one room's "自分あて"
-   * would read every reply and every mention in the database to build a list that
-   * the outer query then throws away (§26).
+   * would read every reply, mention, and quote in the database to build a list
+   * that the outer query then throws away (§26).
    */
   private async concerningUser(
     mine: FeedMineScope,
@@ -193,7 +243,7 @@ export class FeedRepository {
   ): Promise<Prisma.PostWhereInput> {
     const room = simulationId === undefined ? {} : { simulationId };
 
-    const [answered, mentioned] = await Promise.all([
+    const [answered, mentioned, quoted] = await Promise.all([
       // A reply whose parent I wrote. Having merely posted in the thread does
       // not count, or `mine` would collapse into `all`.
       this.db.post.findMany({
@@ -206,10 +256,20 @@ export class FeedRepository {
         select: { threadRootId: true },
         distinct: ["threadRootId"],
       }),
+      // A quote repost of a post of mine. Always its own root thread (§8.3,
+      // §12.1), so this is a fact about the root itself - but it still needs
+      // the same "collect ids, then match by id" shape as the reply arm above,
+      // since `findThreadPage`'s own query has no relation to join through
+      // for `quoteOfPost` any more cheaply than this.
+      this.db.post.findMany({
+        where: { ...room, quoteOf: { not: null }, quoteOfPost: { authorId: mine.userId } },
+        select: { threadRootId: true },
+        distinct: ["threadRootId"],
+      }),
     ]);
 
     const threadIds = [
-      ...new Set([...answered, ...mentioned].map((row) => row.threadRootId)),
+      ...new Set([...answered, ...mentioned, ...quoted].map((row) => row.threadRootId)),
     ];
 
     return {

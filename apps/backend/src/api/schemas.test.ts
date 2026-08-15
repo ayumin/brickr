@@ -165,7 +165,7 @@ describe("handle validation (CLAUDE.md §66.2, §66.13)", () => {
     expect(saveCharacterSchema.safeParse({ ...VALID_CHARACTER, handle: "login" }).success).toBe(
       false,
     );
-    expect(signupSchema.safeParse({ ...VALID_SIGNUP, handle: "admin" }).success).toBe(false);
+    expect(signupSchema.safeParse({ ...VALID_SIGNUP, handle: "settings" }).success).toBe(false);
   });
 
   it("resolves a 3-character handle but rejects one below the minimum", () => {

@@ -263,16 +263,26 @@ export class FeedService {
     const page = rows.slice(0, FEED_PAGE_SIZE);
     const rootIds = page.map((row) => row.root.id);
 
-    const [replyCounts, previews] = await Promise.all([
+    const [replyCounts, previews, concerningReplyByThread] = await Promise.all([
       this.feed.countRepliesByThread(rootIds),
       this.feed.findLatestRepliesByThread(rootIds, REPLY_PREVIEW_COUNT),
+      mine ? this.feed.findConcerningReplyByThread(rootIds, mine) : Promise.resolve(new Map<string, Post>()),
     ]);
+
+    const previewsByThread = groupByThread(previews);
+    // Under `mine`, a reply that concerns the reader can be older than this
+    // thread's `REPLY_PREVIEW_COUNT` most-recent replies and so absent from
+    // `previews` above - back it in rather than let newer, unrelated replies
+    // hide the one reason this thread qualifies as "自分あて" (§12.3).
+    for (const [threadId, concerning] of concerningReplyByThread) {
+      previewsByThread.set(threadId, withConcerningReply(previewsByThread.get(threadId) ?? [], concerning));
+    }
+    const allPreviews = [...previewsByThread.values()].flat();
 
     // Roots and previewed replies are mapped together, so authors and quoted
     // posts are looked up once for the entire page.
-    const dtos = await this.posts.toDtos([...page.map((row) => row.root), ...previews]);
+    const dtos = await this.posts.toDtos([...page.map((row) => row.root), ...allPreviews]);
     const dtoById = new Map(dtos.map((dto) => [dto.id, dto]));
-    const previewsByThread = groupByThread(previews);
 
     const threads = page.map((row) =>
       this.toThreadDto({
@@ -346,6 +356,26 @@ function groupByThread(replies: Post[]): Map<string, Post[]> {
     else byThread.set(reply.threadRootId, [reply]);
   }
   return byThread;
+}
+
+/**
+ * Backfills one thread's preview with the reply that concerns the reader
+ * under `mine`, if it was pushed out by newer, unrelated replies (§12.3).
+ *
+ * `concerning` is undefined for a thread with no such reply. If it is already
+ * among `previews` there is nothing to do. Otherwise, since `previews` is
+ * already "this thread's most recent replies", a `concerning` reply absent
+ * from it is necessarily older than every one of them - so the result keeps
+ * only the single newest existing preview alongside it, re-sorted oldest
+ * first, rather than growing past `REPLY_PREVIEW_COUNT`.
+ */
+function withConcerningReply(previews: Post[], concerning: Post | undefined): Post[] {
+  if (!concerning || previews.some((post) => post.id === concerning.id)) {
+    return previews;
+  }
+  const newestExisting = previews.at(-1);
+  const merged = newestExisting ? [concerning, newestExisting] : [concerning];
+  return merged.sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime());
 }
 
 /** The last thread actually served is where the next page continues from (§9.4). */
