@@ -135,7 +135,7 @@ export function FeedScreen() {
             onClick={openComposer}
             className="min-w-0 flex-1 rounded-full border border-line bg-surface px-4 py-2.5 text-left text-sm text-ink-faint transition hover:border-accent/50"
           >
-            {"いま何が起きてる？　@ でキャラクターを指名"}
+            {"いま何が起きてる？　@ でキャストを指名"}
           </button>
         </div>
       ) : null}

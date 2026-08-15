@@ -154,7 +154,7 @@ export function parseGeneratedPersonas(
   const end = text.lastIndexOf("}");
   if (start < 0 || end < start) {
     throw new CharacterPersonaParseError(
-      "LLMの応答にキャラクターオブジェクトが含まれていませんでした。",
+      "LLMの応答にキャストオブジェクトが含まれていませんでした。",
     );
   }
   let parsed: unknown;
@@ -198,7 +198,7 @@ export function parseGeneratedPersonas(
   const generated = expectedKeys.map((key) => validated.data.characters[key]);
   if (generated.some((persona) => persona === undefined)) {
     throw new CharacterPersonaParseError(
-      "LLMの応答に要求されたキャラクターキーが含まれていませんでした。",
+      "LLMの応答に要求されたキャストキーが含まれていませんでした。",
     );
   }
   return generated as GeneratedCharacterPersona[];

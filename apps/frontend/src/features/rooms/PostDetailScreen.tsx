@@ -13,7 +13,6 @@ import {
   isUnauthorizedError,
   toErrorMessage,
 } from "../../services/api-client";
-import { useCharacters } from "../../hooks/useCharacters";
 import { useUserProfile } from "../../hooks/useUserProfile";
 import { PostDetail } from "../timeline/PostDetail";
 import { useSimulationEvents } from "../simulation/useSimulationEvents";
@@ -67,7 +66,6 @@ export function PostDetailScreen({ postId }: { postId: string }) {
 
   const simulationId = state.status === "ready" ? state.post.simulationId : null;
 
-  const { characters } = useCharacters();
   const userProfile = useUserProfile();
   const events = useSimulationEvents(simulationId ?? "", simulationId !== null);
 
@@ -93,12 +91,13 @@ export function PostDetailScreen({ postId }: { postId: string }) {
         navigate(handlePath(userProfile.profile.handle));
         return;
       }
-      const character = characters.find((item) => item.id === authorId);
-      const handle = character?.handle ?? events.posts.find((post) => post.author.id === authorId)?.author.handle;
+      const handle = events.posts.find((post) => post.author.id === authorId)?.author.handle;
       if (handle) navigate(handlePath(handle));
     },
-    [navigate, characters, events.posts, userProfile.profile.id, userProfile.profile.handle],
+    [navigate, events.posts, userProfile.profile.id, userProfile.profile.handle],
   );
+
+  const openHandle = useCallback((handle: string) => navigate(handlePath(handle)), [navigate]);
 
   const openPost = useCallback(
     (id: string) => navigate(postPath(id)),
@@ -147,11 +146,11 @@ export function PostDetailScreen({ postId }: { postId: string }) {
       <PostDetail
         post={post}
         allPosts={events.posts}
-        characters={characters}
         userProfile={userProfile.profile}
         activities={events.activities}
         canPost={canPost}
         onOpenAuthor={openAuthor}
+        onOpenHandle={openHandle}
         onOpenPost={openPost}
         onPosted={events.addLocalPost}
       />

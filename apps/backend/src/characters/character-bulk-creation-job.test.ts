@@ -35,7 +35,7 @@ describe("CharacterBulkCreationJobs", () => {
     await vi.waitFor(() => {
       expect(jobs.find(started.id)).toMatchObject({
         status: "failed",
-        error: "キャラクター生成処理でエラーが発生しました: invalid structured output",
+        error: "キャスト生成処理でエラーが発生しました: invalid structured output",
       });
     });
   });

@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import type { CreateInviteCodeRequest, UserManagementDto } from "@brickr/shared";
+import type { UserManagementDto } from "@brickr/shared";
 import { USER_MANAGEMENT_PAGE_SIZE } from "@brickr/shared";
 
 import { Avatar } from "../../components/Avatar";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { Icon } from "../../components/Icon";
+import { SecretResultDialog, type SecretResult } from "../../components/SecretResultDialog";
 import { Spinner } from "../../components/Spinner";
 import { api, isAbortError, toErrorMessage } from "../../services/api-client";
 import { UserDrilldown } from "./UserDrilldown";
@@ -14,8 +15,6 @@ const SEARCH_DEBOUNCE_MS = 300;
 type PendingAction =
   | { kind: "suspend"; user: UserManagementDto }
   | { kind: "reset-password"; user: UserManagementDto };
-
-type SecretResult = { title: string; value: string };
 
 function statusLabel(status: UserManagementDto["status"]): string {
   return status === "suspended" ? "停止中" : "有効";
@@ -35,10 +34,6 @@ export function UserManagementList() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [secretResult, setSecretResult] = useState<SecretResult | null>(null);
   const [drilldownUser, setDrilldownUser] = useState<UserManagementDto | null>(null);
-  const [inviteOpen, setInviteOpen] = useState(false);
-  const [inviteExpiresDays, setInviteExpiresDays] = useState("");
-  const [inviteBusy, setInviteBusy] = useState(false);
-  const [inviteError, setInviteError] = useState<string | null>(null);
 
   // Debounced: the backend requires a real round trip per keystroke otherwise.
   useEffect(() => {
@@ -117,24 +112,6 @@ export function UserManagementList() {
     }
   }
 
-  async function issueInviteCode(): Promise<void> {
-    setInviteBusy(true);
-    setInviteError(null);
-    const trimmed = inviteExpiresDays.trim();
-    const request: CreateInviteCodeRequest =
-      trimmed.length > 0 ? { expiresInDays: Number(trimmed) } : {};
-    try {
-      const inviteCode = await api.createInviteCode(request);
-      setInviteOpen(false);
-      setInviteExpiresDays("");
-      setSecretResult({ title: "発行された招待コード", value: inviteCode.code });
-    } catch (cause) {
-      setInviteError(toErrorMessage(cause));
-    } finally {
-      setInviteBusy(false);
-    }
-  }
-
   return (
     <section>
       <div className="space-y-3 border-b border-line px-4 py-4">
@@ -153,17 +130,6 @@ export function UserManagementList() {
               className="w-full rounded-full border border-line bg-surface-raised py-2 pl-9 pr-3 text-sm text-ink placeholder:text-ink-faint focus:border-accent/60 focus:outline-none"
             />
           </label>
-          <button
-            type="button"
-            onClick={() => {
-              setInviteError(null);
-              setInviteOpen(true);
-            }}
-            className="flex items-center gap-1.5 rounded-full border border-accent/40 px-3 py-2 text-xs font-semibold text-accent transition hover:bg-accent/10"
-          >
-            <Icon name="key" />
-            招待コードを発行
-          </button>
         </div>
         <p className="text-xs text-ink-faint">{totalCount.toLocaleString("ja-JP")}人</p>
       </div>
@@ -400,61 +366,6 @@ export function UserManagementList() {
         </div>
       ) : null}
 
-      {inviteOpen ? (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
-          onClick={(event) => {
-            if (event.target === event.currentTarget && !inviteBusy) setInviteOpen(false);
-          }}
-        >
-          <form
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="invite-code-title"
-            className="w-full max-w-sm rounded-2xl border border-line bg-surface p-5 shadow-2xl"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void issueInviteCode();
-            }}
-          >
-            <h2 id="invite-code-title" className="text-base font-bold text-ink">
-              招待コードを発行
-            </h2>
-            <label className="mt-4 block text-sm text-ink-muted">
-              有効期限（日数、任意）
-              <input
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                disabled={inviteBusy}
-                value={inviteExpiresDays}
-                onChange={(event) => setInviteExpiresDays(event.currentTarget.value)}
-                placeholder="無期限"
-                className="mt-1.5 w-full rounded-xl border border-line bg-surface-raised px-3 py-2 text-ink focus:border-accent/60 focus:outline-none"
-              />
-            </label>
-            {inviteError ? <p className="mt-3 text-sm text-danger">{inviteError}</p> : null}
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                type="button"
-                disabled={inviteBusy}
-                onClick={() => setInviteOpen(false)}
-                className="rounded-full border border-line px-4 py-2 text-sm text-ink-muted hover:bg-surface-hover disabled:opacity-50"
-              >
-                キャンセル
-              </button>
-              <button
-                type="submit"
-                disabled={inviteBusy}
-                className="rounded-full bg-accent-strong px-4 py-2 text-sm font-semibold text-white hover:bg-accent disabled:opacity-50"
-              >
-                {inviteBusy ? "発行中…" : "発行する"}
-              </button>
-            </div>
-          </form>
-        </div>
-      ) : null}
-
       {secretResult ? (
         <SecretResultDialog result={secretResult} onClose={() => setSecretResult(null)} />
       ) : null}
@@ -463,78 +374,5 @@ export function UserManagementList() {
         <UserDrilldown user={drilldownUser} onClose={() => setDrilldownUser(null)} />
       ) : null}
     </section>
-  );
-}
-
-/**
- * Shown exactly once (CLAUDE.md §66.10): the invite code or temporary
- * password is never retrievable again after this, so closing requires an
- * explicit click rather than a background click that could happen by accident.
- */
-function SecretResultDialog({
-  result,
-  onClose,
-}: {
-  result: SecretResult;
-  onClose: () => void;
-}) {
-  const [copied, setCopied] = useState(false);
-  const [copyError, setCopyError] = useState(false);
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="secret-result-title"
-        className="relative w-full max-w-sm rounded-2xl border border-line bg-surface p-5 shadow-2xl"
-      >
-        <h2 id="secret-result-title" className="text-base font-bold text-ink">
-          {result.title}
-        </h2>
-        <p className="mt-2 text-xs text-ink-muted">
-          この値は今だけ表示されます。担当のUserへ別の手段で伝えてください。
-        </p>
-        <div className="mt-4 flex items-center gap-2 rounded-xl border border-line bg-surface-raised px-3 py-2">
-          <code className="min-w-0 flex-1 break-all text-sm text-ink">{result.value}</code>
-          <button
-            type="button"
-            onClick={() => {
-              navigator.clipboard
-                .writeText(result.value)
-                .then(() => {
-                  setCopyError(false);
-                  setCopied(true);
-                })
-                .catch(() => {
-                  setCopied(false);
-                  setCopyError(true);
-                });
-            }}
-            aria-label="コピー"
-            title="コピー"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-ink-muted transition hover:bg-surface-hover hover:text-ink"
-          >
-            <Icon name="clipboard" />
-          </button>
-        </div>
-        {copied ? <p className="mt-1.5 text-xs text-accent">コピーしました。</p> : null}
-        {copyError ? (
-          <p className="mt-1.5 text-xs text-danger">
-            コピーできませんでした。値を選択して手動でコピーしてください。
-          </p>
-        ) : null}
-        <div className="mt-5 flex justify-end">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-full bg-accent-strong px-4 py-2 text-sm font-semibold text-white hover:bg-accent"
-          >
-            閉じる
-          </button>
-        </div>
-      </div>
-    </div>
   );
 }

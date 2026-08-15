@@ -133,10 +133,10 @@ function safeEnvironmentSettings(runtime: RuntimeSettings): EnvironmentSettingDt
     setting("USE_MOCK_LLM", "実LLMの代わりにMockプロバイダーだけを使用するか", env.llm.useMock ? "ON" : "OFF", { inputType: "toggle" }),
     editable("LLM_TIMEOUT_MS", "1回のLLMリクエストを待つ最大時間（ミリ秒）"),
     editable("LLM_MAX_RETRIES", "失敗したLLMリクエストの最大再試行回数"),
-    editable("MIN_RESPONDERS", "投稿に反応するキャラクター数の下限"),
-    editable("MAX_RESPONDERS", "投稿に反応するキャラクター数の上限"),
+    editable("MIN_RESPONDERS", "投稿に反応するキャスト数の下限"),
+    editable("MAX_RESPONDERS", "投稿に反応するキャスト数の上限"),
     editable("CONTEXT_POST_LIMIT", "LLMへ文脈として渡す投稿数の上限"),
-    editable("MAX_CONCURRENT_CHARACTERS", "同時にLLM応答を生成できるキャラクター数"),
+    editable("MAX_CONCURRENT_CHARACTERS", "同時にLLM応答を生成できるキャスト数"),
     editable("MAX_CASCADE_DEPTH", "返信・引用が連鎖する最大の深さ"),
   ];
 }

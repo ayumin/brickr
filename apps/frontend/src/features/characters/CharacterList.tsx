@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   CharacterBulkCreationJobDto,
+  CharacterCreatorDto,
   CharacterDto,
   CharacterManagementDto,
   CharacterDeletionMode,
@@ -309,10 +310,10 @@ export function CharacterList({
         setBulkJob(job);
       }
       if (job.status === "failed") {
-        throw new Error(job.error ?? "LLMによるキャラクター生成に失敗しました。");
+        throw new Error(job.error ?? "LLMによるキャスト生成に失敗しました。");
       }
       setBulkCreateOpen(false);
-      setNotice(`${String(job.createdCount)}人のキャラクターを追加しました。`);
+      setNotice(`${String(job.createdCount)}人のキャストを追加しました。`);
       onCreated();
     } catch (cause) {
       setBulkError(toErrorMessage(cause));
@@ -330,7 +331,7 @@ export function CharacterList({
               name="search"
               className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-ink-faint"
             />
-            <span className="sr-only">キャラクターを検索</span>
+            <span className="sr-only">キャストを検索</span>
             <input
               type="search"
               value={query}
@@ -377,8 +378,8 @@ export function CharacterList({
               setBulkError(null);
               setBulkCreateOpen(true);
             }}
-            aria-label="キャラクターを一括追加"
-            title="キャラクターを一括追加"
+            aria-label="キャストを一括追加"
+            title="キャストを一括追加"
             className="flex h-9 w-9 items-center justify-center rounded-full border border-accent/40 text-sm text-accent transition hover:bg-accent/10"
           >
             <Icon name="magic" />
@@ -386,8 +387,8 @@ export function CharacterList({
           <button
             type="button"
             onClick={onCreate}
-            aria-label="キャラクターを新規追加"
-            title="キャラクターを新規追加"
+            aria-label="キャストを新規追加"
+            title="キャストを新規追加"
             className="flex h-9 w-9 items-center justify-center rounded-full bg-accent-strong text-sm text-white transition hover:bg-accent"
           >
             <Icon name="plus-circle" />
@@ -404,7 +405,7 @@ export function CharacterList({
               className="peer sr-only"
             />
             <span className="relative h-5 w-9 rounded-full bg-line-strong transition after:absolute after:left-0.5 after:top-0.5 after:h-4 after:w-4 after:rounded-full after:bg-white after:shadow-sm after:transition after:content-[''] peer-checked:bg-accent peer-checked:after:translate-x-4" />
-            停止キャラクターを表示
+            停止キャストを表示
           </label>
           <label className="flex cursor-pointer items-center gap-2 text-ink-muted">
             <input
@@ -426,7 +427,7 @@ export function CharacterList({
                 setDeleteMode("soft");
                 setPendingDelete({
                   ids: selectedIds,
-                  label: `${String(selectedIds.length)}人のキャラクター`,
+                  label: `${String(selectedIds.length)}人のキャスト`,
                 });
               }}
               className="ml-auto rounded-full border border-danger/40 px-3 py-1.5 text-xs font-semibold text-danger transition hover:bg-danger/10"
@@ -441,7 +442,7 @@ export function CharacterList({
       {error ? (
         <div className="px-4 pt-3">
           <ErrorBanner
-            message="キャラクター一覧を更新できませんでした"
+            message="キャスト一覧を更新できませんでした"
             detail={error}
             onDismiss={() => setError(null)}
           />
@@ -464,12 +465,12 @@ export function CharacterList({
 
       {(loading || managementLoading) && management.size === 0 ? (
         <div className="flex justify-center py-16">
-          <Spinner label="キャラクターを読み込み中…" />
+          <Spinner label="キャストを読み込み中…" />
         </div>
       ) : visible.length === 0 ? (
         <div className="px-6 py-16 text-center">
           <Icon name="people" className="text-3xl text-ink-faint" />
-          <p className="mt-3 text-sm font-semibold text-ink">キャラクターが見つかりません</p>
+          <p className="mt-3 text-sm font-semibold text-ink">キャストが見つかりません</p>
           <p className="mt-1 text-xs text-ink-muted">
             {query ? "検索条件を変更してください。" : "新規作成から追加できます。"}
           </p>
@@ -477,11 +478,12 @@ export function CharacterList({
       ) : (
         <>
           <div className="max-h-[calc(100dvh-15rem)] overflow-auto">
-            <table className="w-full min-w-[800px] table-fixed border-collapse text-left text-[11px]">
+            <table className={`w-full ${isAdmin ? "min-w-[900px]" : "min-w-[800px]"} table-fixed border-collapse text-left text-[11px]`}>
             <colgroup>
               <col className="w-10" />
               <col className="w-[260px]" />
               <col className="w-[120px]" />
+              {isAdmin ? <col className="w-[140px]" /> : null}
               <col className="w-14" />
               {BEHAVIOR_COLUMNS.map(({ key }) => (
                 <col key={key} className="w-[50px]" />
@@ -493,8 +495,11 @@ export function CharacterList({
                 <th scope="col" className="px-3 py-3 font-medium">
                   <span className="sr-only">選択</span>
                 </th>
-                <th scope="col" className="px-3 py-3 font-medium">キャラクター</th>
+                <th scope="col" className="px-3 py-3 font-medium">キャスト</th>
                 <th scope="col" className="px-3 py-3 font-medium">モデル</th>
+                {isAdmin ? (
+                  <th scope="col" className="px-3 py-3 font-medium">作成者</th>
+                ) : null}
                 <SortableBehaviorHeader
                   column={{ key: "postCount", label: "投稿数" }}
                   sort={sort}
@@ -523,7 +528,7 @@ export function CharacterList({
                       onChange={() => toggleSelected(character.id)}
                       disabled={!canManage}
                       aria-label={`${character.displayName}を選択`}
-                      title={canManage ? undefined : "他のユーザーが作成したキャラクターです"}
+                      title={canManage ? undefined : "他のユーザーが作成したキャストです"}
                       className="h-4 w-4 rounded border-line accent-accent-strong disabled:opacity-40"
                     />
                   </td>
@@ -571,6 +576,11 @@ export function CharacterList({
                       profiles={modelProfiles}
                     />
                   </td>
+                  {isAdmin ? (
+                    <td className="px-2 py-4 text-[9px] leading-tight text-ink-muted">
+                      <CreatorSummary creator={management.get(character.id)?.creator} />
+                    </td>
+                  ) : null}
                   <td className="px-1 py-4 text-right font-mono text-[10px] tabular-nums text-ink">
                     {management.get(character.id)?.postCount.toLocaleString("ja-JP") ?? "—"}
                   </td>
@@ -589,7 +599,7 @@ export function CharacterList({
                         disabled={!canManage}
                         onClick={() => onEdit(character)}
                         aria-label={`${character.displayName}の設定を編集`}
-                        title={canManage ? "設定を編集" : "他のユーザーが作成したキャラクターです"}
+                        title={canManage ? "設定を編集" : "他のユーザーが作成したキャストです"}
                         className="flex h-9 w-9 items-center justify-center rounded-full text-ink-muted transition hover:bg-surface-raised hover:text-ink disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
                       >
                         <Icon name="gear" />
@@ -600,7 +610,7 @@ export function CharacterList({
                           disabled={!canManage || restoringIds.has(character.id)}
                           onClick={() => void restoreCharacter(character)}
                           aria-label={`${character.displayName}を復活`}
-                          title={canManage ? "復活" : "他のユーザーが作成したキャラクターです"}
+                          title={canManage ? "復活" : "他のユーザーが作成したキャストです"}
                           className="flex h-9 w-9 items-center justify-center rounded-full text-ink-muted transition hover:bg-accent/10 hover:text-accent disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
                         >
                           <Icon name="recycle" />
@@ -617,7 +627,7 @@ export function CharacterList({
                             });
                           }}
                           aria-label={`${character.displayName}を削除`}
-                          title={canManage ? "削除" : "他のユーザーが作成したキャラクターです"}
+                          title={canManage ? "削除" : "他のユーザーが作成したキャストです"}
                           className="flex h-9 w-9 items-center justify-center rounded-full text-ink-muted transition hover:bg-danger/10 hover:text-danger disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
                         >
                           <Icon name="trash" />
@@ -632,7 +642,7 @@ export function CharacterList({
             </table>
           </div>
           <nav
-            aria-label="キャラクター一覧のページ"
+            aria-label="キャスト一覧のページ"
             className="flex items-center justify-center gap-3 border-t border-line px-4 py-4"
           >
             <button
@@ -684,7 +694,7 @@ export function CharacterList({
             }}
           >
             <h2 id="bulk-create-title" className="text-base font-bold text-ink">
-              キャラクターを一括追加
+              キャストを一括追加
             </h2>
             <p className="mt-2 text-sm leading-relaxed text-ink-muted">
               LLMが一人ずつ異なるプロフィールとPersonaを生成し、行動傾向をランダムに設定します。
@@ -719,7 +729,7 @@ export function CharacterList({
                   max={100}
                   value={bulkProgressPercent(bulkJob)}
                   className="mt-2 h-2 w-full accent-accent-strong"
-                  aria-label="キャラクター一括作成の進捗"
+                  aria-label="キャスト一括作成の進捗"
                 />
               </div>
             ) : null}
@@ -760,7 +770,7 @@ export function CharacterList({
             className="absolute inset-0 bg-black/70 backdrop-blur-sm"
           />
           <div role="dialog" aria-modal="true" aria-labelledby="delete-character-title" className="relative w-full max-w-sm rounded-2xl border border-line bg-surface p-5 shadow-2xl">
-            <h2 id="delete-character-title" className="text-base font-bold text-ink">キャラクターを削除しますか？</h2>
+            <h2 id="delete-character-title" className="text-base font-bold text-ink">キャストを削除しますか？</h2>
             <p className="mt-2 text-sm leading-relaxed text-ink-muted">
               {pendingDelete.label}を削除します。削除方法を選択してください。
             </p>
@@ -777,7 +787,7 @@ export function CharacterList({
                   <input type="radio" name="deleteMode" value="hard" checked={deleteMode === "hard"} onChange={() => setDeleteMode("hard")} className="accent-danger" />
                   完全に削除
                 </span>
-                <span className="mt-1 block pl-6 text-xs text-ink-muted">キャラクターとその投稿を完全に削除します。この操作は元に戻せません。</span>
+                <span className="mt-1 block pl-6 text-xs text-ink-muted">キャストとその投稿を完全に削除します。この操作は元に戻せません。</span>
               </label>
             </fieldset>
             <div className="mt-5 flex justify-end gap-2">
@@ -812,6 +822,25 @@ function ModelSummary({
       </span>
       <span className="mt-0.5 block break-words text-[9px] leading-tight">
         {truncateText(profile.model, TABLE_TEXT_LENGTH)}
+      </span>
+    </>
+  );
+}
+
+/**
+ * §20.3: shown to an admin only (the `creator` field itself is absent for
+ * anyone else). `null` means System-owned; never render the raw user id.
+ */
+function CreatorSummary({ creator }: { creator: CharacterCreatorDto | null | undefined }) {
+  if (creator === undefined) return "—";
+  if (creator === null) return "System";
+  return (
+    <>
+      <span className="block truncate text-[9px] font-semibold leading-tight text-ink">
+        {truncateText(creator.displayName, TABLE_TEXT_LENGTH)}
+      </span>
+      <span className="mt-0.5 block truncate text-[9px] leading-tight">
+        @{creator.handle}
       </span>
     </>
   );

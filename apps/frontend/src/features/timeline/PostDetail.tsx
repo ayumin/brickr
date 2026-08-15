@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { CharacterDto, FeedThreadDto, PostDto, UserProfileDto } from "@brickr/shared";
+import type { FeedThreadDto, PostDto, UserProfileDto } from "@brickr/shared";
 
 import type { ResponseActivity } from "../../types";
 import { PostCard } from "./PostCard";
@@ -12,11 +12,11 @@ import {
 export type PostDetailProps = {
   post: PostDto;
   allPosts: PostDto[];
-  characters: CharacterDto[];
   userProfile: UserProfileDto;
   activities: ResponseActivity[];
   canPost: boolean;
   onOpenAuthor: (authorId: string) => void;
+  onOpenHandle: (handle: string) => void;
   onOpenPost: (postId: string) => void;
   onPosted: (post: PostDto, thread: FeedThreadDto) => void;
 };
@@ -24,11 +24,11 @@ export type PostDetailProps = {
 export function PostDetail({
   post,
   allPosts,
-  characters,
   userProfile,
   activities,
   canPost,
   onOpenAuthor,
+  onOpenHandle,
   onOpenPost,
   onPosted,
 }: PostDetailProps) {
@@ -61,7 +61,6 @@ export function PostDetail({
         key={post.id}
         rootPosts={[post]}
         allPosts={allPosts}
-        characters={characters}
         userProfile={userProfile}
         activities={activities}
         loading={false}
@@ -69,6 +68,7 @@ export function PostDetail({
         emptyTitle="投稿が見つかりません"
         emptyBody="この投稿は表示できません。"
         onOpenAuthor={onOpenAuthor}
+        onOpenHandle={onOpenHandle}
         onOpenPost={onOpenPost}
         onPosted={onPosted}
         initialExpandedPostId={post.id}

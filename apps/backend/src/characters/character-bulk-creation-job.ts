@@ -83,9 +83,9 @@ function characterGenerationFailureMessage(error: unknown): string {
   }
   if (cause instanceof CharacterPersonaParseError) return cause.message;
   if (cause instanceof Error) {
-    return `キャラクター生成処理でエラーが発生しました: ${safeErrorDetail(cause.message)}`;
+    return `キャスト生成処理でエラーが発生しました: ${safeErrorDetail(cause.message)}`;
   }
-  return "LLMによるキャラクター生成に失敗しました。";
+  return "LLMによるキャスト生成に失敗しました。";
 }
 
 function safeErrorDetail(message: string): string {
