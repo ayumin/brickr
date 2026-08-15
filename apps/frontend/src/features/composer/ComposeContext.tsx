@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { FeedThreadDto, PostDto } from "@brickr/shared";
 
@@ -112,8 +112,14 @@ export function ComposeControllerProvider({ children }: { children: ReactNode })
     }
   };
 
+  // Memoized so consumers' own `useCallback`s keyed on `composeController`
+  // (FeedScreen, RoomScreen, Timeline, AppShell) don't get a new function
+  // identity on every render of this provider — only when `request` itself
+  // actually changes (i.e. `user` changing).
+  const value = useMemo(() => ({ request }), [request]);
+
   return (
-    <ComposeContext.Provider value={{ request }}>
+    <ComposeContext.Provider value={value}>
       {children}
 
       {composerRequest ? (

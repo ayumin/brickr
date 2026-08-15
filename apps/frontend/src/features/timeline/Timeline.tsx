@@ -162,7 +162,6 @@ function EmptyState({ title, body }: { title: string; body: string }) {
 }
 
 export type TimelineProps = {
-  simulationId: string;
   /** Posts to show at the top level, already ordered by the caller. */
   rootPosts: PostDto[];
   /** Every post in the simulation, used to derive threads and reposts. */

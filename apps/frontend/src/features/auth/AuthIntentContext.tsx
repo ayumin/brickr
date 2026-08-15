@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useState } from "react";
+import { createContext, useCallback, useContext, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import type { AuthIntent } from "./auth-intent";
 
@@ -24,11 +24,14 @@ export function AuthIntentProvider({ children }: { children: ReactNode }) {
     setIntent(null);
   }, []);
 
-  return (
-    <AuthIntentContext.Provider value={{ intent, setIntent, consumeIntent }}>
-      {children}
-    </AuthIntentContext.Provider>
-  );
+  // Memoized so a re-render that leaves `intent` unchanged (e.g. `AuthProvider`
+  // re-rendering on an unrelated `setUser`) doesn't hand consumers a new
+  // object identity — `ComposeContext`'s resume effect depends on this value
+  // by reference, and a stable identity keeps that dependency meaningful
+  // rather than incidental.
+  const value = useMemo(() => ({ intent, setIntent, consumeIntent }), [intent, consumeIntent]);
+
+  return <AuthIntentContext.Provider value={value}>{children}</AuthIntentContext.Provider>;
 }
 
 export function useAuthIntent(): AuthIntentContextValue {

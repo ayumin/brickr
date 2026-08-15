@@ -3,6 +3,7 @@ import { GLOBAL_SIMULATION_ID } from "@brickr/shared";
 import type { FeedThreadDto, PostDto, UserProfileDto } from "@brickr/shared";
 
 import { Dialog } from "../../components/Dialog";
+import { Spinner } from "../../components/Spinner";
 import { api, isAbortError } from "../../services/api-client";
 import type { ComposerContext } from "../../types";
 import { composerDialogTitle } from "./composer-utils";
@@ -65,11 +66,26 @@ export function ComposerDialog({ context, userProfile, onClose, onPosted, onUnau
     // remounts it via `key`), so this only ever needs to run once.
   }, [needsRoomLookup]);
 
+  // While the room lookup is in flight, `Dialog` is deliberately not mounted
+  // yet at all — not just its body left empty. `Dialog`'s initial-focus
+  // effect runs exactly once, on its own mount, and would otherwise have
+  // nothing to focus but its close button (`ComposerForm`/`MentionInput`
+  // don't exist until `roomState` is ready), contradicting the "focuses the
+  // textarea on open" guarantee. A lightweight spinner gives the click
+  // immediate feedback without presenting a half-built dialog; `Dialog` then
+  // mounts, and focuses the now-real `textareaRef`, only once there is
+  // something to show.
+  if (roomState.status === "loading") {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+        <Spinner size="lg" />
+      </div>
+    );
+  }
+
   const title = composerDialogTitle(context);
   const headerTitle =
-    context.mode === "new" && roomState.status === "ready" && roomState.label
-      ? `${title}・${roomState.label}`
-      : title;
+    context.mode === "new" && roomState.label ? `${title}・${roomState.label}` : title;
 
   return (
     <Dialog
@@ -80,18 +96,16 @@ export function ComposerDialog({ context, userProfile, onClose, onPosted, onUnau
       initialFocusRef={textareaRef}
       fullScreenOnMobile
     >
-      {roomState.status === "loading" ? null : (
-        <ComposerForm
-          context={context}
-          userProfile={userProfile}
-          disabled={roomState.disabled}
-          {...(roomState.disabled ? { disabledReason: "このルームは停止しています。" } : {})}
-          onPosted={onPosted}
-          onUnauthorized={onUnauthorized}
-          onSubmittingChange={setSubmitting}
-          textareaRef={textareaRef}
-        />
-      )}
+      <ComposerForm
+        context={context}
+        userProfile={userProfile}
+        disabled={roomState.disabled}
+        {...(roomState.disabled ? { disabledReason: "このルームは停止しています。" } : {})}
+        onPosted={onPosted}
+        onUnauthorized={onUnauthorized}
+        onSubmittingChange={setSubmitting}
+        textareaRef={textareaRef}
+      />
     </Dialog>
   );
 }

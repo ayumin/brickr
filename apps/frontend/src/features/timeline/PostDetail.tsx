@@ -10,7 +10,6 @@ import {
 } from "./thread-utils";
 
 export type PostDetailProps = {
-  simulationId: string;
   post: PostDto;
   allPosts: PostDto[];
   characters: CharacterDto[];
@@ -23,7 +22,6 @@ export type PostDetailProps = {
 };
 
 export function PostDetail({
-  simulationId,
   post,
   allPosts,
   characters,
@@ -61,7 +59,6 @@ export function PostDetail({
 
       <Timeline
         key={post.id}
-        simulationId={simulationId}
         rootPosts={[post]}
         allPosts={allPosts}
         characters={characters}

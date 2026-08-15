@@ -145,7 +145,6 @@ export function PostDetailScreen({ postId }: { postId: string }) {
   return (
     <div className="mx-auto w-full max-w-2xl">
       <PostDetail
-        simulationId={post.simulationId}
         post={post}
         allPosts={events.posts}
         characters={characters}
