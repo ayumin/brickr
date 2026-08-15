@@ -36,6 +36,25 @@ function toSimulation(row: SimulationRow): Simulation {
   };
 }
 
+type SimulationSummaryRow = SimulationRow & {
+  _count: { posts: number };
+  createdByUser: { id: string; handle: string | null; displayName: string } | null;
+};
+
+function toSimulationSummary(row: SimulationSummaryRow): SimulationSummary {
+  return {
+    ...toSimulation(row),
+    postCount: row._count.posts,
+    creator: row.createdByUser
+      ? {
+          id: row.createdByUser.id,
+          handle: row.createdByUser.handle ?? toFallbackHandle(row.createdByUser.id),
+          displayName: row.createdByUser.displayName,
+        }
+      : null,
+  };
+}
+
 export class SimulationRepository {
   constructor(private readonly db: Db) {}
 
@@ -89,22 +108,28 @@ export class SimulationRepository {
       },
       orderBy: [{ lastActivityAt: "desc" }, { id: "desc" }],
     });
-    return rows.map((row) => ({
-      ...toSimulation(row),
-      postCount: row._count.posts,
-      creator: row.createdByUser
-        ? {
-            id: row.createdByUser.id,
-            handle: row.createdByUser.handle ?? toFallbackHandle(row.createdByUser.id),
-            displayName: row.createdByUser.displayName,
-          }
-        : null,
-    }));
+    return rows.map(toSimulationSummary);
   }
 
   async findById(id: string): Promise<Simulation | null> {
     const row = await this.db.simulation.findUnique({ where: { id } });
     return row ? toSimulation(row) : null;
+  }
+
+  /**
+   * One room, summary-shaped (§19.2): the room info panel needs `postCount`/
+   * `creator` for a single room, the same fields `findAllVisibleTo` already
+   * computes for the list.
+   */
+  async findSummaryById(id: string): Promise<SimulationSummary | null> {
+    const row = await this.db.simulation.findUnique({
+      where: { id },
+      include: {
+        _count: { select: { posts: true } },
+        createdByUser: { select: { id: true, handle: true, displayName: true } },
+      },
+    });
+    return row ? toSimulationSummary(row) : null;
   }
 
   async updateTitle(id: string, title: string): Promise<Simulation> {

@@ -151,6 +151,10 @@ function makeServices(): { services: AppServices; listedFor: string[] } {
 
   const simulationRepository = {
     findById: (id: string) => Promise.resolve(ROOMS.find((r) => r.id === id) ?? null),
+    findSummaryById: (id: string) => {
+      const found = ROOMS.find((r) => r.id === id);
+      return Promise.resolve(found ? { ...found, postCount: 0, creator: null } : null);
+    },
     findAllVisibleTo: (actor: { id: string; isAdmin: boolean }) => {
       listedFor.push(actor.id);
       return Promise.resolve(
@@ -387,6 +391,20 @@ describe("access matrix (§24.2)", () => {
     it("no longer ships the room's posts with its basics", async () => {
       const { body } = await get(NORMAL_USER, `/api/simulations/${ACTIVE_ROOM.id}`);
       expect(body).not.toHaveProperty("posts");
+    });
+
+    it("is summary-shaped, same as a room list entry, for the room info panel (§19.2)", async () => {
+      const { body } = (await get(ROOM_OWNER, `/api/simulations/${ACTIVE_ROOM.id}`)) as {
+        body: { simulation: { postCount: number; creator: unknown; canManage: boolean } };
+      };
+      expect(body.simulation).toHaveProperty("postCount");
+      expect(body.simulation).toHaveProperty("creator");
+      expect(body.simulation.canManage).toBe(true);
+
+      const { body: asStranger } = (await get(NORMAL_USER, `/api/simulations/${ACTIVE_ROOM.id}`)) as {
+        body: { simulation: { canManage: boolean } };
+      };
+      expect(asStranger.simulation.canManage).toBe(false);
     });
 
     it("applies the same rule to the room's post list", async () => {

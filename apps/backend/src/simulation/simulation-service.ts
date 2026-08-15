@@ -21,7 +21,12 @@ import type { ThreadActivityEvent } from "./public-events.js";
 import { selectCascadeResponders, selectResponders } from "./responder-selector.js";
 import type { UserProfile } from "../user-profile/user-profile.js";
 import type { SimulationRepository } from "./simulation-repository.js";
-import { isGlobalSimulation, type Simulation, type SimulationActor } from "./simulation.js";
+import {
+  isGlobalSimulation,
+  type Simulation,
+  type SimulationActor,
+  type SimulationSummary,
+} from "./simulation.js";
 
 /** Hard ceiling on character posts generated from one user post. */
 const MAX_POSTS_PER_SUBMISSION = 24;
@@ -185,20 +190,19 @@ export class SimulationService {
    */
   async list(actor: SimulationActor): Promise<SimulationSummaryDto[]> {
     const simulations = await this.deps.simulations.findAllVisibleTo(actor);
-    return simulations.map((simulation) => ({
-      ...toSimulationDto(simulation),
-      postCount: simulation.postCount,
-      lastActivityAt: simulation.lastActivityAt.toISOString(),
-      creator: simulation.creator,
-      canManage: isSimulationOwnerOrAdmin(simulation, actor),
-    }));
+    return simulations.map((simulation) => toSimulationSummaryDto(simulation, actor));
   }
 
   /**
-   * One room's basics (§10.4). The posts it used to carry are the feed's job now.
+   * One room's basics (§10.4, §19.2). The posts it used to carry are the
+   * feed's job now; `postCount`/`creator`/`canManage` are here (rather than
+   * on the leaner `requireReadableRoom` path below) because the room info
+   * panel is this method's only reason to exist as a summary.
    */
   async get(id: string, actor: SimulationActor): Promise<SimulationResponse> {
-    return { simulation: toSimulationDto(await this.requireReadableRoom(id, actor)) };
+    const simulation = await this.requireSimulationSummary(id);
+    assertRoomReadable(simulation, actor);
+    return { simulation: toSimulationSummaryDto(simulation, actor) };
   }
 
   /**
@@ -210,6 +214,12 @@ export class SimulationService {
   async requireReadableRoom(id: string, actor: SimulationActor): Promise<Simulation> {
     const simulation = await this.requireSimulation(id);
     assertRoomReadable(simulation, actor);
+    return simulation;
+  }
+
+  private async requireSimulationSummary(id: string): Promise<SimulationSummary> {
+    const simulation = await this.deps.simulations.findSummaryById(id);
+    if (!simulation) throw new SimulationNotFoundError(id);
     return simulation;
   }
 
@@ -618,6 +628,25 @@ export function toSimulationDto(simulation: Simulation): SimulationDto {
     status: simulation.status,
     createdAt: simulation.createdAt.toISOString(),
     ...optionalField("createdByUserId", simulation.createdByUserId),
+  };
+}
+
+/**
+ * Shared by `list()` and `get()` (§10.3, §19.2): `canManage` is computed here
+ * rather than left to the client, since the same rule decides whether
+ * `rename`/`stop`/`resume` will be accepted — deriving it twice is how a
+ * button appears for an action the server then refuses.
+ */
+export function toSimulationSummaryDto(
+  simulation: SimulationSummary,
+  actor: SimulationActor,
+): SimulationSummaryDto {
+  return {
+    ...toSimulationDto(simulation),
+    postCount: simulation.postCount,
+    lastActivityAt: simulation.lastActivityAt.toISOString(),
+    creator: simulation.creator,
+    canManage: isSimulationOwnerOrAdmin(simulation, actor),
   };
 }
 

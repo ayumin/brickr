@@ -1,0 +1,97 @@
+import { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import type { SimulationSummaryDto } from "@brickr/shared";
+
+import {
+  api,
+  ApiError,
+  isAbortError,
+  isForbiddenError,
+  isUnauthorizedError,
+  toErrorMessage,
+} from "../../services/api-client";
+import { useAuth } from "../auth/AuthContext";
+import { checkRoomAccess } from "../../app/route-access";
+
+export type SelectedRoomState =
+  | { status: "loading" }
+  | { status: "denied" }
+  | { status: "error"; message: string }
+  | { status: "ready"; simulation: SimulationSummaryDto };
+
+export type UseSelectedRoomResult = {
+  state: SelectedRoomState;
+  reload: () => void;
+  rename: (title: string) => Promise<void>;
+  stop: () => Promise<void>;
+  resume: () => Promise<void>;
+};
+
+/**
+ * One room's basics — fetch, access decision, and the rename/stop/resume
+ * mutations that all just need to refetch afterward (§19.2, Issue #51).
+ *
+ * Extracted out of `RoomScreen` so `RoomHeader`/`RoomInfoPanel`/`RoomInfoSheet`
+ * share the same state instead of each re-fetching (or worse, drifting after
+ * one of them renames/stops/resumes the room).
+ */
+export function useSelectedRoom(roomId: string): UseSelectedRoomResult {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const [state, setState] = useState<SelectedRoomState>({ status: "loading" });
+  const [reloadToken, setReloadToken] = useState(0);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setState({ status: "loading" });
+    api
+      .getSimulation(roomId, controller.signal)
+      .then(({ simulation }) => {
+        const decision = checkRoomAccess(simulation, user);
+        setState(decision.allowed ? { status: "ready", simulation } : { status: "denied" });
+      })
+      .catch((cause: unknown) => {
+        if (isAbortError(cause)) return;
+        if (
+          isUnauthorizedError(cause) ||
+          isForbiddenError(cause) ||
+          (cause instanceof ApiError && cause.isNotFound)
+        ) {
+          setState({ status: "denied" });
+          return;
+        }
+        setState({ status: "error", message: toErrorMessage(cause) });
+      });
+    return () => controller.abort();
+  }, [roomId, user, reloadToken]);
+
+  // Denial always redirects to the feed, never a distinct 403/404 screen
+  // (§6.3, mirrors `SessionGate`/`route-access.ts`).
+  useEffect(() => {
+    if (state.status === "denied") {
+      navigate("/", { replace: true });
+    }
+  }, [state.status, navigate]);
+
+  const reload = useCallback(() => setReloadToken((value) => value + 1), []);
+
+  const rename = useCallback(
+    async (title: string): Promise<void> => {
+      await api.updateSimulation(roomId, { title });
+      reload();
+    },
+    [roomId, reload],
+  );
+
+  const stop = useCallback(async (): Promise<void> => {
+    await api.stopSimulation(roomId);
+    reload();
+  }, [roomId, reload]);
+
+  const resume = useCallback(async (): Promise<void> => {
+    await api.resumeSimulation(roomId);
+    reload();
+  }, [roomId, reload]);
+
+  return { state, reload, rename, stop, resume };
+}
