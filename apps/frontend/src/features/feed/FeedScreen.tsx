@@ -1,11 +1,13 @@
 import { useCallback, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { GLOBAL_SIMULATION_ID, type FeedFilter } from "@brickr/shared";
+import { GLOBAL_SIMULATION_ID, type FeedFilter, type PostDto } from "@brickr/shared";
 
+import { Avatar } from "../../components/Avatar";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { Spinner } from "../../components/Spinner";
 import { useAuth } from "../auth/AuthContext";
-import { Composer } from "../composer/Composer";
+import { composerContextForReply, composerContextForQuote } from "../composer/composer-utils";
+import { useComposeController } from "../composer/ComposeContext";
 import { useUserProfile } from "../../hooks/useUserProfile";
 import { handlePath, postPath } from "../../routes";
 import { readFeedFilter, writeFeedFilter } from "../rooms/feed-filter-storage";
@@ -27,9 +29,43 @@ export function FeedScreen() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const userProfile = useUserProfile();
+  const composeController = useComposeController();
   const [filter, setFilter] = useState<FeedFilter>(readFeedFilter);
 
   const feed = useFeed(GLOBAL_FEED_SCOPE, filter);
+
+  const openComposer = useCallback(() => {
+    composeController.request({
+      context: { mode: "new", simulationId: GLOBAL_SIMULATION_ID, roomLabel: "フィード" },
+      onPosted: (_post, thread) => {
+        feed.upsertThread(thread);
+      },
+    });
+  }, [composeController, feed]);
+
+  const openReply = useCallback(
+    (post: PostDto) => {
+      composeController.request({
+        context: composerContextForReply(post),
+        onPosted: (_post, thread) => {
+          feed.upsertThread(thread);
+        },
+      });
+    },
+    [composeController, feed],
+  );
+
+  const openQuote = useCallback(
+    (post: PostDto) => {
+      composeController.request({
+        context: composerContextForQuote(post),
+        onPosted: (_post, thread) => {
+          feed.upsertThread(thread);
+        },
+      });
+    },
+    [composeController, feed],
+  );
 
   const handleFilterChange = useCallback((next: FeedFilter) => {
     writeFeedFilter(next);
@@ -80,21 +116,27 @@ export function FeedScreen() {
         </p>
       ) : null}
 
-      {/* Composer — logged-in users only */}
+      {/* Compose trigger — logged-in users only. Opens the shared composer
+          dialog (§17) rather than an inline form; the actual post lands via
+          `openComposer`'s `onPosted`, which upserts the new thread from the
+          `CreatePostResponse` immediately (preserving any additional pages
+          already loaded via "さらに読み込む") — the SSE echo arriving shortly
+          after is a no-op against the same thread id. */}
       {user ? (
-        <div className="border-b border-line px-4 py-3">
-          <Composer
-            simulationId={GLOBAL_SIMULATION_ID}
-            characters={[]}
-            userProfile={userProfile.profile}
-            onPosted={(_post, thread) => {
-              // Insert the new thread immediately from the CreatePostResponse,
-              // preserving any additional pages the user had already loaded via
-              // "さらに読み込む". The SSE echo will arrive shortly and upsert
-              // the same thread again, which is a no-op.
-              feed.upsertThread(thread);
-            }}
+        <div className="flex items-center gap-3 border-b border-line px-4 py-3">
+          <Avatar
+            handle={userProfile.profile.handle}
+            displayName={userProfile.profile.displayName}
+            avatarUrl={userProfile.profile.avatarUrl}
+            size="md"
           />
+          <button
+            type="button"
+            onClick={openComposer}
+            className="min-w-0 flex-1 rounded-full border border-line bg-surface px-4 py-2.5 text-left text-sm text-ink-faint transition hover:border-accent/50"
+          >
+            {"いま何が起きてる？　@ でキャラクターを指名"}
+          </button>
         </div>
       ) : null}
 
@@ -145,6 +187,8 @@ export function FeedScreen() {
             onOpenAuthor={openAuthor}
             onOpenHandle={openHandle}
             onOpenThread={openThread}
+            onReply={openReply}
+            onRepost={openQuote}
           />
 
           {/* Load more (§16.4) */}

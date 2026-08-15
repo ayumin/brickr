@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { matchPath, useLocation, useNavigate } from "react-router-dom";
+import { GLOBAL_SIMULATION_ID } from "@brickr/shared";
 
 import { castPath, roomListPath, settingsPath } from "../routes";
 import { useAuth } from "../features/auth/AuthContext";
+import { ComposeControllerProvider, useComposeController } from "../features/composer/ComposeContext";
 import { FeedScreen } from "../features/feed/FeedScreen";
 import { RoomScreen } from "../features/rooms/RoomScreen";
 import { clearSelectedRoomId } from "../features/rooms/selected-room-storage";
@@ -34,9 +36,18 @@ function activeItemFor(pathname: string): NavActiveItem {
  * `/rooms/:id` at all, so there is no double-render/priority question.
  */
 export function AppShell() {
+  return (
+    <ComposeControllerProvider>
+      <AppShellContent />
+    </ComposeControllerProvider>
+  );
+}
+
+function AppShellContent() {
   const { user, loading } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const composeController = useComposeController();
 
   const roomMatch = matchPath({ path: "/rooms/:roomId", end: true }, location.pathname);
   const activeRoomId = roomMatch?.params.roomId ?? null;
@@ -65,12 +76,22 @@ export function AppShell() {
     onOpenRooms: () => navigate(roomListPath()),
     onOpenSettings: () =>
       navigate(settingsPath("profile"), { state: { returnTo: location.pathname } }),
+    // The nav's "投稿する" is the only compose entry point reachable while
+    // signed out (§14.1) - `request` itself decides whether that means
+    // opening the composer or deferring to the auth dialog (§18.2). Mirrors
+    // `showComposeButton`'s own condition exactly, rather than falling back
+    // to some default destination: the button this handler belongs to is
+    // never rendered for any other route, so there is no third case here.
     onComposeClick: () => {
-      if (!user) {
-        navigate("/login");
-        return;
+      if (isFeedRoute) {
+        composeController.request({
+          context: { mode: "new", simulationId: GLOBAL_SIMULATION_ID, roomLabel: "フィード" },
+        });
+      } else if (activeRoomId) {
+        composeController.request({
+          context: { mode: "new", simulationId: activeRoomId, roomLabel: "ルーム" },
+        });
       }
-      window.scrollTo({ top: 0, behavior: "smooth" });
     },
   };
 

@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import type { FeedFilter, SimulationDto } from "@brickr/shared";
+import type { FeedFilter, PostDto, SimulationDto } from "@brickr/shared";
 
+import { Avatar } from "../../components/Avatar";
 import { ErrorBanner } from "../../components/ErrorBanner";
-import { Icon } from "../../components/Icon";
 import { Spinner } from "../../components/Spinner";
 import { handlePath, postPath } from "../../routes";
 import {
@@ -16,7 +16,8 @@ import {
 } from "../../services/api-client";
 import type { ConnectionState } from "../../types";
 import { useAuth } from "../auth/AuthContext";
-import { Composer } from "../composer/Composer";
+import { composerContextForQuote, composerContextForReply } from "../composer/composer-utils";
+import { useComposeController } from "../composer/ComposeContext";
 import { useCharacters } from "../../hooks/useCharacters";
 import { useUserProfile } from "../../hooks/useUserProfile";
 import { checkRoomAccess } from "../../app/route-access";
@@ -80,6 +81,7 @@ type RoomState =
 export function RoomScreen({ roomId }: { roomId: string }) {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const composeController = useComposeController();
 
   const [roomState, setRoomState] = useState<RoomState>({ status: "loading" });
   const [reloadToken, setReloadToken] = useState(0);
@@ -163,7 +165,25 @@ export function RoomScreen({ roomId }: { roomId: string }) {
   const openHandle = useCallback((handle: string) => navigate(handlePath(handle)), [navigate]);
   const openThread = useCallback((postId: string) => navigate(postPath(postId)), [navigate]);
 
-  const [composerOpen, setComposerOpen] = useState(false);
+  const openReply = useCallback(
+    (post: PostDto) => {
+      composeController.request({
+        context: composerContextForReply(post),
+        onPosted: (_post, thread) => feed.upsertThread(thread),
+      });
+    },
+    [composeController, feed],
+  );
+
+  const openQuote = useCallback(
+    (post: PostDto) => {
+      composeController.request({
+        context: composerContextForQuote(post),
+        onPosted: (_post, thread) => feed.upsertThread(thread),
+      });
+    },
+    [composeController, feed],
+  );
 
   if (roomState.status === "loading" || roomState.status === "denied") {
     return (
@@ -215,34 +235,34 @@ export function RoomScreen({ roomId }: { roomId: string }) {
         <FeedFilters active={filter} onChange={handleFilterChange} />
       </header>
 
-      {!composerOpen ? (
-        <div className="border-b border-line px-4 py-3">
-          <button
-            type="button"
-            disabled={isStopped}
-            onClick={() => setComposerOpen(true)}
-            className="w-full rounded-full bg-accent-strong px-4 py-2 text-sm font-semibold text-white transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Icon name="pencil" className="mr-1.5" />
-            投稿する
-          </button>
-        </div>
-      ) : (
-        <div className="border-b border-line px-4 py-3">
-          <Composer
-            simulationId={simulation.id}
-            characters={characters}
-            userProfile={userProfile.profile}
-            disabled={isStopped}
-            {...(isStopped ? { disabledReason: "このルームは停止しています。" } : {})}
-            onPosted={(_post, thread) => {
-              feed.upsertThread(thread);
-              setComposerOpen(false);
-            }}
-            onCancel={() => setComposerOpen(false)}
-          />
-        </div>
-      )}
+      {/* Compose trigger (§17): opens the shared composer dialog scoped to
+          this room rather than an inline form. Disabled outright when
+          stopped, so no request ever needs to check that itself (§16.3). */}
+      <div className="flex items-center gap-3 border-b border-line px-4 py-3">
+        <Avatar
+          handle={userProfile.profile.handle}
+          displayName={userProfile.profile.displayName}
+          avatarUrl={userProfile.profile.avatarUrl}
+          size="md"
+        />
+        <button
+          type="button"
+          disabled={isStopped}
+          onClick={() => {
+            composeController.request({
+              context: {
+                mode: "new",
+                simulationId: simulation.id,
+                roomLabel: simulation.title ?? "無題のルーム",
+              },
+              onPosted: (_post, thread) => feed.upsertThread(thread),
+            });
+          }}
+          className="min-w-0 flex-1 rounded-full border border-line bg-surface px-4 py-2.5 text-left text-sm text-ink-faint transition hover:border-accent/50 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isStopped ? "このルームは停止しています" : "いま何が起きてる？　@ でキャラクターを指名"}
+        </button>
+      </div>
 
       {charactersError ? (
         <div className="px-4 pt-3">
@@ -315,6 +335,8 @@ export function RoomScreen({ roomId }: { roomId: string }) {
             onOpenAuthor={openAuthor}
             onOpenHandle={openHandle}
             onOpenThread={openThread}
+            onReply={openReply}
+            onRepost={openQuote}
           />
 
           {feed.hasMore ? (
