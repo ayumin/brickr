@@ -889,13 +889,14 @@ export const openApiDocument: OpenAPIV3.Document = {
         description:
           "Requires a session, and no longer returns the room's posts - reading a room is the feed's job " +
           "(10.4). The reserved global row and a stopped room the caller neither created nor administers " +
-          "both answer 404, so this cannot be used to discover that a room exists.",
+          "both answer 404, so this cannot be used to discover that a room exists. Summary-shaped " +
+          "(postCount/creator/canManage), same as a room list entry, for the room info panel (19.2).",
         parameters: [idParameter("Simulation ID")],
         responses: {
           "200": jsonResponse("The room's basics", {
             type: "object",
             required: ["simulation"],
-            properties: { simulation: ref("Simulation") },
+            properties: { simulation: ref("SimulationSummary") },
           }),
           "401": { $ref: "#/components/responses/Unauthorized" },
           ...errorResponses,

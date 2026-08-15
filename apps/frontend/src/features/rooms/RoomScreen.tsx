@@ -1,70 +1,23 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import type { FeedFilter, PostDto, SimulationDto } from "@brickr/shared";
+import type { FeedFilter, PostDto } from "@brickr/shared";
 
 import { Avatar } from "../../components/Avatar";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { Spinner } from "../../components/Spinner";
-import { handlePath, postPath } from "../../routes";
-import {
-  api,
-  ApiError,
-  isAbortError,
-  isForbiddenError,
-  isUnauthorizedError,
-  toErrorMessage,
-} from "../../services/api-client";
-import type { ConnectionState } from "../../types";
-import { useAuth } from "../auth/AuthContext";
+import { handlePath, postPath, roomAnalysisPath } from "../../routes";
 import { composerContextForQuote, composerContextForReply } from "../composer/composer-utils";
 import { useComposeController } from "../composer/ComposeContext";
 import { useCharacters } from "../../hooks/useCharacters";
 import { useUserProfile } from "../../hooks/useUserProfile";
-import { checkRoomAccess } from "../../app/route-access";
-import { FeedFilters } from "../feed/FeedFilters";
 import { FeedThreadList } from "../feed/FeedThreadList";
 import { useFeed, type FeedScope } from "../feed/useFeed";
 import { readFeedFilter, writeFeedFilter } from "./feed-filter-storage";
-
-const CONNECTION_LABEL: Record<ConnectionState, string> = {
-  connecting: "接続中…",
-  open: "接続済み",
-  reconnecting: "再接続中…",
-  disconnected: "切断中",
-};
-
-const CONNECTION_DOT: Record<ConnectionState, string> = {
-  connecting: "bg-ink-faint",
-  open: "bg-emerald-400",
-  reconnecting: "bg-warn",
-  disconnected: "bg-ink-faint",
-};
-
-function ConnectionBadge({
-  connection,
-  onToggle,
-}: {
-  connection: ConnectionState;
-  onToggle: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      className="flex shrink-0 items-center gap-1.5 rounded-full border border-line bg-surface-raised px-2.5 py-1 text-[11px] text-ink-muted"
-      title={connection === "disconnected" ? "Backendへ再接続" : "Backendとの接続を切断"}
-    >
-      <span className={`h-1.5 w-1.5 rounded-full ${CONNECTION_DOT[connection]}`} aria-hidden="true" />
-      {CONNECTION_LABEL[connection]}
-    </button>
-  );
-}
-
-type RoomState =
-  | { status: "loading" }
-  | { status: "denied" }
-  | { status: "error"; message: string }
-  | { status: "ready"; simulation: SimulationDto };
+import { RoomHeader } from "./RoomHeader";
+import { RoomInfoPanel } from "./RoomInfoPanel";
+import { RoomInfoSheet } from "./RoomInfoSheet";
+import { RoomNameDialog } from "./RoomNameDialog";
+import { useSelectedRoom } from "./useSelectedRoom";
 
 /**
  * One room's persistent content (§13.5): mounted once per opened room id by
@@ -79,42 +32,9 @@ type RoomState =
  * the room up front instead of paging through the feed API.
  */
 export function RoomScreen({ roomId }: { roomId: string }) {
-  const { user } = useAuth();
   const navigate = useNavigate();
   const composeController = useComposeController();
-
-  const [roomState, setRoomState] = useState<RoomState>({ status: "loading" });
-  const [reloadToken, setReloadToken] = useState(0);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    setRoomState({ status: "loading" });
-    api
-      .getSimulation(roomId, controller.signal)
-      .then(({ simulation }) => {
-        const decision = checkRoomAccess(simulation, user);
-        setRoomState(decision.allowed ? { status: "ready", simulation } : { status: "denied" });
-      })
-      .catch((cause: unknown) => {
-        if (isAbortError(cause)) return;
-        if (
-          isUnauthorizedError(cause) ||
-          isForbiddenError(cause) ||
-          (cause instanceof ApiError && cause.isNotFound)
-        ) {
-          setRoomState({ status: "denied" });
-          return;
-        }
-        setRoomState({ status: "error", message: toErrorMessage(cause) });
-      });
-    return () => controller.abort();
-  }, [roomId, user, reloadToken]);
-
-  useEffect(() => {
-    if (roomState.status === "denied") {
-      navigate("/", { replace: true });
-    }
-  }, [roomState.status, navigate]);
+  const selectedRoom = useSelectedRoom(roomId);
 
   const { characters, error: charactersError, reload: reloadCharacters } = useCharacters();
   const userProfile = useUserProfile();
@@ -128,6 +48,9 @@ export function RoomScreen({ roomId }: { roomId: string }) {
   const [streamEnabled, setStreamEnabled] = useState(true);
   const scope = useMemo<FeedScope>(() => ({ kind: "room", roomId }), [roomId]);
   const feed = useFeed(scope, filter, streamEnabled);
+
+  const [infoSheetOpen, setInfoSheetOpen] = useState(false);
+  const [renameDialogOpen, setRenameDialogOpen] = useState(false);
 
   // Every author clickable from this room is either the signed-in user, a
   // known character, or someone whose post is already loaded - each of which
@@ -185,7 +108,7 @@ export function RoomScreen({ roomId }: { roomId: string }) {
     [composeController, feed],
   );
 
-  if (roomState.status === "loading" || roomState.status === "denied") {
+  if (selectedRoom.state.status === "loading" || selectedRoom.state.status === "denied") {
     return (
       <div className="flex items-center justify-center px-4 py-16">
         <Spinner size="lg" />
@@ -193,181 +116,199 @@ export function RoomScreen({ roomId }: { roomId: string }) {
     );
   }
 
-  if (roomState.status === "error") {
+  if (selectedRoom.state.status === "error") {
     return (
       <div className="px-4 py-12">
         <ErrorBanner
           message="ルームを取得できませんでした"
-          detail={roomState.message}
-          onRetry={() => setReloadToken((value) => value + 1)}
+          detail={selectedRoom.state.message}
+          onRetry={selectedRoom.reload}
         />
       </div>
     );
   }
 
-  const { simulation } = roomState;
+  const { simulation } = selectedRoom.state;
   const isStopped = simulation.status === "stopped";
+  const roomInfoProps = {
+    simulation,
+    onOpenAnalysis: () => navigate(roomAnalysisPath(simulation.id)),
+    // Closes the mobile info sheet too: opened from there, `RoomNameDialog`
+    // would otherwise stack on top of it — two `Dialog`s mounted at once,
+    // each with its own Escape handler racing the other's.
+    onRename: () => {
+      setInfoSheetOpen(false);
+      setRenameDialogOpen(true);
+    },
+    onStop: selectedRoom.stop,
+    onResume: selectedRoom.resume,
+  };
 
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col">
-      <header className="border-b border-line">
-        <div className="flex items-center gap-3 px-4 py-2.5">
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-ink">
-              {simulation.title ?? "無題のルーム"}
-              {isStopped ? "・停止中" : ""}
-            </p>
-          </div>
-          {/* Anonymous generation indicator (§11.2, §16.1) */}
-          {feed.activeResponseCount > 0 ? (
-            <span className="flex shrink-0 items-center gap-1.5 rounded-full border border-line bg-surface-raised px-2.5 py-1 text-[11px] text-ink-muted">
-              <Spinner size="sm" />
-              応答を生成中
-            </span>
-          ) : null}
-          <ConnectionBadge
-            connection={feed.connection}
-            onToggle={() => setStreamEnabled((enabled) => !enabled)}
-          />
-        </div>
-
-        {/* すべて／自分あて filter, shared with the unified feed (§7.2, §16.1) */}
-        <FeedFilters active={filter} onChange={handleFilterChange} />
-      </header>
-
-      {/* Compose trigger (§17): opens the shared composer dialog scoped to
-          this room rather than an inline form. Disabled outright when
-          stopped, so no request ever needs to check that itself (§16.3). */}
-      <div className="flex items-center gap-3 border-b border-line px-4 py-3">
-        <Avatar
-          handle={userProfile.profile.handle}
-          displayName={userProfile.profile.displayName}
-          avatarUrl={userProfile.profile.avatarUrl}
-          size="md"
+    <div className="flex w-full">
+      <div className="mx-auto flex w-full min-w-0 max-w-2xl flex-1 flex-col">
+        <RoomHeader
+          title={simulation.title ?? "無題のルーム"}
+          isStopped={isStopped}
+          activeResponseCount={feed.activeResponseCount}
+          connection={feed.connection}
+          onToggleConnection={() => setStreamEnabled((enabled) => !enabled)}
+          filter={filter}
+          onFilterChange={handleFilterChange}
+          onOpenInfo={() => setInfoSheetOpen(true)}
         />
-        <button
-          type="button"
-          disabled={isStopped}
-          onClick={() => {
-            composeController.request({
-              context: {
-                mode: "new",
-                simulationId: simulation.id,
-                roomLabel: simulation.title ?? "無題のルーム",
-              },
-              onPosted: (_post, thread) => feed.upsertThread(thread),
-            });
-          }}
-          className="min-w-0 flex-1 rounded-full border border-line bg-surface px-4 py-2.5 text-left text-sm text-ink-faint transition hover:border-accent/50 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {isStopped ? "このルームは停止しています" : "いま何が起きてる？　@ でキャラクターを指名"}
-        </button>
+
+        {/* Compose trigger (§17, §19.3): hidden entirely when stopped, the same
+            as reply/quote (already capabilities-driven) - not merely disabled,
+            since a stopped room accepts no writes from anyone. */}
+        {!isStopped ? (
+          <div className="flex items-center gap-3 border-b border-line px-4 py-3">
+            <Avatar
+              handle={userProfile.profile.handle}
+              displayName={userProfile.profile.displayName}
+              avatarUrl={userProfile.profile.avatarUrl}
+              size="md"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                composeController.request({
+                  context: {
+                    mode: "new",
+                    simulationId: simulation.id,
+                    roomLabel: simulation.title ?? "無題のルーム",
+                  },
+                  onPosted: (_post, thread) => feed.upsertThread(thread),
+                });
+              }}
+              className="min-w-0 flex-1 rounded-full border border-line bg-surface px-4 py-2.5 text-left text-sm text-ink-faint transition hover:border-accent/50"
+            >
+              {"いま何が起きてる？　@ でキャラクターを指名"}
+            </button>
+          </div>
+        ) : null}
+
+        {charactersError ? (
+          <div className="px-4 pt-3">
+            <ErrorBanner
+              message="キャスト一覧を取得できませんでした"
+              detail={charactersError}
+              onRetry={reloadCharacters}
+            />
+          </div>
+        ) : null}
+
+        {userProfile.error ? (
+          <div className="px-4 pt-3">
+            <ErrorBanner
+              message="ユーザープロフィールを取得できませんでした"
+              detail={userProfile.error}
+              onRetry={userProfile.reload}
+            />
+          </div>
+        ) : null}
+
+        {feed.generationWarning ? (
+          <div className="px-4 pt-3">
+            {/* Aggregated on purpose (§11.2): naming who failed, or why, would
+                describe the machinery behind a post. Details stay in the log. */}
+            <ErrorBanner
+              tone="warning"
+              message="一部の応答を生成できませんでした"
+              onDismiss={feed.dismissGenerationWarning}
+            />
+          </div>
+        ) : null}
+
+        {feed.connection === "reconnecting" ? (
+          <p className="flex items-center gap-2 border-b border-line px-4 py-2 text-xs text-warn">
+            <Spinner size="sm" />
+            リアルタイム接続が切れました。再接続中です…
+          </p>
+        ) : null}
+
+        {feed.initialError ? (
+          <div className="p-4">
+            <ErrorBanner
+              message="ルームのフィードを取得できませんでした"
+              detail={feed.initialError}
+              onRetry={feed.reload}
+            />
+          </div>
+        ) : feed.loadingInitial ? (
+          <div className="flex justify-center py-12">
+            <Spinner size="lg" />
+          </div>
+        ) : feed.threads.length === 0 ? (
+          <div className="px-4 py-12 text-center">
+            <p className="text-sm text-ink-faint">
+              {filter === "mine" ? "自分に関係するスレッドはまだありません" : "まだ投稿がありません"}
+            </p>
+            {filter === "all" && !isStopped ? (
+              <p className="mt-2 text-xs text-ink-faint">
+                上のフォームから投稿すると、このルームのスレッドがここに並びます。
+              </p>
+            ) : null}
+          </div>
+        ) : (
+          <>
+            <FeedThreadList
+              threads={feed.threads}
+              currentUserId={userProfile.profile.id}
+              knownHandles={knownHandles}
+              onOpenAuthor={openAuthor}
+              onOpenHandle={openHandle}
+              onOpenThread={openThread}
+              onReply={openReply}
+              onRepost={openQuote}
+            />
+
+            {feed.hasMore ? (
+              <div className="flex flex-col items-center gap-2 px-4 py-4">
+                {feed.loadMoreError ? (
+                  <ErrorBanner
+                    message="追加の投稿を取得できませんでした"
+                    detail={feed.loadMoreError}
+                    onRetry={feed.loadMore}
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    disabled={feed.loadingMore}
+                    onClick={feed.loadMore}
+                    className="rounded-full border border-line px-4 py-2 text-sm text-ink-muted transition hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {feed.loadingMore ? (
+                      <span className="flex items-center gap-2">
+                        <Spinner size="sm" />
+                        読み込み中…
+                      </span>
+                    ) : (
+                      "さらに読み込む"
+                    )}
+                  </button>
+                )}
+              </div>
+            ) : null}
+          </>
+        )}
       </div>
 
-      {charactersError ? (
-        <div className="px-4 pt-3">
-          <ErrorBanner
-            message="キャスト一覧を取得できませんでした"
-            detail={charactersError}
-            onRetry={reloadCharacters}
-          />
-        </div>
+      <RoomInfoPanel {...roomInfoProps} />
+
+      {infoSheetOpen ? <RoomInfoSheet {...roomInfoProps} onClose={() => setInfoSheetOpen(false)} /> : null}
+
+      {renameDialogOpen ? (
+        <RoomNameDialog
+          mode="rename"
+          initialValue={simulation.title ?? ""}
+          onClose={() => setRenameDialogOpen(false)}
+          onSave={async (title) => {
+            await selectedRoom.rename(title);
+            setRenameDialogOpen(false);
+          }}
+        />
       ) : null}
-
-      {userProfile.error ? (
-        <div className="px-4 pt-3">
-          <ErrorBanner
-            message="ユーザープロフィールを取得できませんでした"
-            detail={userProfile.error}
-            onRetry={userProfile.reload}
-          />
-        </div>
-      ) : null}
-
-      {feed.generationWarning ? (
-        <div className="px-4 pt-3">
-          {/* Aggregated on purpose (§11.2): naming who failed, or why, would
-              describe the machinery behind a post. Details stay in the log. */}
-          <ErrorBanner
-            tone="warning"
-            message="一部の応答を生成できませんでした"
-            onDismiss={feed.dismissGenerationWarning}
-          />
-        </div>
-      ) : null}
-
-      {feed.connection === "reconnecting" ? (
-        <p className="flex items-center gap-2 border-b border-line px-4 py-2 text-xs text-warn">
-          <Spinner size="sm" />
-          リアルタイム接続が切れました。再接続中です…
-        </p>
-      ) : null}
-
-      {feed.initialError ? (
-        <div className="p-4">
-          <ErrorBanner
-            message="ルームのフィードを取得できませんでした"
-            detail={feed.initialError}
-            onRetry={feed.reload}
-          />
-        </div>
-      ) : feed.loadingInitial ? (
-        <div className="flex justify-center py-12">
-          <Spinner size="lg" />
-        </div>
-      ) : feed.threads.length === 0 ? (
-        <div className="px-4 py-12 text-center">
-          <p className="text-sm text-ink-faint">
-            {filter === "mine" ? "自分に関係するスレッドはまだありません" : "まだ投稿がありません"}
-          </p>
-          {filter === "all" ? (
-            <p className="mt-2 text-xs text-ink-faint">
-              上のフォームから投稿すると、このルームのスレッドがここに並びます。
-            </p>
-          ) : null}
-        </div>
-      ) : (
-        <>
-          <FeedThreadList
-            threads={feed.threads}
-            currentUserId={userProfile.profile.id}
-            knownHandles={knownHandles}
-            onOpenAuthor={openAuthor}
-            onOpenHandle={openHandle}
-            onOpenThread={openThread}
-            onReply={openReply}
-            onRepost={openQuote}
-          />
-
-          {feed.hasMore ? (
-            <div className="flex flex-col items-center gap-2 px-4 py-4">
-              {feed.loadMoreError ? (
-                <ErrorBanner
-                  message="追加の投稿を取得できませんでした"
-                  detail={feed.loadMoreError}
-                  onRetry={feed.loadMore}
-                />
-              ) : (
-                <button
-                  type="button"
-                  disabled={feed.loadingMore}
-                  onClick={feed.loadMore}
-                  className="rounded-full border border-line px-4 py-2 text-sm text-ink-muted transition hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {feed.loadingMore ? (
-                    <span className="flex items-center gap-2">
-                      <Spinner size="sm" />
-                      読み込み中…
-                    </span>
-                  ) : (
-                    "さらに読み込む"
-                  )}
-                </button>
-              )}
-            </div>
-          ) : null}
-        </>
-      )}
     </div>
   );
 }

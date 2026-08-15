@@ -123,7 +123,12 @@ export type SimulationAnalysisResponse = {
  * The posts used to ride along here, which meant opening a room downloaded its
  * entire history. Reading a room is the feed's job now
  * (`GET /api/simulations/:id/feed`), which pages instead.
+ *
+ * Summary-shaped (postCount/creator/canManage), same as the list endpoint's
+ * entries: the room info panel (§19.2) needs exactly these fields for one
+ * room, and duplicating the room list's summary type for a single-room
+ * variant would just be the same fields under a different name.
  */
 export type SimulationResponse = {
-  simulation: SimulationDto;
+  simulation: SimulationSummaryDto;
 };
