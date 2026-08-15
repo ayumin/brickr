@@ -48,6 +48,7 @@ export function SettingsNav({
       console.error(cause);
     }
     setUser(null);
+    setLoggingOut(false);
     // Not `/login` (§22): browsing stays available signed out, and the
     // selected-room localStorage entry is deliberately left untouched so it
     // can still be restored after a future login.
