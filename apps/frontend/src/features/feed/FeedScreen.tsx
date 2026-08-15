@@ -99,14 +99,42 @@ export function FeedScreen() {
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col">
-      <FeedHeader
-        title="フィード"
-        subtitle="すべてのルームの投稿"
-        activeResponseCount={feed.activeResponseCount}
-        showFilters={user !== null}
-        filter={filter}
-        onFilterChange={handleFilterChange}
-      />
+      {/* Sticks to the viewport top through the compose trigger; only the
+          thread list beneath scrolls. */}
+      <div className="sticky top-0 z-10 bg-canvas/95 backdrop-blur">
+        <FeedHeader
+          title="フィード"
+          subtitle="すべてのルームの投稿"
+          activeResponseCount={feed.activeResponseCount}
+          showFilters={user !== null}
+          filter={filter}
+          onFilterChange={handleFilterChange}
+        />
+
+        {/* Compose trigger — logged-in users only. Opens the shared composer
+            dialog (§17) rather than an inline form; the actual post lands via
+            `openComposer`'s `onPosted`, which upserts the new thread from the
+            `CreatePostResponse` immediately (preserving any additional pages
+            already loaded via "さらに読み込む") — the SSE echo arriving shortly
+            after is a no-op against the same thread id. */}
+        {user ? (
+          <div className="flex items-center gap-3 border-b border-line px-4 py-3">
+            <Avatar
+              handle={userProfile.profile.handle}
+              displayName={userProfile.profile.displayName}
+              avatarUrl={userProfile.profile.avatarUrl}
+              size="md"
+            />
+            <button
+              type="button"
+              onClick={openComposer}
+              className="min-w-0 flex-1 rounded-full border border-line bg-surface px-4 py-2.5 text-left text-sm text-ink-faint transition hover:border-accent/50"
+            >
+              {"いま何が起きてる？　@ でキャストを指名"}
+            </button>
+          </div>
+        ) : null}
+      </div>
 
       {/* SSE reconnecting indicator (§16.4) */}
       {feed.connection === "reconnecting" ? (
@@ -114,30 +142,6 @@ export function FeedScreen() {
           <Spinner size="sm" />
           リアルタイム接続が切れました。再接続中です…
         </p>
-      ) : null}
-
-      {/* Compose trigger — logged-in users only. Opens the shared composer
-          dialog (§17) rather than an inline form; the actual post lands via
-          `openComposer`'s `onPosted`, which upserts the new thread from the
-          `CreatePostResponse` immediately (preserving any additional pages
-          already loaded via "さらに読み込む") — the SSE echo arriving shortly
-          after is a no-op against the same thread id. */}
-      {user ? (
-        <div className="flex items-center gap-3 border-b border-line px-4 py-3">
-          <Avatar
-            handle={userProfile.profile.handle}
-            displayName={userProfile.profile.displayName}
-            avatarUrl={userProfile.profile.avatarUrl}
-            size="md"
-          />
-          <button
-            type="button"
-            onClick={openComposer}
-            className="min-w-0 flex-1 rounded-full border border-line bg-surface px-4 py-2.5 text-left text-sm text-ink-faint transition hover:border-accent/50"
-          >
-            {"いま何が起きてる？　@ でキャストを指名"}
-          </button>
-        </div>
       ) : null}
 
       {/* Generation warning (§16.4) */}
