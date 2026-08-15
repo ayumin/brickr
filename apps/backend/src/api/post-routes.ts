@@ -8,18 +8,23 @@ import { createPostSchema, idParams, threadRootParams } from "./schemas.js";
 
 export function registerPostRoutes(app: FastifyInstance, services: AppServices): void {
   /**
-   * One room's posts in full. Login required, and under the same room access rule
-   * as the room itself (§10.4, §10.8) — otherwise the 404 the room detail gives
-   * for somebody else's stopped room would be undone by reading its posts here.
+   * One simulation's posts in full — the room's, or the global feed's when a
+   * post detail's thread lives there (§10.8). Login required, and a stopped
+   * room stays refused for anyone but its creator or an administrator, same as
+   * the room detail — but unlike the room detail, the global row is not
+   * refused: `PostDetailScreen` is this route's only remaining caller, and it
+   * needs every post in a thread regardless of which simulation the thread is
+   * in, not a "this is a real room" check (`requireReadableSimulation`, not
+   * `requireReadableRoom`).
    *
-   * The paged feed (`GET /api/simulations/:id/feed`) is what the UI reads.
+   * The paged feed (`GET /api/simulations/:id/feed`) is what the UI otherwise reads.
    */
   app.get("/api/simulations/:id/posts", async (request, reply) => {
     const user = requireUser(request, reply);
     if (!user) return reply;
 
     return withSimulation(request, reply, async (id) => {
-      await services.simulations.requireReadableRoom(id, user);
+      await services.simulations.requireReadableSimulation(id, user);
       return { posts: await services.posts.listBySimulation(id) };
     });
   });
