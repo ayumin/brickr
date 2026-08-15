@@ -5,7 +5,8 @@ import { Avatar } from "../../components/Avatar";
 import { Icon } from "../../components/Icon";
 import { Spinner } from "../../components/Spinner";
 import type { ResponseActivity } from "../../types";
-import { Composer } from "../composer/Composer";
+import { composerContextForQuote, composerContextForReply } from "../composer/composer-utils";
+import { useComposeController } from "../composer/ComposeContext";
 import { PostCard } from "./PostCard";
 import { PostContent } from "./PostContent";
 import { formatRelativeTime } from "./QuotePost";
@@ -18,11 +19,6 @@ import {
   indexPostsById,
   selectReposts,
 } from "./thread-utils";
-
-type InlineComposerState = {
-  postId: string;
-  mode: "reply" | "quote";
-};
 
 const TIMELINE_PAGE_SIZE = 100;
 
@@ -194,7 +190,6 @@ export type TimelineProps = {
 };
 
 export function Timeline({
-  simulationId,
   rootPosts,
   allPosts,
   characters,
@@ -211,14 +206,13 @@ export function Timeline({
   rootPostShowQuotedPost = true,
   rootPostExpandable = true,
 }: TimelineProps) {
+  const composeController = useComposeController();
   const [expandedReplies, setExpandedReplies] = useState<ReadonlySet<string>>(
     () => new Set(initialExpandedPostId ? [initialExpandedPostId] : []),
   );
   const [expandedReposts, setExpandedReposts] = useState<ReadonlySet<string>>(
     () => new Set(initialExpandedPostId ? [initialExpandedPostId] : []),
   );
-  const [inlineComposer, setInlineComposer] =
-    useState<InlineComposerState | null>(null);
   const [visibleCount, setVisibleCount] = useState(TIMELINE_PAGE_SIZE);
 
   const visibleRootPosts = useMemo(
@@ -305,27 +299,12 @@ export function Timeline({
     setExpandedReposts((current) => toggleId(current, postId));
   };
 
-  const openInlineComposer = (
-    postId: string,
-    mode: "reply" | "quote",
-  ): void => {
-    // Only one inline composer is open at a time.
-    setInlineComposer((current) =>
-      current && current.postId === postId && current.mode === mode
-        ? null
-        : { postId, mode },
-    );
-  };
-
-  const closeInlineComposer = (): void => {
-    setInlineComposer(null);
-  };
-
   /**
-   * After an inline post, reveal it: a reply lands inside the target's thread
-   * and a repost inside the target's repost list, both of which may be closed.
+   * After a reply/quote made from the shared composer dialog (§17), reveal
+   * it: a reply lands inside the target's thread and a repost inside the
+   * target's repost list, both of which may be closed.
    */
-  const handleInlinePosted = (post: PostDto, thread: FeedThreadDto): void => {
+  const handleComposedPosted = (post: PostDto, thread: FeedThreadDto): void => {
     onPosted(post, thread);
     const repliedTo = post.replyTo;
     if (repliedTo !== null) {
@@ -337,23 +316,12 @@ export function Timeline({
     }
   };
 
-  const renderInlineComposer = (post: PostDto) => {
-    if (!canPost || inlineComposer?.postId !== post.id) {
-      return null;
-    }
-    return (
-      <Composer
-        simulationId={simulationId}
-        characters={characters}
-        userProfile={userProfile}
-        compact
-        autoFocus
-        scope={{ mode: inlineComposer.mode, post }}
-        onOpenUser={() => onOpenAuthor(userProfile.id)}
-        onCancel={closeInlineComposer}
-        onPosted={handleInlinePosted}
-      />
-    );
+  const openReply = (post: PostDto): void => {
+    composeController.request({ context: composerContextForReply(post), onPosted: handleComposedPosted });
+  };
+
+  const openQuote = (post: PostDto): void => {
+    composeController.request({ context: composerContextForQuote(post), onPosted: handleComposedPosted });
   };
 
   const renderThinking = (postId: string) => {
@@ -444,10 +412,10 @@ export function Timeline({
                 {...(canPost
                   ? {
                       onReply: () => {
-                        openInlineComposer(post.id, "reply");
+                        openReply(post);
                       },
                       onRepost: () => {
-                        openInlineComposer(post.id, "quote");
+                        openQuote(post);
                       },
                     }
                   : {})}
@@ -455,7 +423,6 @@ export function Timeline({
 
               {renderThinking(post.id)}
 
-              {renderInlineComposer(post)}
               {renderRepostList(post)}
 
               {repliesExpanded ? (
@@ -488,16 +455,15 @@ export function Timeline({
                           {...(canPost
                             ? {
                                 onReply: () => {
-                                  openInlineComposer(reply.id, "reply");
+                                  openReply(reply);
                                 },
                                 onRepost: () => {
-                                  openInlineComposer(reply.id, "quote");
+                                  openQuote(reply);
                                 },
                               }
                             : {})}
                         />
                         {renderThinking(reply.id)}
-                        {renderInlineComposer(reply)}
                         {renderRepostList(reply)}
                       </li>
                     ))}

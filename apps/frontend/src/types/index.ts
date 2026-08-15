@@ -23,10 +23,17 @@ export type ResponseActivity = {
 export type ConnectionState = "connecting" | "open" | "reconnecting" | "disconnected";
 
 /**
- * What an inline composer is scoped to.
+ * What the composer dialog is posting to (Brickr-ux-refine §17.1).
+ *
+ * `simulationId` is the actual write destination and is always present, even
+ * for `reply`/`quote` where it duplicates `post.simulationId` — the point is
+ * that a reply or quote always targets the post's own room, never wherever
+ * the reader happened to be looking (the unified feed, in particular, has no
+ * simulation of its own to reply into).
+ *
  * `quote` is also the repost mechanism — there is no separate repost field.
  */
-export type ComposerScope = {
-  mode: "reply" | "quote";
-  post: PostDto;
-};
+export type ComposerContext =
+  | { mode: "new"; simulationId: string; roomLabel: string }
+  | { mode: "reply"; simulationId: string; post: PostDto }
+  | { mode: "quote"; simulationId: string; post: PostDto };
