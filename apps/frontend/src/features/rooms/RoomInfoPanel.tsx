@@ -61,14 +61,16 @@ export function RoomInfoContent({
         <p className="text-xs text-ink-faint">投稿数: {simulation.postCount.toLocaleString("ja-JP")}</p>
       </div>
 
-      <button
-        type="button"
-        onClick={onOpenAnalysis}
-        className="flex w-full items-center gap-2 rounded-xl border border-line px-3 py-2 text-sm text-ink-muted transition hover:bg-surface-hover hover:text-ink"
-      >
-        <Icon name="clipboard" />
-        詳細分析を見る
-      </button>
+      {simulation.canManage ? (
+        <button
+          type="button"
+          onClick={onOpenAnalysis}
+          className="flex w-full items-center gap-2 rounded-xl border border-line px-3 py-2 text-sm text-ink-muted transition hover:bg-surface-hover hover:text-ink"
+        >
+          <Icon name="clipboard" />
+          詳細分析を見る
+        </button>
+      ) : null}
 
       {simulation.canManage ? (
         <div className="space-y-2 border-t border-line pt-4">
