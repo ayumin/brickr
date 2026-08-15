@@ -8,7 +8,6 @@ import { Spinner } from "../../components/Spinner";
 import { handlePath, postPath, roomAnalysisPath } from "../../routes";
 import { composerContextForQuote, composerContextForReply } from "../composer/composer-utils";
 import { useComposeController } from "../composer/ComposeContext";
-import { useCharacters } from "../../hooks/useCharacters";
 import { useUserProfile } from "../../hooks/useUserProfile";
 import { FeedThreadList } from "../feed/FeedThreadList";
 import { useFeed, type FeedScope } from "../feed/useFeed";
@@ -36,7 +35,6 @@ export function RoomScreen({ roomId }: { roomId: string }) {
   const composeController = useComposeController();
   const selectedRoom = useSelectedRoom(roomId);
 
-  const { characters, error: charactersError, reload: reloadCharacters } = useCharacters();
   const userProfile = useUserProfile();
 
   const [filter, setFilter] = useState<FeedFilter>(readFeedFilter);
@@ -52,30 +50,28 @@ export function RoomScreen({ roomId }: { roomId: string }) {
   const [infoSheetOpen, setInfoSheetOpen] = useState(false);
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
 
-  // Every author clickable from this room is either the signed-in user, a
-  // known character, or someone whose post is already loaded - each of which
-  // already carries its own handle, so no extra lookup request is needed.
+  // Every author clickable from this room is either the signed-in user or
+  // someone whose post is already loaded - each of which already carries its
+  // own handle, so no extra lookup request is needed. This includes a quoted
+  // post's author (QuotePost.tsx's header): `quotedPost` is denormalised onto
+  // the quoting post itself (PostDto.quotedPost), so it never needs the
+  // quoted author to have their own thread root or preview reply on this page.
   const authorHandleById = useMemo(() => {
     const map = new Map<string, string>([[userProfile.profile.id, userProfile.profile.handle]]);
-    for (const character of characters) {
-      map.set(character.id, character.handle);
-    }
     for (const thread of feed.threads) {
       map.set(thread.root.author.id, thread.root.author.handle);
+      if (thread.root.quotedPost) {
+        map.set(thread.root.quotedPost.author.id, thread.root.quotedPost.author.handle);
+      }
       for (const reply of thread.latestReplies) {
         map.set(reply.author.id, reply.author.handle);
+        if (reply.quotedPost) {
+          map.set(reply.quotedPost.author.id, reply.quotedPost.author.handle);
+        }
       }
     }
     return map;
-  }, [characters, feed.threads, userProfile.profile.id, userProfile.profile.handle]);
-
-  const knownHandles = useMemo(() => {
-    const handles = new Set<string>([userProfile.profile.handle]);
-    for (const character of characters) {
-      handles.add(character.handle);
-    }
-    return handles;
-  }, [characters, userProfile.profile.handle]);
+  }, [feed.threads, userProfile.profile.id, userProfile.profile.handle]);
 
   const openAuthor = useCallback(
     (authorId: string) => {
@@ -183,18 +179,8 @@ export function RoomScreen({ roomId }: { roomId: string }) {
               }}
               className="min-w-0 flex-1 rounded-full border border-line bg-surface px-4 py-2.5 text-left text-sm text-ink-faint transition hover:border-accent/50"
             >
-              {"いま何が起きてる？　@ でキャラクターを指名"}
+              {"いま何が起きてる？　@ でキャストを指名"}
             </button>
-          </div>
-        ) : null}
-
-        {charactersError ? (
-          <div className="px-4 pt-3">
-            <ErrorBanner
-              message="キャスト一覧を取得できませんでした"
-              detail={charactersError}
-              onRetry={reloadCharacters}
-            />
           </div>
         ) : null}
 
@@ -255,7 +241,6 @@ export function RoomScreen({ roomId }: { roomId: string }) {
             <FeedThreadList
               threads={feed.threads}
               currentUserId={userProfile.profile.id}
-              knownHandles={knownHandles}
               onOpenAuthor={openAuthor}
               onOpenHandle={openHandle}
               onOpenThread={openThread}

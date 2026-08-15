@@ -9,8 +9,6 @@ export type CharacterProfileProps = {
   description?: string | null;
   /** Number of posts this author has in the current simulation. */
   postCount: number;
-  /** Go back home with this handle pre-filled in the composer. */
-  onMention?: (handle: string) => void;
   onEdit?: () => void;
 };
 
@@ -25,7 +23,6 @@ export function CharacterProfile({
   avatarUrl,
   description,
   postCount,
-  onMention,
   onEdit,
 }: CharacterProfileProps) {
   return (
@@ -53,17 +50,6 @@ export function CharacterProfile({
                 className="flex h-9 w-9 items-center justify-center rounded-full border border-line text-ink-muted transition hover:bg-surface-hover hover:text-ink"
               >
                 <Icon name="gear" />
-              </button>
-            ) : null}
-            {onMention ? (
-              <button
-                type="button"
-                onClick={() => {
-                  onMention(handle);
-                }}
-                className="rounded-full bg-accent-strong px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-accent"
-              >
-                @で話しかける
               </button>
             ) : null}
           </div>

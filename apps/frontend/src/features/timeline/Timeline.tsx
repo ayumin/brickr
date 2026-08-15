@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { CharacterDto, FeedThreadDto, PostDto, UserProfileDto } from "@brickr/shared";
+import type { FeedThreadDto, PostDto, UserProfileDto } from "@brickr/shared";
 
 import { Avatar } from "../../components/Avatar";
 import { Icon } from "../../components/Icon";
@@ -166,7 +166,6 @@ export type TimelineProps = {
   rootPosts: PostDto[];
   /** Every post in the simulation, used to derive threads and reposts. */
   allPosts: PostDto[];
-  characters: CharacterDto[];
   userProfile: UserProfileDto;
   activities: ResponseActivity[];
   loading: boolean;
@@ -175,6 +174,8 @@ export type TimelineProps = {
   /** False when the simulation is stopped: no reply / repost composers. */
   canPost: boolean;
   onOpenAuthor: (authorId: string) => void;
+  /** `@handle` mentions in post content link here directly (§10.5: free text, no roster lookup needed). */
+  onOpenHandle: (handle: string) => void;
   onPosted: (post: PostDto, thread: FeedThreadDto) => void;
   onOpenPost: (postId: string) => void;
   /** Detail view starts with this post's replies and reposts open. */
@@ -191,7 +192,6 @@ export type TimelineProps = {
 export function Timeline({
   rootPosts,
   allPosts,
-  characters,
   userProfile,
   activities,
   loading,
@@ -199,6 +199,7 @@ export function Timeline({
   emptyBody,
   canPost,
   onOpenAuthor,
+  onOpenHandle,
   onPosted,
   onOpenPost,
   initialExpandedPostId,
@@ -264,29 +265,6 @@ export function Timeline({
     });
   }, [activities, postsById, visibleRootPosts]);
 
-  const knownHandles = useMemo(() => {
-    const handles = new Set<string>([userProfile.handle]);
-    for (const character of characters) {
-      handles.add(character.handle);
-    }
-    return handles;
-  }, [characters, userProfile.handle]);
-
-  const authorIdByHandle = useMemo(() => {
-    const map = new Map<string, string>([[userProfile.handle, userProfile.id]]);
-    for (const character of characters) {
-      map.set(character.handle, character.id);
-    }
-    return map;
-  }, [characters, userProfile.handle, userProfile.id]);
-
-  const openHandle = (handle: string): void => {
-    const authorId = authorIdByHandle.get(handle);
-    if (authorId) {
-      onOpenAuthor(authorId);
-    }
-  };
-
   const replyToHandleOf = (post: PostDto): string | null =>
     post.replyTo ? (postsById.get(post.replyTo)?.author.handle ?? null) : null;
 
@@ -344,7 +322,7 @@ export function Timeline({
     return (
       <div className="border-b border-line bg-surface">
         <p className="px-4 pt-2 text-[11px] font-medium text-ink-faint">
-          リポストしたキャラクター
+          リポストしたキャスト
         </p>
         <ul>
           {reposts.map((repost) => (
@@ -393,9 +371,8 @@ export function Timeline({
                 post={post}
                 currentUserId={userProfile.id}
                 replyToHandle={replyToHandleOf(post)}
-                knownHandles={knownHandles}
                 onOpenAuthor={onOpenAuthor}
-                onOpenHandle={openHandle}
+                onOpenHandle={onOpenHandle}
                 {...(rootPostExpandable ? { onExpand: onOpenPost } : {})}
                 showQuotedPost={rootPostShowQuotedPost}
                 replyCount={replyCount}
@@ -439,9 +416,8 @@ export function Timeline({
                           currentUserId={userProfile.id}
                           dense
                           replyToHandle={replyToHandleOf(reply)}
-                          knownHandles={knownHandles}
                           onOpenAuthor={onOpenAuthor}
-                          onOpenHandle={openHandle}
+                          onOpenHandle={onOpenHandle}
                           onExpand={onOpenPost}
                           // No nested reply expander: every descendant is
                           // already visible in this flat list.

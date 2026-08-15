@@ -160,7 +160,7 @@ export function CharacterEditor({
         <header className="sticky top-0 z-10 flex items-center gap-3 border-b border-line bg-canvas/95 px-4 py-3 backdrop-blur">
           <div>
             <h2 id="character-editor-title" className="font-bold text-ink">
-              {characterId ? "キャラクターを編集" : "キャラクターを作成"}
+              {characterId ? "キャストを編集" : "キャストを作成"}
             </h2>
             <p className="text-xs text-ink-faint">
               Persona設定から実際のSystem Promptが組み立てられます
@@ -189,7 +189,7 @@ export function CharacterEditor({
           >
             {error ? (
               <ErrorBanner
-                message="キャラクター設定を保存できませんでした"
+                message="キャスト設定を保存できませんでした"
                 detail={error}
                 onDismiss={() => setError(null)}
               />
@@ -349,7 +349,7 @@ export function CharacterEditor({
                   onChange={(value) => setForm((current) => ({ ...current, quoteProbability: value }))}
                 />
                 <ProbabilityField
-                  label="他Characterへの影響力"
+                  label="他キャストへの影響力"
                   value={form.influence}
                   onChange={(value) => setForm((current) => ({ ...current, influence: value }))}
                 />

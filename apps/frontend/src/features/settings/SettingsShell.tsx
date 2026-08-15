@@ -2,43 +2,50 @@ import { useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import type { UserProfileDto } from "@brickr/shared";
 
-import { isSettingsSection, roomPath, settingsPath, type SettingsSection as UrlSettingsSection } from "../../routes";
+import { Icon } from "../../components/Icon";
+import { isSettingsSection, roomPath, type SettingsSection } from "../../routes";
+import { checkAdminSettingsAccess } from "../../app/route-access";
 import { readSelectedRoomId } from "../rooms/selected-room-storage";
 import { applyTheme, readPreferredTheme, type Theme } from "../../services/theme";
-import { UserManagementList } from "../admin/UserManagementList";
-import { UserProfileEditor } from "../user/UserProfileEditor";
-import { useUserProfile } from "../../hooks/useUserProfile";
 import { useAuth } from "../auth/AuthContext";
-import { checkAdminSettingsAccess } from "../../app/route-access";
+import { useUserProfile } from "../../hooks/useUserProfile";
+import { AppearanceSettings } from "./AppearanceSettings";
+import { InviteSettings } from "./InviteSettings";
+import { ProfileSettings } from "./ProfileSettings";
+import { RuntimeSettings } from "./RuntimeSettings";
+import { SettingsNav } from "./SettingsNav";
+import { UsageSettings } from "./UsageSettings";
+import { UserManagementSettings } from "./UserManagementSettings";
+
+const SECTION_TITLES: Record<SettingsSection, string> = {
+  profile: "プロフィール",
+  appearance: "見た目",
+  usage: "使用量",
+  runtime: "モデルと実行設定",
+  users: "ユーザー管理",
+  invites: "招待コード",
+};
+
+const SECTION_DESCRIPTIONS: Record<SettingsSection, string> = {
+  profile: "表示名、プロフィール、アバターを編集します。",
+  appearance: "Brickrの表示テーマを選択します。",
+  usage: "あなたの投稿がきっかけで生成されたLLMのトークン利用量です。",
+  runtime: "環境変数、LLMプロバイダー・モデル、全User分のトークン利用量を確認・編集します。",
+  users: "Userの停止・復帰・仮パスワード発行や、作成したキャスト・トークン利用量を確認します。",
+  invites: "新規登録用の招待コードを発行します。",
+};
 
 /**
- * Maps a URL section (`routes.ts`'s `SettingsSection`) to the internal
- * section `UserProfileEditor` already understands. `/settings/runtime`
- * lands on its "environment" tab; the admin can still reach the models/usage
- * tabs from UserProfileEditor's own sub-nav without the URL changing -
- * splitting those into their own addressable routes is Step 10's job.
- */
-function toEditorSection(section: UrlSettingsSection): "profile" | "appearance" | "my-usage" | "environment" {
-  if (section === "usage") return "my-usage";
-  if (section === "runtime") return "environment";
-  if (section === "appearance") return "appearance";
-  return "profile";
-}
-
-/**
- * The route-driven settings screen (§22, Issue #48 "settings shell切替").
- *
- * Wraps the existing UserProfileEditor (in `variant="page"`, dropping its
- * modal chrome) rather than splitting every section into its own component -
- * that finer breakdown is Step 10's "route settings sections" work item.
- * `/settings/users` and `/settings/invites` bypass it entirely and render
- * the existing UserManagementList directly, since user/invite management
- * was never part of UserProfileEditor's own tab set.
+ * The route-driven settings screen (§22). Replaces the old modal
+ * `UserProfileEditor`, decomposed into one component per URL section so each
+ * is directly addressable and all six share the same `SettingsNav` - not
+ * just the four that used to delegate to `UserProfileEditor`'s own sidebar
+ * (`/settings/users` and `/settings/invites` previously rendered nothing but
+ * a bare close button, a dead end with no way to reach another section or
+ * log out without the browser back button).
  *
  * AppShell (§13.5) does not render the normal nav while a `/settings/*`
- * route is active - UserProfileEditor's own section sidebar already serves
- * as the replacement nav §22 calls for, so this component adds no nav of
- * its own beyond "設定を閉じる" for the admin-only screens.
+ * route is active; `SettingsNav` is the replacement §22 calls for.
  */
 export function SettingsShell({ onProfileUpdated }: { onProfileUpdated?: (profile: UserProfileDto) => void }) {
   const navigate = useNavigate();
@@ -48,7 +55,7 @@ export function SettingsShell({ onProfileUpdated }: { onProfileUpdated?: (profil
   const [theme, setTheme] = useState<Theme>(readPreferredTheme);
   const { user } = useAuth();
 
-  const section = params.section && isSettingsSection(params.section) ? params.section : "profile";
+  const section: SettingsSection = params.section && isSettingsSection(params.section) ? params.section : "profile";
 
   const accessDecision = checkAdminSettingsAccess(section, user);
   useEffect(() => {
@@ -67,37 +74,54 @@ export function SettingsShell({ onProfileUpdated }: { onProfileUpdated?: (profil
     navigate(storedRoomId ? roomPath(storedRoomId) : "/", { replace: true });
   };
 
-  if (section === "users" || section === "invites") {
-    return (
-      <div className="mx-auto w-full max-w-5xl px-4 py-4">
+  if (!accessDecision.allowed) return null;
+
+  return (
+    <div className="mx-auto flex w-full max-w-5xl flex-col">
+      <div className="border-b border-line px-4 py-3 sm:px-0">
         <button
           type="button"
           onClick={close}
-          className="mb-4 rounded-full border border-line px-3 py-1 text-xs text-ink-muted hover:text-ink"
+          className="flex items-center gap-1.5 rounded-full border border-line px-3 py-1.5 text-xs font-semibold text-ink-muted transition hover:text-ink"
         >
+          <Icon name="arrow-left" />
           設定を閉じる
         </button>
-        <UserManagementList />
       </div>
-    );
-  }
 
-  return (
-    <UserProfileEditor
-      variant="page"
-      initialSection={toEditorSection(section)}
-      profile={userProfile.profile}
-      theme={theme}
-      onThemeChange={(selected) => {
-        applyTheme(selected);
-        setTheme(selected);
-      }}
-      onClose={close}
-      onSaved={(saved) => {
-        userProfile.setProfile(saved);
-        onProfileUpdated?.(saved);
-      }}
-      onOpenUsersManagement={() => navigate(settingsPath("users"))}
-    />
+      <div className="flex flex-col sm:flex-row">
+        <SettingsNav activeSection={section} isAdmin={user?.isAdmin ?? false} />
+
+        <main className="min-w-0 flex-1 p-5 sm:p-7">
+          <div className="mb-5">
+            <h1 className="text-xl font-bold text-ink">{SECTION_TITLES[section]}</h1>
+            <p className="mt-1 text-sm text-ink-muted">{SECTION_DESCRIPTIONS[section]}</p>
+          </div>
+
+          {section === "profile" ? (
+            <ProfileSettings
+              profile={userProfile.profile}
+              onSaved={(saved) => {
+                userProfile.setProfile(saved);
+                onProfileUpdated?.(saved);
+              }}
+            />
+          ) : null}
+          {section === "appearance" ? (
+            <AppearanceSettings
+              theme={theme}
+              onThemeChange={(selected) => {
+                applyTheme(selected);
+                setTheme(selected);
+              }}
+            />
+          ) : null}
+          {section === "usage" ? <UsageSettings /> : null}
+          {section === "runtime" ? <RuntimeSettings /> : null}
+          {section === "users" ? <UserManagementSettings /> : null}
+          {section === "invites" ? <InviteSettings /> : null}
+        </main>
+      </div>
+    </div>
   );
 }

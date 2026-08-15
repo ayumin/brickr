@@ -91,7 +91,7 @@ export function ComposerForm({
       ? "コメントを添えてリポスト…"
       : context.mode === "reply"
         ? "返信を書く…"
-        : "いま何が起きてる？　@ でキャラクターを指名できます";
+        : "いま何が起きてる？　@ でキャストを指名できます";
 
   const selectImage = (file: File | undefined): void => {
     if (!file) return;

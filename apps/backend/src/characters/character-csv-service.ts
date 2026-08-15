@@ -81,7 +81,7 @@ export class CharacterCsvService {
       const handleMatch = byHandle.get(row.handle);
       if (idMatch && handleMatch && idMatch.id !== handleMatch.id) {
         throw new CharacterCsvError(
-          `id「${row.id}」とhandle「@${row.handle}」が別の既存キャラクターを指しています。`,
+          `id「${row.id}」とhandle「@${row.handle}」が別の既存キャストを指しています。`,
         );
       }
       const existing = idMatch ?? handleMatch;
@@ -130,7 +130,7 @@ export class CharacterCsvService {
     try {
       await this.characters.importMany(entries);
     } catch (cause) {
-      throw new CharacterCsvError("CSVのキャラクターを保存できませんでした。重複するidまたはhandleを確認してください。", { cause });
+      throw new CharacterCsvError("CSVのキャストを保存できませんでした。重複するidまたはhandleを確認してください。", { cause });
     }
     return {
       importedCount: entries.length,
