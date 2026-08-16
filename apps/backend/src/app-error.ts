@@ -64,7 +64,7 @@ export function appErrorHandler(
   reply.status(status).send({
     error: {
       code: "internal_error",
-      message: status < 500 ? error.message : "internal error",
+      message: status < 500 ? (error as Error).message : "internal error",
     },
   });
 }
