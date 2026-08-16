@@ -116,6 +116,13 @@ export const saveCharacterSchema = z.object({
   replyProbability: probability,
   quoteProbability: probability,
   influence: probability,
+  /**
+   * Key of the BehaviorProfile archetype for autonomous Cast participation.
+   * Absent or null means the `casual` default is used.
+   */
+  behaviorProfileKey: z.string().trim().max(64).nullable().optional(),
+  /** Whether this character may join rooms autonomously.  Defaults to true. */
+  castAutonomous: z.boolean().optional(),
   modelProfileId: id,
   avatarUrl: avatarSource.optional(),
 });

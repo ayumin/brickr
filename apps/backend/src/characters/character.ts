@@ -31,6 +31,20 @@ export type Character = {
   /** 0..1 — how often other characters get drawn into responding. */
   influence: number;
 
+  /**
+   * Selects the BehaviorProfile that governs autonomous Cast participation
+   * (response timing, cooldown, concurrency).  Null / absent means the
+   * `casual` default profile is used.  See `behavior-profiles.ts`.
+   */
+  behaviorProfileKey?: string | null;
+
+  /**
+   * Whether this character may join rooms autonomously as a Cast member.
+   * Defaults to true.  The Cast creator can disable it to keep the character
+   * purely reactive (only responds when explicitly invited or mentioned).
+   */
+  castAutonomous?: boolean;
+
   modelProfileId: string;
   avatarUrl?: string;
   /** Present when the character is logically deleted. */

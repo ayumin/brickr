@@ -27,6 +27,17 @@ export type CharacterConfigDto = CharacterDto & {
   replyProbability: number;
   quoteProbability: number;
   influence: number;
+  /**
+   * Key of the BehaviorProfile archetype that governs autonomous Cast
+   * participation (timing, cooldown, concurrency).  Absent means the `casual`
+   * default is used.
+   */
+  behaviorProfileKey?: string | null;
+  /**
+   * Whether this character may join rooms autonomously as a Cast member.
+   * Defaults to true.
+   */
+  castAutonomous: boolean;
   modelProfileId: string;
   /** Only present for the creator or an admin (CLAUDE.md §66.5); omitted, not null, otherwise. */
   createdByUserId?: string;
@@ -81,6 +92,10 @@ export type SaveCharacterRequest = {
   replyProbability: number;
   quoteProbability: number;
   influence: number;
+  /** Key of the BehaviorProfile archetype.  Absent / null means `casual`. */
+  behaviorProfileKey?: string | null;
+  /** Whether this character may join rooms autonomously.  Defaults to true. */
+  castAutonomous?: boolean;
   modelProfileId: string;
   avatarUrl?: string;
 };

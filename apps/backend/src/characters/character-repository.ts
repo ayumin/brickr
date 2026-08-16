@@ -24,6 +24,8 @@ type CharacterRow = {
   replyProbability: number;
   quoteProbability: number;
   influence: number;
+  behaviorProfileKey: string | null;
+  castAutonomous: boolean;
   modelProfileId: string;
   avatarUrl: string | null;
   deletedAt: Date | null;
@@ -45,6 +47,8 @@ function toCharacter(row: CharacterRow): Character {
     replyProbability: row.replyProbability,
     quoteProbability: row.quoteProbability,
     influence: row.influence,
+    ...optionalField("behaviorProfileKey", row.behaviorProfileKey),
+    castAutonomous: row.castAutonomous,
     modelProfileId: row.modelProfileId,
     ...optionalField("avatarUrl", row.avatarUrl),
     ...optionalField("deletedAt", row.deletedAt),
@@ -317,6 +321,8 @@ function toWriteData(input: SaveCharacter) {
     replyProbability: input.replyProbability,
     quoteProbability: input.quoteProbability,
     influence: input.influence,
+    behaviorProfileKey: input.behaviorProfileKey ?? null,
+    castAutonomous: input.castAutonomous ?? true,
     modelProfileId: input.modelProfileId,
     avatarUrl: input.avatarUrl ?? null,
   };

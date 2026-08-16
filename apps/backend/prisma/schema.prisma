@@ -93,6 +93,14 @@ model Character {
   quoteProbability    Float @default(0.2) @map("quote_probability")
   influence           Float @default(0.5)
 
+  /// Selects the BehaviorProfile archetype for autonomous Cast participation.
+  /// Null means the `casual` default profile is used (see behavior-profiles.ts).
+  behaviorProfileKey String? @map("behavior_profile_key")
+
+  /// Whether this character may join rooms autonomously as a Cast member.
+  /// Defaults to true; set to false to keep the character purely reactive.
+  castAutonomous Boolean @default(true) @map("cast_autonomous")
+
   modelProfileId String  @map("model_profile_id")
   avatarUrl      String? @map("avatar_url") @db.Text
 

@@ -69,6 +69,8 @@ export const CHARACTER_SEEDS: CharacterSeed[] = [
     replyProbability: 0.7,
     quoteProbability: 0.25,
     influence: 0.85,
+    behaviorProfileKey: "thoughtful",
+    castAutonomous: true,
     // TEMPORARY: was "openai-default". Reassigned because the OpenAI account has no credits.
     modelProfileId: "anthropic-default",
   },
@@ -96,6 +98,8 @@ export const CHARACTER_SEEDS: CharacterSeed[] = [
     replyProbability: 0.5,
     quoteProbability: 0.45,
     influence: 0.7,
+    behaviorProfileKey: "thoughtful",
+    castAutonomous: true,
     modelProfileId: "anthropic-default",
   },
   {
@@ -122,6 +126,8 @@ export const CHARACTER_SEEDS: CharacterSeed[] = [
     replyProbability: 0.6,
     quoteProbability: 0.35,
     influence: 0.5,
+    behaviorProfileKey: "casual",
+    castAutonomous: true,
     modelProfileId: "gemini-default",
   },
   {
@@ -154,6 +160,8 @@ export const CHARACTER_SEEDS: CharacterSeed[] = [
     replyProbability: 0.8,
     quoteProbability: 0.1,
     influence: 0.55,
+    behaviorProfileKey: "casual",
+    castAutonomous: true,
     // TEMPORARY: was "openai-default". Reassigned because the OpenAI account has no credits.
     modelProfileId: "anthropic-default",
   },
@@ -181,6 +189,8 @@ export const CHARACTER_SEEDS: CharacterSeed[] = [
     replyProbability: 0.45,
     quoteProbability: 0.4,
     influence: 0.9,
+    behaviorProfileKey: "eager",
+    castAutonomous: true,
     modelProfileId: "anthropic-default",
   },
   {
@@ -207,6 +217,8 @@ export const CHARACTER_SEEDS: CharacterSeed[] = [
     replyProbability: 0.8,
     quoteProbability: 0.1,
     influence: 0.6,
+    behaviorProfileKey: "morning_person",
+    castAutonomous: true,
     modelProfileId: "gemini-default",
   },
   {
@@ -233,6 +245,8 @@ export const CHARACTER_SEEDS: CharacterSeed[] = [
     replyProbability: 0.65,
     quoteProbability: 0.3,
     influence: 0.65,
+    behaviorProfileKey: "lurker",
+    castAutonomous: true,
     // TEMPORARY: was "openai-default". Reassigned because the OpenAI account has no credits.
     modelProfileId: "gemini-default",
   },
@@ -260,6 +274,8 @@ export const CHARACTER_SEEDS: CharacterSeed[] = [
     replyProbability: 0.85,
     quoteProbability: 0.05,
     influence: 0.2,
+    behaviorProfileKey: "casual",
+    castAutonomous: true,
     modelProfileId: "anthropic-default",
   },
   {
@@ -286,6 +302,8 @@ export const CHARACTER_SEEDS: CharacterSeed[] = [
     replyProbability: 0.75,
     quoteProbability: 0.2,
     influence: 0.4,
+    behaviorProfileKey: "eager",
+    castAutonomous: true,
     modelProfileId: "gemini-default",
   },
   {
@@ -312,6 +330,8 @@ export const CHARACTER_SEEDS: CharacterSeed[] = [
     replyProbability: 0.7,
     quoteProbability: 0.2,
     influence: 0.15,
+    behaviorProfileKey: "lurker",
+    castAutonomous: true,
     // TEMPORARY: was "openai-default". Reassigned because the OpenAI account has no credits.
     modelProfileId: "gemini-default",
   },
@@ -339,6 +359,8 @@ export const CHARACTER_SEEDS: CharacterSeed[] = [
     replyProbability: 0.5,
     quoteProbability: 0.5,
     influence: 0.6,
+    behaviorProfileKey: "night_owl",
+    castAutonomous: true,
     modelProfileId: "anthropic-default",
   },
   {
@@ -365,6 +387,8 @@ export const CHARACTER_SEEDS: CharacterSeed[] = [
     replyProbability: 0.6,
     quoteProbability: 0.3,
     influence: 0.35,
+    behaviorProfileKey: "lurker",
+    castAutonomous: true,
     modelProfileId: "gemini-default",
   },
   {
@@ -391,6 +415,8 @@ export const CHARACTER_SEEDS: CharacterSeed[] = [
     replyProbability: 0.5,
     quoteProbability: 0.5,
     influence: 0.9,
+    behaviorProfileKey: "eager",
+    castAutonomous: true,
     // TEMPORARY: was "openai-default". Reassigned because the OpenAI account has no credits.
     modelProfileId: "gemini-default",
   },
@@ -418,6 +444,8 @@ export const CHARACTER_SEEDS: CharacterSeed[] = [
     replyProbability: 0.6,
     quoteProbability: 0.35,
     influence: 0.45,
+    behaviorProfileKey: "thoughtful",
+    castAutonomous: true,
     modelProfileId: "anthropic-default",
   },
 ];
