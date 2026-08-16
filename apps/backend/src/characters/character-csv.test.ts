@@ -30,6 +30,8 @@ describe("character CSV", () => {
     );
     expect(csv).toContain("投稿数");
     expect(csv).toContain("停止");
+    expect(csv).toContain("行動プロファイル");
+    expect(csv).toContain("自律参加");
     const [row] = parseCharactersCsv(csv);
     expect(row).toMatchObject({
       id: CHARACTER.id,
@@ -38,6 +40,8 @@ describe("character CSV", () => {
       interests: CHARACTER.interests,
       postCount: "42",
       isDeleted: false,
+      behaviorProfileKey: null,
+      castAutonomous: true,
     });
   });
 

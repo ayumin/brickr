@@ -174,6 +174,20 @@ describe("handle validation (CLAUDE.md §66.2, §66.13)", () => {
   });
 });
 
+describe("character behavior profile validation", () => {
+  it("accepts a known profile key", () => {
+    expect(
+      saveCharacterSchema.safeParse({ ...VALID_CHARACTER, behaviorProfileKey: "eager" }).success,
+    ).toBe(true);
+  });
+
+  it("rejects an unknown profile key instead of silently using casual", () => {
+    expect(
+      saveCharacterSchema.safeParse({ ...VALID_CHARACTER, behaviorProfileKey: "eagre" }).success,
+    ).toBe(false);
+  });
+});
+
 describe("bulkDeleteCharactersSchema", () => {
   it("accepts one or more character ids", () => {
     expect(

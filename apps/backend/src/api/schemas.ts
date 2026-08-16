@@ -11,6 +11,7 @@ import {
   isReservedHandle,
 } from "@brickr/shared";
 import { z } from "zod";
+import { BEHAVIOR_PROFILE_KEYS } from "../simulation/behavior-profiles.js";
 
 /**
  * Request validation at the HTTP boundary (CLAUDE.md §55).
@@ -120,7 +121,7 @@ export const saveCharacterSchema = z.object({
    * Key of the BehaviorProfile archetype for autonomous Cast participation.
    * Absent or null means the `casual` default is used.
    */
-  behaviorProfileKey: z.string().trim().max(64).nullable().optional(),
+  behaviorProfileKey: z.enum(BEHAVIOR_PROFILE_KEYS).nullable().optional(),
   /** Whether this character may join rooms autonomously.  Defaults to true. */
   castAutonomous: z.boolean().optional(),
   modelProfileId: id,

@@ -21,13 +21,16 @@ import type { Rng } from "./responder-selector.js";
  * The six initial archetypes.  The union is the authoritative list of valid
  * `behaviorProfileKey` values on a Character.
  */
-export type BehaviorProfileKey =
-  | "eager"
-  | "casual"
-  | "thoughtful"
-  | "lurker"
-  | "night_owl"
-  | "morning_person";
+export const BEHAVIOR_PROFILE_KEYS = [
+  "eager",
+  "casual",
+  "thoughtful",
+  "lurker",
+  "night_owl",
+  "morning_person",
+] as const;
+
+export type BehaviorProfileKey = (typeof BEHAVIOR_PROFILE_KEYS)[number];
 
 /**
  * Parameters that control autonomous Cast behaviour.
