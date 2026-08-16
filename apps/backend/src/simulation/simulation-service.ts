@@ -596,7 +596,7 @@ export class SimulationService {
   private async recordUsage(
     billingUserId: string,
     usage: NonNullable<GeneratedPost["usage"]>,
-    context: { simulationId: string; characterId: string; providerId: string },
+    context: { simulationId: string; characterId: string; providerId: ProviderId },
   ): Promise<void> {
     try {
       await this.deps.tokenUsage.record(billingUserId, usage);
@@ -613,7 +613,7 @@ export class SimulationService {
     if (this.deps.llmBudget) {
       try {
         await this.deps.llmBudget.recordUsage(
-          context.providerId as ProviderId,
+          context.providerId,
           usage.totalTokens,
           context.simulationId,
         );

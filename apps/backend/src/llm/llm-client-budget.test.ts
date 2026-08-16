@@ -6,6 +6,7 @@ import { LLMClient, LLMBudgetExceededError } from "./llm-client.js";
 import { LLMProviderRegistry } from "./provider-registry.js";
 import type { LLMBudgetChecker } from "./llm-client.js";
 import type { LLMGenerateRequest, LLMGenerateResult } from "./provider.js";
+import { LLMError } from "./provider.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -86,6 +87,33 @@ describe("LLMClient budget circuit-breaker", () => {
     await expect(client.generate("openai", baseRequest)).rejects.toBeInstanceOf(
       LLMBudgetExceededError,
     );
+  });
+
+  it("normalizes a budget checker failure as an LLMError", async () => {
+    const { registry } = makeRegistry("openai");
+    const cause = new Error("budget database unavailable");
+    const budgetChecker: LLMBudgetChecker = {
+      isAllowed: vi.fn(() => Promise.reject(cause)),
+      recordUsage: vi.fn(() => Promise.resolve()),
+    };
+    const client = new LLMClient(
+      registry,
+      { timeoutMs: 5_000, maxRetries: 0 },
+      undefined,
+      undefined,
+      undefined,
+      budgetChecker,
+    );
+
+    const error = await client.generate("openai", baseRequest).catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(LLMError);
+    expect(error).toMatchObject({
+      providerId: "openai",
+      retryable: true,
+      message: "openai request failed: budget database unavailable",
+      cause,
+    });
   });
 
   it("does not check the budget for the mock provider", async () => {

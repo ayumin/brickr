@@ -1,6 +1,6 @@
 import type { Character } from "../characters/character.js";
 import type { LLMClient } from "../llm/llm-client.js";
-import { LLMError } from "../llm/provider.js";
+import { LLMError, type ProviderId } from "../llm/provider.js";
 import type { ModelProfileRepository } from "../model-profiles/model-profile-repository.js";
 import type { Post } from "../posts/post.js";
 import type { ResponseAction } from "../simulation/simulation.js";
@@ -47,7 +47,7 @@ export type GenerateRequest = {
 export type GeneratedPost = {
   content: string;
   action: ResponseAction;
-  providerId: string;
+  providerId: ProviderId;
   model: string;
   /** Absent when the provider does not report usage (CLAUDE.md §66.4). */
   usage?: {

@@ -69,7 +69,12 @@ export class LLMClient {
     // Budget circuit-breaker check (issue #162). The mock provider is exempt
     // so tests and development environments are never blocked by budget state.
     if (this.budgetChecker && provider.id !== MOCK_PROVIDER_ID) {
-      const allowed = await this.budgetChecker.isAllowed(provider.id);
+      let allowed: boolean;
+      try {
+        allowed = await this.budgetChecker.isAllowed(provider.id);
+      } catch (error) {
+        throw normalizeError(error, provider.id);
+      }
       if (!allowed) {
         throw new LLMBudgetExceededError(provider.id);
       }

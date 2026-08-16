@@ -17,8 +17,10 @@ import {
   idParams,
   importCharactersCsvSchema,
   loginSchema,
+  llmBudgetProviderParams,
   saveCharacterSchema,
   saveUserProfileSchema,
+  setBudgetLimitSchema,
   signupSchema,
   updateApplicationSettingsSchema,
   updateSimulationSchema,
@@ -483,20 +485,10 @@ export const openApiDocument: OpenAPIV3.Document = {
             in: "path",
             required: true,
             description: "Provider identifier",
-            schema: { type: "string", enum: ["openai", "anthropic", "gemini", "mock"] },
+            schema: propertySchema(llmBudgetProviderParams, "provider"),
           },
         ],
-        requestBody: jsonBody({
-          type: "object",
-          required: ["tokenLimit"],
-          properties: {
-            tokenLimit: {
-              type: "integer",
-              minimum: 0,
-              description: "Token ceiling. 0 removes the limit.",
-            },
-          },
-        }),
+        requestBody: jsonBody(requestSchema(setBudgetLimitSchema)),
         responses: {
           "200": jsonResponse("Updated provider budget", ref("ProviderBudgetResponse")),
           "400": errorResponses["400"],
@@ -520,7 +512,7 @@ export const openApiDocument: OpenAPIV3.Document = {
             in: "path",
             required: true,
             description: "Provider identifier",
-            schema: { type: "string", enum: ["openai", "anthropic", "gemini", "mock"] },
+            schema: propertySchema(llmBudgetProviderParams, "provider"),
           },
         ],
         responses: {

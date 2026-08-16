@@ -1,18 +1,8 @@
 import type { FastifyInstance } from "fastify";
-import { z } from "zod";
 import { requireAdmin } from "../auth/auth-context.js";
-import { PROVIDER_IDS } from "../llm/provider.js";
 import type { AppServices } from "../services.js";
 import { parseOr400, withDomainErrors } from "./route-helpers.js";
-
-const providerParams = z.object({
-  provider: z.enum(PROVIDER_IDS),
-});
-
-const setBudgetLimitSchema = z.object({
-  /** Token ceiling. 0 removes the limit without resetting usage. */
-  tokenLimit: z.number().int().min(0),
-});
+import { llmBudgetProviderParams, setBudgetLimitSchema } from "./schemas.js";
 
 /**
  * Admin-only LLM budget and circuit-breaker endpoints (issue #162).
@@ -36,7 +26,7 @@ export function registerLLMBudgetRoutes(
     if (!requireAdmin(request, reply)) return reply;
 
     const params = parseOr400(
-      providerParams,
+      llmBudgetProviderParams,
       request.params,
       reply,
       "invalid_params",
@@ -70,7 +60,7 @@ export function registerLLMBudgetRoutes(
     if (!requireAdmin(request, reply)) return reply;
 
     const params = parseOr400(
-      providerParams,
+      llmBudgetProviderParams,
       request.params,
       reply,
       "invalid_params",

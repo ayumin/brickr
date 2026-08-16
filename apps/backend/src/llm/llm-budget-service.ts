@@ -62,10 +62,7 @@ export class LLMBudgetService {
     tokens: number,
     roomId: string | null,
   ): Promise<void> {
-    // Write the per-room log entry first (cascade-deletable with the room).
-    await this.repository.recordUsage(provider, tokens, roomId);
-    // Then atomically increment the global aggregate and check the limit.
-    await this.repository.incrementAndCheckLimit(provider, tokens);
+    await this.repository.recordUsageAndIncrement(provider, tokens, roomId);
   }
 
   /**

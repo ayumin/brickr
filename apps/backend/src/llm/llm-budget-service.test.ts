@@ -29,22 +29,6 @@ function makeFakeRepository() {
       return Promise.resolve();
     },
 
-    incrementAndCheckLimit: (provider: string, tokens: number) => {
-      const existing = budgets.get(provider) ?? {
-        provider,
-        tokenLimit: 0,
-        totalTokens: 0,
-        stopped: false,
-      };
-      const newTotal = existing.totalTokens + tokens;
-      const stopped =
-        existing.stopped ||
-        (existing.tokenLimit > 0 && newTotal >= existing.tokenLimit);
-      const updated: BudgetRow = { ...existing, totalTokens: newTotal, stopped };
-      budgets.set(provider, updated);
-      return Promise.resolve(updated);
-    },
-
     reset: (provider: string) => {
       const existing = budgets.get(provider) ?? {
         provider,
@@ -57,9 +41,24 @@ function makeFakeRepository() {
       return Promise.resolve(updated);
     },
 
-    recordUsage: (provider: string, totalTokens: number, roomId: string | null) => {
+    recordUsageAndIncrement: (provider: string, totalTokens: number, roomId: string | null) => {
       usageLog.push({ provider, totalTokens, roomId });
-      return Promise.resolve();
+      const existing = budgets.get(provider) ?? {
+        provider,
+        tokenLimit: 0,
+        totalTokens: 0,
+        stopped: false,
+      };
+      const newTotal = existing.totalTokens + totalTokens;
+      const updated: BudgetRow = {
+        ...existing,
+        totalTokens: newTotal,
+        stopped:
+          existing.stopped ||
+          (existing.tokenLimit > 0 && newTotal >= existing.tokenLimit),
+      };
+      budgets.set(provider, updated);
+      return Promise.resolve(updated);
     },
 
     sumByRoom: (provider: string, roomId: string) => {

@@ -1,4 +1,4 @@
-import type { Db } from "../persistence/prisma.js";
+import type { Db, DbTransaction } from "../persistence/prisma.js";
 import type { ProviderId } from "./provider.js";
 
 export type BudgetRow = {
@@ -40,26 +40,21 @@ export class LLMBudgetRepository {
     });
   }
 
-  /**
-   * Atomically increments the global token aggregate and marks the provider
-   * as stopped when the new total exceeds the configured limit.
-   *
-   * Uses a raw SQL UPDATE so the check-and-set is a single round-trip with no
-   * read-then-write race. Returns the updated row.
-   */
-  async incrementAndCheckLimit(
+  /** Atomically increments and trips the breaker within the caller's transaction. */
+  private async incrementAndCheckLimitWithClient(
+    client: DbTransaction,
     provider: string,
     tokens: number,
   ): Promise<BudgetRow> {
     // Upsert ensures the row exists before the increment.
-    await this.db.lLMBudget.upsert({
+    await client.lLMBudget.upsert({
       where: { provider },
       create: { provider, totalTokens: 0 },
       update: {},
     });
 
     // Atomic increment + conditional stop in one statement.
-    await this.db.$executeRaw`
+    await client.$executeRaw`
       UPDATE llm_budgets
       SET
         total_tokens = total_tokens + ${tokens},
@@ -71,7 +66,7 @@ export class LLMBudgetRepository {
       WHERE provider = ${provider}
     `;
 
-    const row = await this.db.lLMBudget.findUniqueOrThrow({ where: { provider } });
+    const row = await client.lLMBudget.findUniqueOrThrow({ where: { provider } });
     return row;
   }
 
@@ -88,16 +83,19 @@ export class LLMBudgetRepository {
   }
 
   /**
-   * Records one generation's token usage for a specific room.
-   * This is the per-room log; the global aggregate lives in `llm_budgets`.
+   * Records the per-room log and global aggregate in one transaction so a
+   * partial failure can never leave the circuit breaker under-counting usage.
    */
-  async recordUsage(
+  async recordUsageAndIncrement(
     provider: string,
     totalTokens: number,
     roomId: string | null,
-  ): Promise<void> {
-    await this.db.lLMUsage.create({
-      data: { provider, totalTokens, roomId },
+  ): Promise<BudgetRow> {
+    return this.db.$transaction(async (tx) => {
+      await tx.lLMUsage.create({
+        data: { provider, totalTokens, roomId },
+      });
+      return this.incrementAndCheckLimitWithClient(tx, provider, totalTokens);
     });
   }
 
