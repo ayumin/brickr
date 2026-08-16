@@ -22,6 +22,7 @@ const ROOM: FeedRoom = {
   title: "設計の部屋",
   status: "active",
   scope: "room",
+  visibility: "public",
   createdByUserId: "owner-1",
 };
 
@@ -30,9 +31,28 @@ const FEED_ROOM: FeedRoom = {
   title: GLOBAL_SIMULATION_TITLE,
   status: "active",
   scope: "global",
+  visibility: "public",
 };
 
 const STOPPED_ROOM: FeedRoom = { ...ROOM, id: "room-2", title: "止まった部屋", status: "archived" };
+
+const CLOSED_ROOM: FeedRoom = {
+  id: "room-3",
+  title: "クローズドルーム",
+  status: "active",
+  scope: "room",
+  visibility: "closed",
+  createdByUserId: "owner-1",
+};
+
+const PRIVATE_ROOM: FeedRoom = {
+  id: "room-4",
+  title: "プライベートルーム",
+  status: "active",
+  scope: "room",
+  visibility: "private",
+  createdByUserId: "owner-1",
+};
 
 const READER = { id: "reader-1", isAdmin: false, handle: "hanako" };
 
@@ -60,15 +80,36 @@ function reply(overrides: Partial<Post> & { id: string; replyTo: string; threadR
   return post(overrides);
 }
 
-function makeHarness(input: { posts: Post[]; rooms?: FeedRoom[] }) {
+function makeHarness(input: { posts: Post[]; rooms?: FeedRoom[]; memberRoomIds?: string[] }) {
   const rooms = new Map((input.rooms ?? [ROOM]).map((room) => [room.id, room]));
   const roots = input.posts.filter((entry) => entry.replyTo === null);
   const replies = input.posts.filter((entry) => entry.replyTo !== null);
 
+  // Default: all rooms are visible (public/open). Tests that need closed/private
+  // filtering pass `memberRoomIds` to restrict which rooms the reader can see.
+  const allRoomIds = [...rooms.keys()];
+
   const feed = {
+    findVisibleRoomIds: vi.fn((userId: string | null) => {
+      if (input.memberRoomIds !== undefined) {
+        // Simulate visibility: public/open rooms + rooms the reader is a member of.
+        const visibleIds = allRoomIds.filter((id) => {
+          const room = rooms.get(id);
+          if (!room) return false;
+          if (room.visibility === "public" || room.visibility === "open") return true;
+          if (room.scope === "global") return true;
+          // closed/private: only if the reader is in memberRoomIds.
+          return userId !== null && input.memberRoomIds!.includes(id);
+        });
+        return Promise.resolve(visibleIds);
+      }
+      // Default: all rooms visible.
+      return Promise.resolve(allRoomIds);
+    }),
     findThreadPage: vi.fn(
       (query: {
         simulationId?: string;
+        visibleRoomIds?: string[];
         mine?: { userId: string; handle: string };
         cursor?: { activityAt: Date; id: string };
         limit: number;
@@ -78,6 +119,10 @@ function makeHarness(input: { posts: Post[]; rooms?: FeedRoom[] }) {
         let page = roots.filter(
           (root) => !query.simulationId || root.roomId === query.simulationId,
         );
+        // Apply visibility filter when provided.
+        if (query.visibleRoomIds !== undefined) {
+          page = page.filter((root) => query.visibleRoomIds!.includes(root.roomId));
+        }
         if (mine) page = page.filter((root) => concernsUser(root, mine, input.posts));
         page = [...page].sort(newestFirst);
         if (cursor) page = page.filter((root) => isAfterCursor(root, cursor));
@@ -175,7 +220,7 @@ function toSimulation(room: FeedRoom): Simulation {
     title: room.title,
     status: room.status,
     scope: room.scope,
-    visibility: "public",
+    visibility: room.visibility,
     tags: [],
     createdAt: at(0),
     lastActivityAt: at(0),
@@ -634,6 +679,120 @@ describe("FeedService room feed (§10.2, §10.4)", () => {
     await expect(
       service.getRoomFeed("missing", { reader: READER, filter: "all" }),
     ).rejects.toThrow(SimulationNotFoundError);
+  });
+
+  it("refuses a closed room for a non-member", async () => {
+    const { service } = makeHarness({
+      posts: [post({ id: "root-1", roomId: CLOSED_ROOM.id })],
+      rooms: [CLOSED_ROOM],
+      // Reader is not a member of the closed room.
+      memberRoomIds: [],
+    });
+
+    await expect(
+      service.getRoomFeed(CLOSED_ROOM.id, { reader: READER, filter: "all" }),
+    ).rejects.toThrow(SimulationNotFoundError);
+  });
+
+  it("opens a closed room for an active member", async () => {
+    const { service } = makeHarness({
+      posts: [post({ id: "root-1", roomId: CLOSED_ROOM.id })],
+      rooms: [CLOSED_ROOM],
+      // Reader is an active member of the closed room.
+      memberRoomIds: [CLOSED_ROOM.id],
+    });
+
+    const page = await service.getRoomFeed(CLOSED_ROOM.id, { reader: READER, filter: "all" });
+
+    expect(page.threads).toHaveLength(1);
+  });
+
+  it("refuses a private room for a non-member", async () => {
+    const { service } = makeHarness({
+      posts: [post({ id: "root-1", roomId: PRIVATE_ROOM.id })],
+      rooms: [PRIVATE_ROOM],
+      memberRoomIds: [],
+    });
+
+    await expect(
+      service.getRoomFeed(PRIVATE_ROOM.id, { reader: READER, filter: "all" }),
+    ).rejects.toThrow(SimulationNotFoundError);
+  });
+});
+
+describe("FeedService global feed visibility filtering (§10.1)", () => {
+  const publicPost = post({ id: "root-public", roomId: ROOM.id, createdAt: at(1) });
+  const closedPost = post({ id: "root-closed", roomId: CLOSED_ROOM.id, createdAt: at(2) });
+  const privatePost = post({ id: "root-private", roomId: PRIVATE_ROOM.id, createdAt: at(3) });
+
+  it("excludes closed and private room posts from the global feed for non-members", async () => {
+    const { service } = makeHarness({
+      posts: [publicPost, closedPost, privatePost],
+      rooms: [ROOM, CLOSED_ROOM, PRIVATE_ROOM],
+      // Reader is not a member of closed or private rooms.
+      memberRoomIds: [],
+    });
+
+    const page = await service.getUnifiedFeed({ reader: READER, filter: "all" });
+
+    expect(page.threads.map((thread) => thread.root.id)).toEqual(["root-public"]);
+  });
+
+  it("includes closed room posts for active members", async () => {
+    const { service } = makeHarness({
+      posts: [publicPost, closedPost],
+      rooms: [ROOM, CLOSED_ROOM],
+      // Reader is a member of the closed room.
+      memberRoomIds: [CLOSED_ROOM.id],
+    });
+
+    const page = await service.getUnifiedFeed({ reader: READER, filter: "all" });
+
+    expect(page.threads.map((thread) => thread.root.id).sort()).toEqual([
+      "root-closed",
+      "root-public",
+    ]);
+  });
+
+  it("includes private room posts for active members", async () => {
+    const { service } = makeHarness({
+      posts: [publicPost, privatePost],
+      rooms: [ROOM, PRIVATE_ROOM],
+      memberRoomIds: [PRIVATE_ROOM.id],
+    });
+
+    const page = await service.getUnifiedFeed({ reader: READER, filter: "all" });
+
+    expect(page.threads.map((thread) => thread.root.id).sort()).toEqual([
+      "root-private",
+      "root-public",
+    ]);
+  });
+
+  it("excludes closed and private room posts for anonymous readers", async () => {
+    const { service } = makeHarness({
+      posts: [publicPost, closedPost, privatePost],
+      rooms: [ROOM, CLOSED_ROOM, PRIVATE_ROOM],
+      memberRoomIds: [],
+    });
+
+    const page = await service.getUnifiedFeed({ reader: null, filter: "all" });
+
+    expect(page.threads.map((thread) => thread.root.id)).toEqual(["root-public"]);
+  });
+
+  it("passes the visible room ids to the repository query", async () => {
+    const { service, spies } = makeHarness({
+      posts: [publicPost],
+      rooms: [ROOM],
+      memberRoomIds: [],
+    });
+
+    await service.getUnifiedFeed({ reader: READER, filter: "all" });
+
+    expect(spies.findThreadPage).toHaveBeenCalledWith(
+      expect.objectContaining({ visibleRoomIds: expect.any(Array) }),
+    );
   });
 });
 

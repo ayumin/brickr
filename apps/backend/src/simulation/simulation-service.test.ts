@@ -256,6 +256,7 @@ function makeHarness(options: HarnessOptions): Harness {
           title: simulation.title,
           status: simulation.status,
           scope: simulation.scope,
+          visibility: simulation.visibility,
         },
         thread: {
           root: toDto(posts.find((entry) => entry.id === post.threadRootId) ?? post),

@@ -12,6 +12,7 @@ const ROOM: FeedRoom = {
   title: "設計の部屋",
   status: "active",
   scope: "room",
+  visibility: "public",
   createdByUserId: "owner-1",
 };
 

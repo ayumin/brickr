@@ -16,6 +16,7 @@ const ROOM_ROW = {
   title: "設計の部屋",
   status: "active",
   scope: "room",
+  visibility: "public",
   createdByUserId: "owner-1",
 };
 
@@ -42,7 +43,11 @@ function postRow(overrides: Record<string, unknown> = {}) {
  * it was asked for, so adding a query cannot silently rewire an existing
  * assertion.
  */
-function makeDb(options: { roots?: Record<string, unknown>[]; threadIds?: string[] } = {}) {
+function makeDb(options: {
+  roots?: Record<string, unknown>[];
+  threadIds?: string[];
+  visibleRooms?: Array<{ id: string }>;
+} = {}) {
   const calls: FindManyArgs[] = [];
 
   const db = {
@@ -61,6 +66,11 @@ function makeDb(options: { roots?: Record<string, unknown>[]; threadIds?: string
       }),
       groupBy: vi.fn(() =>
         Promise.resolve([{ threadRootId: "root-1", _count: { _all: 3 } }]),
+      ),
+    },
+    room: {
+      findMany: vi.fn(() =>
+        Promise.resolve(options.visibleRooms ?? [{ id: "room-1" }]),
       ),
     },
     // Typed with the parts of a Prisma statement the assertions below read.
@@ -96,6 +106,7 @@ describe("FeedRepository.findThreadPage (§10.1)", () => {
           title: true,
           status: true,
           scope: true,
+          visibility: true,
           createdByUserId: true,
         },
       },
@@ -105,6 +116,7 @@ describe("FeedRepository.findThreadPage (§10.1)", () => {
       title: "設計の部屋",
       status: "active",
       scope: "room",
+      visibility: "public",
       createdByUserId: "owner-1",
     });
   });
@@ -153,6 +165,84 @@ describe("FeedRepository.findThreadPage (§10.1)", () => {
         },
       ],
     });
+  });
+
+  /**
+   * The global feed restricts to rooms the reader can see (§10.1). The list is
+   * computed by `findVisibleRoomIds` and pushed into the WHERE clause so the
+   * database does the filtering.
+   */
+  it("restricts to visible rooms when visibleRoomIds is provided", async () => {
+    const { db, calls } = makeDb();
+
+    await new FeedRepository(db).findThreadPage({
+      limit: 21,
+      visibleRoomIds: ["room-1", "room-2"],
+    });
+
+    expect(calls[0]?.where).toMatchObject({
+      AND: [{ roomId: { in: ["room-1", "room-2"] } }],
+    });
+  });
+});
+
+describe("FeedRepository.findVisibleRoomIds (§10.1)", () => {
+  it("queries public and open rooms plus the global row for any reader", async () => {
+    const { db, spies } = makeDb({ visibleRooms: [{ id: "room-1" }, { id: "room-global" }] });
+
+    const ids = await new FeedRepository(db).findVisibleRoomIds(null);
+
+    expect(spies.room.findMany).toHaveBeenCalledTimes(1);
+    const call = spies.room.findMany.mock.calls[0] as unknown as [{ where: Record<string, unknown> }];
+    // public/open rooms and the global row are always included.
+    expect(call[0].where).toMatchObject({
+      OR: expect.arrayContaining([
+        { visibility: { in: ["public", "open"] } },
+        { scope: "global" },
+      ]),
+    });
+    expect(ids).toEqual(["room-1", "room-global"]);
+  });
+
+  it("includes closed and private rooms the signed-in reader is an active member of", async () => {
+    const { db, spies } = makeDb({ visibleRooms: [{ id: "room-1" }, { id: "room-closed" }] });
+
+    await new FeedRepository(db).findVisibleRoomIds("user-1");
+
+    const call = spies.room.findMany.mock.calls[0] as unknown as [{ where: Record<string, unknown> }];
+    // closed/private rooms with an active membership are included.
+    expect(call[0].where).toMatchObject({
+      OR: expect.arrayContaining([
+        {
+          visibility: { in: ["closed", "private"] },
+          memberships: {
+            some: {
+              memberId: "user-1",
+              memberKind: "user",
+              status: "active",
+            },
+          },
+        },
+      ]),
+    });
+  });
+
+  it("does not include closed/private membership arm for anonymous readers", async () => {
+    const { db, spies } = makeDb({ visibleRooms: [{ id: "room-1" }] });
+
+    await new FeedRepository(db).findVisibleRoomIds(null);
+
+    const call = spies.room.findMany.mock.calls[0] as unknown as [{ where: { OR: unknown[] } }];
+    // Only two arms: public/open and global. No membership arm for anonymous.
+    expect(call[0].where.OR).toHaveLength(2);
+  });
+
+  it("returns the room ids from the query result", async () => {
+    const { db } = makeDb({ visibleRooms: [{ id: "room-a" }, { id: "room-b" }] });
+
+    const ids = await new FeedRepository(db).findVisibleRoomIds("user-1");
+
+    expect(ids).toEqual(["room-a", "room-b"]);
   });
 });
 

@@ -1,9 +1,9 @@
-import type { SimulationScope, SimulationStatus } from "@brickr/shared";
+import type { RoomVisibility, SimulationScope, SimulationStatus } from "@brickr/shared";
 import { Prisma, type Db } from "../persistence/prisma.js";
 import { optionalField } from "../persistence/repository-mapping.js";
 import { toPost, type PostRow } from "../posts/post-repository.js";
 import type { Post } from "../posts/post.js";
-import { toSimulationScope, toSimulationStatus } from "../simulation/simulation-repository.js";
+import { toSimulationScope, toSimulationStatus, toSimulationVisibility } from "../simulation/simulation-repository.js";
 import type { FeedCursor } from "./feed-cursor.js";
 
 /**
@@ -17,6 +17,7 @@ export type FeedRoom = {
   title: string | null;
   status: SimulationStatus;
   scope: SimulationScope;
+  visibility: RoomVisibility;
   createdByUserId?: string;
 };
 
@@ -41,6 +42,14 @@ export type FeedPageQuery = {
    * page" is answered without a second count query.
    */
   limit: number;
+  /**
+   * When set, restricts the global feed to posts from these rooms only.
+   *
+   * Used by the unified feed to filter out closed/private rooms the reader
+   * cannot see (§10.1). Absent for a room-scoped feed, which already narrows
+   * by `simulationId`.
+   */
+  visibleRoomIds?: string[];
 };
 
 const ROOM_SELECT = {
@@ -48,6 +57,7 @@ const ROOM_SELECT = {
   title: true,
   status: true,
   scope: true,
+  visibility: true,
   createdByUserId: true,
 } as const;
 
@@ -76,6 +86,13 @@ export class FeedRepository {
     if (query.mine) {
       conditions.push(await this.concerningUser(query.mine, query.simulationId));
     }
+    // Restrict the global feed to rooms the reader may see (§10.1). When
+    // `visibleRoomIds` is present the caller has already resolved which rooms
+    // are accessible; we push the list into the WHERE clause so the database
+    // does the filtering rather than the application layer.
+    if (query.visibleRoomIds !== undefined) {
+      conditions.push({ roomId: { in: query.visibleRoomIds } });
+    }
 
     const rows = await this.db.post.findMany({
       where: {
@@ -96,6 +113,7 @@ export class FeedRepository {
         title: row.room.title,
         status: toSimulationStatus(row.room.status),
         scope: toSimulationScope(row.room.scope),
+        visibility: toSimulationVisibility(row.room.visibility),
         ...optionalField("createdByUserId", row.room.createdByUserId),
       },
     }));
@@ -201,6 +219,57 @@ export class FeedRepository {
     `);
 
     return new Map(rows.map((row) => [row.threadRootId, toPost(row)]));
+  }
+
+  /**
+   * The IDs of every room whose posts may appear in the global feed for this
+   * reader (§10.1).
+   *
+   * Visibility rules:
+   * - `public` and `open` rooms are visible to everyone, including anonymous
+   *   readers.
+   * - `closed` and `private` rooms are visible only to their active members
+   *   (and to the room owner, who always holds an active owner membership).
+   * - Archived rooms follow the same visibility rules as active ones for the
+   *   global feed: stopping a room means "readable, not writable", so its
+   *   history stays in the feed for everyone who could see it before (§10.1).
+   *
+   * The global simulation row itself is always included — it is the feed, and
+   * its posts are visible to everyone.
+   *
+   * One query regardless of how many rooms exist: the database filters by
+   * visibility and membership in a single pass.
+   */
+  async findVisibleRoomIds(userId: string | null): Promise<string[]> {
+    const rows = await this.db.room.findMany({
+      where: {
+        OR: [
+          // public and open rooms are visible to everyone.
+          { visibility: { in: ["public", "open"] } },
+          // The global simulation row is always visible.
+          { scope: "global" },
+          // closed and private rooms: only active members (including the owner,
+          // who always holds an active owner membership).
+          ...(userId !== null
+            ? [
+                {
+                  visibility: { in: ["closed", "private"] as const },
+                  memberships: {
+                    some: {
+                      memberId: userId,
+                      memberKind: "user" as const,
+                      status: "active" as const,
+                    },
+                  },
+                },
+              ]
+            : []),
+        ],
+      },
+      select: { id: true },
+    });
+
+    return rows.map((row: { id: string }) => row.id);
   }
 
   /**
