@@ -42,6 +42,7 @@ const room: Simulation = {
   status: "active",
   scope: "room",
   visibility: "public",
+  tags: [],
   createdAt: now,
   lastActivityAt: now,
   createdByUserId: "user-1",
@@ -69,9 +70,13 @@ function makeDeps(generate: () => Promise<unknown>) {
   const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
   const deps = {
     simulations: { findById: () => Promise.resolve(room) },
-    characters: { findAll: () => Promise.resolve([character]) },
+    characters: {
+      findAll: () => Promise.resolve([character]),
+      findById: () => Promise.resolve(character),
+    },
     memberships: {
       findActiveCastIds: () => Promise.resolve([]),
+      findPendingCastIds: () => Promise.resolve([]),
       findBannedCastIds: () => Promise.resolve([]),
       countPendingCasts: () => Promise.resolve(0),
       countActiveRoomsForCast: () => Promise.resolve(0),
@@ -118,5 +123,52 @@ describe("processEvent character.respond", () => {
 
     await expect(processEvent(event, deps)).resolves.toBeUndefined();
     expect(publish).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("processEvent Cast join events", () => {
+  it("logs join errors at warn level", async () => {
+    const { deps, logger } = makeDeps(() => Promise.resolve({}));
+    deps.providers.preferred = () => ({ id: "mock", defaultModel: "test" }) as never;
+    deps.llm.generate = vi.fn().mockResolvedValue({
+      text: JSON.stringify({ shouldJoin: true, reason: "good fit" }),
+      providerId: "mock",
+      model: "test",
+    });
+    deps.memberships.create = vi.fn().mockRejectedValue(new Error("database unavailable"));
+
+    await processEvent(
+      { ...event, type: "character.join.request", postId: null, threadRootId: null },
+      deps,
+    );
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: "database unavailable" }),
+      "cast join errored",
+    );
+  });
+
+  it("logs a skipped welcome without claiming a post was published", async () => {
+    const { deps, logger } = makeDeps(() => Promise.resolve({}));
+
+    await processEvent(
+      {
+        ...event,
+        type: "character.join.welcome",
+        postId: null,
+        threadRootId: null,
+        characterId: character.id,
+      },
+      deps,
+    );
+
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: "no LLM provider available" }),
+      "cast welcome post skipped",
+    );
+    expect(logger.info).not.toHaveBeenCalledWith(
+      expect.anything(),
+      "cast welcome post published",
+    );
   });
 });

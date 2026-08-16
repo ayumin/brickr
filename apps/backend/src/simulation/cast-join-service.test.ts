@@ -47,7 +47,7 @@ function makeCharacter(overrides: Partial<Character> = {}): Character {
   };
 }
 
-function makeRoom(overrides: Partial<Simulation & { tags?: string[] }> = {}): Simulation & { tags?: string[] } {
+function makeRoom(overrides: Partial<Simulation> = {}): Simulation {
   return {
     id: "room-1",
     title: "Test Room",
@@ -207,6 +207,7 @@ function makeDeps(overrides: Partial<CastJoinServiceDeps> = {}): CastJoinService
 
   const memberships = {
     findActiveCastIds: vi.fn().mockResolvedValue([]),
+    findPendingCastIds: vi.fn().mockResolvedValue([]),
     findBannedCastIds: vi.fn().mockResolvedValue([]),
     countPendingCasts: vi.fn().mockResolvedValue(0),
     countActiveRoomsForCast: vi.fn().mockResolvedValue(0),
@@ -318,6 +319,7 @@ describe("processCastJoinRequests — ban exclusion", () => {
       characters: { findAll: vi.fn().mockResolvedValue([character]) } as never,
       memberships: {
         findActiveCastIds: vi.fn().mockResolvedValue([]),
+        findPendingCastIds: vi.fn().mockResolvedValue([]),
         findBannedCastIds: vi.fn().mockResolvedValue(["char-banned"]),
         countPendingCasts: vi.fn().mockResolvedValue(0),
         countActiveRoomsForCast: vi.fn().mockResolvedValue(0),
@@ -337,6 +339,7 @@ describe("processCastJoinRequests — ban exclusion", () => {
       characters: { findAll: vi.fn().mockResolvedValue([character]) } as never,
       memberships: {
         findActiveCastIds: vi.fn().mockResolvedValue(["char-active"]),
+        findPendingCastIds: vi.fn().mockResolvedValue([]),
         findBannedCastIds: vi.fn().mockResolvedValue([]),
         countPendingCasts: vi.fn().mockResolvedValue(0),
         countActiveRoomsForCast: vi.fn().mockResolvedValue(0),
@@ -347,6 +350,27 @@ describe("processCastJoinRequests — ban exclusion", () => {
     const results = await processCastJoinRequests("room-1", deps);
     expect(results).toHaveLength(1);
     expect(results[0]?.outcome).toBe("skipped");
+    expect(deps.memberships.create).not.toHaveBeenCalled();
+  });
+
+  it("skips characters that already have a pending membership", async () => {
+    const character = makeCharacter({ id: "char-pending" });
+    const deps = makeDeps({
+      characters: { findAll: vi.fn().mockResolvedValue([character]) } as never,
+      memberships: {
+        findActiveCastIds: vi.fn().mockResolvedValue([]),
+        findPendingCastIds: vi.fn().mockResolvedValue(["char-pending"]),
+        findBannedCastIds: vi.fn().mockResolvedValue([]),
+        countPendingCasts: vi.fn().mockResolvedValue(1),
+        countActiveRoomsForCast: vi.fn().mockResolvedValue(0),
+        create: vi.fn(),
+      } as never,
+    });
+
+    const results = await processCastJoinRequests("room-1", deps);
+
+    expect(results).toEqual([{ outcome: "skipped", reason: "no eligible candidates" }]);
+    expect(deps.llm.generate).not.toHaveBeenCalled();
     expect(deps.memberships.create).not.toHaveBeenCalled();
   });
 });
@@ -360,6 +384,7 @@ describe("processCastJoinRequests — pending limit", () => {
     const deps = makeDeps({
       memberships: {
         findActiveCastIds: vi.fn().mockResolvedValue([]),
+        findPendingCastIds: vi.fn().mockResolvedValue([]),
         findBannedCastIds: vi.fn().mockResolvedValue([]),
         countPendingCasts: vi.fn().mockResolvedValue(3),
         countActiveRoomsForCast: vi.fn().mockResolvedValue(0),
@@ -509,8 +534,9 @@ describe("publishWelcomePost", () => {
 
   it("publishes a welcome post when the LLM generates content", async () => {
     const deps = makeWelcomeDeps();
-    await publishWelcomePost("room-1", "char-1", deps);
+    const result = await publishWelcomePost("room-1", "char-1", deps);
 
+    expect(result).toEqual({ outcome: "published" });
     expect(deps.posts.publish).toHaveBeenCalledWith(
       expect.objectContaining({
         simulationId: "room-1",
@@ -526,7 +552,8 @@ describe("publishWelcomePost", () => {
         findById: vi.fn().mockResolvedValue(makeRoom({ status: "archived" })),
       } as never,
     });
-    await publishWelcomePost("room-1", "char-1", deps);
+    const result = await publishWelcomePost("room-1", "char-1", deps);
+    expect(result).toEqual({ outcome: "skipped", reason: "room not found or archived" });
     expect(deps.posts.publish).not.toHaveBeenCalled();
   });
 
@@ -534,7 +561,8 @@ describe("publishWelcomePost", () => {
     const deps = makeWelcomeDeps({
       simulations: { findById: vi.fn().mockResolvedValue(null) } as never,
     });
-    await publishWelcomePost("room-1", "char-1", deps);
+    const result = await publishWelcomePost("room-1", "char-1", deps);
+    expect(result).toEqual({ outcome: "skipped", reason: "room not found or archived" });
     expect(deps.posts.publish).not.toHaveBeenCalled();
   });
 
@@ -542,7 +570,8 @@ describe("publishWelcomePost", () => {
     const deps = makeWelcomeDeps({
       characters: { findById: vi.fn().mockResolvedValue(null) } as never,
     });
-    await publishWelcomePost("room-1", "char-1", deps);
+    const result = await publishWelcomePost("room-1", "char-1", deps);
+    expect(result).toEqual({ outcome: "skipped", reason: "character not found" });
     expect(deps.posts.publish).not.toHaveBeenCalled();
   });
 
@@ -550,7 +579,8 @@ describe("publishWelcomePost", () => {
     const deps = makeWelcomeDeps({
       providers: { preferred: () => null } as never,
     });
-    await publishWelcomePost("room-1", "char-1", deps);
+    const result = await publishWelcomePost("room-1", "char-1", deps);
+    expect(result).toEqual({ outcome: "skipped", reason: "no LLM provider available" });
     expect(deps.posts.publish).not.toHaveBeenCalled();
   });
 
@@ -560,7 +590,10 @@ describe("publishWelcomePost", () => {
         generate: vi.fn().mockRejectedValue(new Error("LLM down")),
       } as never,
     });
-    await expect(publishWelcomePost("room-1", "char-1", deps)).resolves.toBeUndefined();
+    await expect(publishWelcomePost("room-1", "char-1", deps)).resolves.toEqual({
+      outcome: "error",
+      reason: "LLM down",
+    });
     expect(deps.posts.publish).not.toHaveBeenCalled();
   });
 
@@ -574,7 +607,8 @@ describe("publishWelcomePost", () => {
         }),
       } as never,
     });
-    await publishWelcomePost("room-1", "char-1", deps);
+    const result = await publishWelcomePost("room-1", "char-1", deps);
+    expect(result).toEqual({ outcome: "skipped", reason: "LLM returned empty content" });
     expect(deps.posts.publish).not.toHaveBeenCalled();
   });
 });

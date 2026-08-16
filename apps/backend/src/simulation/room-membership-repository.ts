@@ -1,5 +1,9 @@
 import type { MemberKind, MemberRole, MembershipStatus } from "@brickr/shared";
-import type { Db, DbTransaction } from "../persistence/prisma.js";
+import {
+  isRecordNotFoundError,
+  type Db,
+  type DbTransaction,
+} from "../persistence/prisma.js";
 import { optionalField } from "../persistence/repository-mapping.js";
 
 export type RoomMembership = {
@@ -149,8 +153,9 @@ export class RoomMembershipRepository {
         data: { status },
       });
       return toMembership(row);
-    } catch {
-      return null;
+    } catch (error) {
+      if (isRecordNotFoundError(error)) return null;
+      throw error;
     }
   }
 
@@ -175,6 +180,15 @@ export class RoomMembershipRepository {
   async findActiveCastIds(roomId: string): Promise<string[]> {
     const rows = await this.db.roomMembership.findMany({
       where: { roomId, memberKind: "character", status: "active" },
+      select: { memberId: true },
+    });
+    return rows.map((row: { memberId: string }) => row.memberId);
+  }
+
+  /** Returns pending Cast IDs so repeated join-request events do not re-evaluate them. */
+  async findPendingCastIds(roomId: string): Promise<string[]> {
+    const rows = await this.db.roomMembership.findMany({
+      where: { roomId, memberKind: "character", status: "pending" },
       select: { memberId: true },
     });
     return rows.map((row: { memberId: string }) => row.memberId);

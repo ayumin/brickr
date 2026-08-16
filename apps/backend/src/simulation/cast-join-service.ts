@@ -189,12 +189,17 @@ export async function processCastJoinRequests(
   // Load all non-deleted characters.
   const allCharacters = await deps.characters.findAll();
 
-  // Exclude characters that are already members or banned.
-  const [activeCastIds, bannedCastIds] = await Promise.all([
+  // Exclude characters that are already members, pending approval, or banned.
+  const [activeCastIds, pendingCastIds, bannedCastIds] = await Promise.all([
     deps.memberships.findActiveCastIds(roomId),
+    deps.memberships.findPendingCastIds(roomId),
     deps.memberships.findBannedCastIds(roomId),
   ]);
-  const excludedIds = new Set([...activeCastIds, ...bannedCastIds]);
+  const excludedIds = new Set([
+    ...activeCastIds,
+    ...pendingCastIds,
+    ...bannedCastIds,
+  ]);
 
   // Only autonomous characters are eligible.
   const candidates = allCharacters.filter(
@@ -212,7 +217,7 @@ export async function processCastJoinRequests(
   }
 
   // Score and pick the top candidates.
-  const roomTags = (room as { tags?: string[] }).tags ?? [];
+  const roomTags = room.tags;
   const scored = await Promise.all(
     candidates.map(async (c) => {
       const activeRoomCount = await deps.memberships.countActiveRoomsForCast(c.id);
@@ -293,24 +298,28 @@ async function processSingleCandidate(
  * member of a room.
  *
  * Called by the `character.join.welcome` event handler. The post is generated
- * by the LLM using the character's persona; if generation fails the welcome is
- * silently skipped (the membership itself is already committed).
+ * by the LLM using the character's persona. Returns the actual outcome so the
+ * worker can distinguish publication, a normal skip, and a non-fatal failure.
  */
 export async function publishWelcomePost(
   roomId: string,
   characterId: string,
   deps: Pick<CastJoinServiceDeps, "simulations" | "characters" | "posts" | "llm" | "providers">,
-): Promise<void> {
+): Promise<WelcomePostResult> {
   const [room, character] = await Promise.all([
     deps.simulations.findById(roomId),
     deps.characters.findById(characterId),
   ]);
 
-  if (!room || room.status === "archived") return;
-  if (!character) return;
+  if (!room || room.status === "archived") {
+    return { outcome: "skipped", reason: "room not found or archived" };
+  }
+  if (!character) return { outcome: "skipped", reason: "character not found" };
 
   const provider = deps.providers.preferred();
-  if (!provider) return;
+  if (!provider) {
+    return { outcome: "skipped", reason: "no LLM provider available" };
+  }
 
   const roomName = room.title ?? "(無題のルーム)";
 
@@ -334,7 +343,9 @@ export async function publishWelcomePost(
     });
 
     const content = result.text.trim();
-    if (!content) return;
+    if (!content) {
+      return { outcome: "skipped", reason: "LLM returned empty content" };
+    }
 
     await deps.posts.publish({
       simulationId: roomId,
@@ -343,7 +354,17 @@ export async function publishWelcomePost(
       replyTo: null,
       quoteOf: null,
     });
-  } catch {
+    return { outcome: "published" };
+  } catch (error) {
     // Welcome post failure is non-fatal: the membership is already committed.
+    return {
+      outcome: "error",
+      reason: error instanceof Error ? error.message : String(error),
+    };
   }
 }
+
+export type WelcomePostResult =
+  | { outcome: "published" }
+  | { outcome: "skipped"; reason: string }
+  | { outcome: "error"; reason: string };

@@ -274,10 +274,15 @@ async function handleCharacterJoinRequest(
         { eventId: event.id, roomId, characterId: result.characterId, outcome: result.outcome },
         "cast join processed",
       );
+    } else if (result.outcome === "error") {
+      deps.logger.warn(
+        { eventId: event.id, roomId, reason: result.reason },
+        "cast join errored",
+      );
     } else {
       deps.logger.info(
-        { eventId: event.id, roomId, outcome: result.outcome, reason: result.reason },
-        "cast join skipped or errored",
+        { eventId: event.id, roomId, reason: result.reason },
+        "cast join skipped",
       );
     }
   }
@@ -302,7 +307,7 @@ async function handleCharacterJoinWelcome(
     );
   }
 
-  await publishWelcomePost(roomId, characterId, {
+  const result = await publishWelcomePost(roomId, characterId, {
     simulations: deps.simulations,
     characters: deps.characters,
     posts: deps.posts,
@@ -310,8 +315,20 @@ async function handleCharacterJoinWelcome(
     providers: deps.providers,
   });
 
-  deps.logger.info(
-    { eventId: event.id, roomId, characterId },
-    "cast welcome post published",
-  );
+  if (result.outcome === "published") {
+    deps.logger.info(
+      { eventId: event.id, roomId, characterId },
+      "cast welcome post published",
+    );
+  } else if (result.outcome === "error") {
+    deps.logger.warn(
+      { eventId: event.id, roomId, characterId, reason: result.reason },
+      "cast welcome post errored",
+    );
+  } else {
+    deps.logger.info(
+      { eventId: event.id, roomId, characterId, reason: result.reason },
+      "cast welcome post skipped",
+    );
+  }
 }
