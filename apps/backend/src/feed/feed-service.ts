@@ -94,9 +94,17 @@ export class FeedService {
    *
    * Readable without a session, which is why `reader` is nullable: an anonymous
    * visitor sees the same posts and no actions at all.
+   *
+   * Visibility filtering: closed and private rooms are excluded for readers who
+   * are not active members. Public and open rooms are always included. The global
+   * simulation row is always included regardless of visibility (§10.1).
    */
   async getUnifiedFeed(request: FeedPageRequest): Promise<FeedPageDto> {
-    return this.buildPage(request, {});
+    const visibleRoomIds = await this.feed.findVisibleRoomIds(
+      request.reader ? request.reader.id : null,
+      request.reader?.isAdmin ?? false,
+    );
+    return this.buildPage(request, { visibleRoomIds });
   }
 
   /**
@@ -106,6 +114,10 @@ export class FeedService {
    * give the same posts a second, room-shaped surface. A stopped room answers as
    * if it did not exist unless the caller may read it, so the endpoint cannot be
    * used to discover somebody else's stopped rooms (§10.4).
+   *
+   * Visibility enforcement: closed and private rooms are refused for readers who
+   * are not active members, using the same 404 response as a stopped room so the
+   * endpoint cannot be used to discover rooms the caller cannot access (§10.4).
    */
   async getRoomFeed(
     simulationId: string,
@@ -120,6 +132,9 @@ export class FeedService {
    *
    * Shared with the room event stream (§11.1), so a subscription can never observe
    * a room the equivalent request would refuse.
+   *
+   * Enforces visibility for closed/private rooms: a reader who is not an active
+   * member receives a 404, indistinguishable from a room that does not exist.
    */
   async assertRoomFeedReadable(
     simulationId: string,
@@ -128,6 +143,21 @@ export class FeedService {
     const simulation = await this.simulations.findById(simulationId);
     if (!simulation) throw new SimulationNotFoundError(simulationId);
     assertRoomReadable(simulation, reader);
+
+    // Public/open rooms are readable without a membership. Owners and admins
+    // retain the same bypass used by the rest of the room authorization flow.
+    // For closed/private rooms, query only this room's membership instead of
+    // materialising every room visible to the reader.
+    if (
+      simulation.status === "active" &&
+      (simulation.visibility === "closed" || simulation.visibility === "private") &&
+      !isSimulationOwnerOrAdmin(simulation, reader)
+    ) {
+      const isMember = await this.feed.hasActiveRoomMembership(simulationId, reader.id);
+      if (!isMember) {
+        throw new SimulationNotFoundError(simulationId);
+      }
+    }
   }
 
   /**
@@ -178,6 +208,7 @@ export class FeedService {
       title: simulation.title,
       status: simulation.status,
       scope: simulation.scope,
+      visibility: simulation.visibility,
       ...optionalField("createdByUserId", simulation.createdByUserId),
     };
 
@@ -248,7 +279,7 @@ export class FeedService {
 
   private async buildPage(
     request: FeedPageRequest,
-    scope: { simulationId?: string },
+    scope: { simulationId?: string; visibleRoomIds?: string[] },
   ): Promise<FeedPageDto> {
     const cursor = request.cursor === undefined ? undefined : decodeFeedCursor(request.cursor);
     const mine =
