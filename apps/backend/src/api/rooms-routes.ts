@@ -1,5 +1,5 @@
 /**
- * Room lifecycle routes (issues #150, #151).
+ * Room lifecycle routes (issues #150, #151, #155).
  *
  * Issue #150 introduced the `defineRoute` pattern with `GET /api/rooms/:id`.
  * Issue #151 adds the full lifecycle:
@@ -8,6 +8,8 @@
  *   PUT    /api/rooms/:id      — update title (visibility is immutable)
  *   POST   /api/rooms/:id/archive  — archive a room (owner/admin only)
  *   DELETE /api/rooms/:id      — delete an archived room (owner/admin only)
+ * Issue #155 adds the visibility-aware room list:
+ *   GET    /api/rooms          — list rooms visible to the caller
  *
  * Every route uses `defineRoute` so auth, Zod validation, DomainError mapping,
  * and OpenAPI documentation are all derived from the same definition.
@@ -58,6 +60,29 @@ export const roomSummaryResponseSchema = z.object({
 
 const roomDtoResponseSchema = z.object({
   simulation: roomDtoSchema,
+});
+
+// Room list entry: either a full summary or a restricted entry for closed rooms.
+const restrictedRoomEntrySchema = z.object({
+  restricted: z.literal(true),
+  id: z.string(),
+  title: z.string().nullable(),
+  visibility: z.enum(ROOM_VISIBILITIES),
+  createdAt: z.string(),
+});
+
+const fullRoomEntrySchema = roomSummarySchema.extend({
+  restricted: z.literal(false),
+  pendingCount: z.number().int().min(0).optional(),
+});
+
+const roomListEntrySchema = z.discriminatedUnion("restricted", [
+  restrictedRoomEntrySchema,
+  fullRoomEntrySchema,
+]);
+
+export const roomListResponseSchema = z.object({
+  rooms: z.array(roomListEntrySchema),
 });
 
 // ---------------------------------------------------------------------------
@@ -146,9 +171,33 @@ export const deleteRoomOpenApiMeta = {
   },
 };
 
+export const listRoomsOpenApiMeta = {
+  operationId: "listRooms",
+  tags: ["Simulations"] as string[],
+  summary: "List rooms visible to the caller",
+  description:
+    "Returns the rooms the signed-in user may discover, ordered by most recent activity. " +
+    "public/open rooms are visible to all authenticated users. " +
+    "closed rooms appear for all authenticated users but non-members receive only " +
+    "prescribed metadata (id, title, visibility, createdAt). " +
+    "private rooms are only visible to active members. " +
+    "Owners receive a pendingCount badge field with the number of pending join requests.",
+  successDescription: "The list of visible rooms",
+};
+
 // ---------------------------------------------------------------------------
 // Register OpenAPI operations at module load time
 // ---------------------------------------------------------------------------
+
+buildOpenApiOperation(
+  {
+    method: "GET",
+    path: "/api/rooms",
+    auth: "required",
+    response: roomListResponseSchema,
+  },
+  listRoomsOpenApiMeta,
+);
 
 buildOpenApiOperation(
   {
@@ -214,6 +263,18 @@ buildOpenApiOperation(
  * Registers all room lifecycle routes on the given Fastify instance.
  */
 export function registerRoomsRoutes(app: FastifyInstance, services: AppServices): void {
+  // GET /api/rooms — list rooms visible to the caller (issue #155)
+  defineRoute({
+    method: "GET",
+    path: "/api/rooms",
+    auth: "required",
+    response: roomListResponseSchema,
+    handler: async ({ user }) => {
+      const rooms = await services.simulations.listRooms(user);
+      return { rooms };
+    },
+  }).register(app);
+
   // GET /api/rooms/:id — get one room's summary
   defineRoute({
     method: "GET",

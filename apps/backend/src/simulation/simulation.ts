@@ -45,6 +45,18 @@ export type SimulationSummary = Simulation & {
   postCount: number;
   /** `null` when the room has no owner — a room created before login existed. */
   creator: SimulationCreator | null;
+  /**
+   * Number of pending join requests. Only populated for the room list when the
+   * caller is the room owner, so they can show a badge on the room entry.
+   * Absent for non-owners and for the single-room summary endpoint.
+   */
+  pendingCount?: number;
+  /**
+   * Whether the caller holds an active membership in this room.
+   * Only populated for the room list query; used to apply metadata restrictions
+   * for closed rooms (issue #155). Absent for the single-room summary endpoint.
+   */
+  callerIsActiveMember?: boolean;
 };
 
 /** The two post shapes a character can produce. Plain `post` is a standalone comment. */

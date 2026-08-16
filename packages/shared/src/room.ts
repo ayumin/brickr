@@ -80,10 +80,39 @@ export type RoomSummaryDto = RoomDto & {
    * server is the only side that can enforce it anyway.
    */
   canManage: boolean;
+  /**
+   * Number of pending join requests. Only present for the room owner, so they
+   * can show a badge on the room entry in the list (issue #155).
+   * Absent for non-owners.
+   */
+  pendingCount?: number;
 };
 
 export type RoomsResponse = {
   simulations: RoomSummaryDto[];
+};
+
+/**
+ * One entry in the visibility-aware room list (issue #155).
+ *
+ * For `closed` rooms where the caller is not an active member, only the
+ * prescribed metadata fields are present (id, title, visibility, createdAt).
+ * Full metadata is available for public/open rooms and for members of
+ * closed/private rooms.
+ */
+export type RoomListEntryDto =
+  | (RoomSummaryDto & { restricted: false })
+  | {
+      /** Restricted entry: only prescribed metadata for closed non-members. */
+      restricted: true;
+      id: string;
+      title: string | null;
+      visibility: RoomVisibility;
+      createdAt: string;
+    };
+
+export type RoomListResponse = {
+  rooms: RoomListEntryDto[];
 };
 
 export type CreateRoomRequest = {
