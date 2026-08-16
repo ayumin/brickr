@@ -54,6 +54,9 @@ export type RoomReviewDeps = {
   memberships: RoomMembershipRepository;
   posts: PostService;
   scheduledEvents: ScheduledEventRepository;
+  logger: {
+    warn: (obj: Record<string, unknown>, message: string) => void;
+  };
   /** Injectable clock for deterministic tests. Defaults to `() => new Date()`. */
   clock?: Clock;
 };
@@ -114,21 +117,28 @@ export async function reviewRoom(
   const scheduledAt = new Date(now.getTime() + REVIVAL_SCHEDULE_DELAY_MS);
 
   for (const root of dormantRoots) {
-    const event = await deps.scheduledEvents.create({
-      id: randomUUID(),
-      type: "thread.revive",
-      scheduledAt,
-      roomId,
-      postId: root.id,
-      threadRootId: root.id,
-      characterId: null,
-    });
+    try {
+      const event = await deps.scheduledEvents.create({
+        id: randomUUID(),
+        type: "thread.revive",
+        scheduledAt,
+        roomId,
+        postId: root.id,
+        threadRootId: root.id,
+        characterId: null,
+      });
 
-    if (event !== null) {
-      revivalsScheduled += 1;
+      if (event !== null) {
+        revivalsScheduled += 1;
+      }
+      // If event is null, a pending revival for this thread already exists —
+      // that is fine, the deduplication is working as intended.
+    } catch (error) {
+      deps.logger.warn(
+        { roomId, threadRootId: root.id, error },
+        "failed to schedule thread revival; continuing room review",
+      );
     }
-    // If event is null, a pending revival for this thread already exists —
-    // that is fine, the deduplication is working as intended.
   }
 
   return { revivalsScheduled };

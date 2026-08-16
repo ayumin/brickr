@@ -370,6 +370,7 @@ async function handleThreadRevive(
     posts: deps.posts,
     threads: deps.threads,
     agents: deps.agents,
+    targetPostId: event.postId ?? event.threadRootId ?? undefined,
   });
 
   if (result.outcome === "revived") {
@@ -415,6 +416,7 @@ async function handleRoomReview(
     memberships: deps.memberships,
     posts: deps.posts,
     scheduledEvents: deps.scheduledEvents,
+    logger: deps.logger,
   });
 
   if (result.skippedReason) {

@@ -58,6 +58,7 @@ function makeDeps(overrides: Partial<RoomReviewDeps> = {}): RoomReviewDeps {
     scheduledEvents: {
       create: vi.fn(() => Promise.resolve({ id: "new-event", type: "thread.revive" })),
     } as unknown as RoomReviewDeps["scheduledEvents"],
+    logger: { warn: vi.fn() },
     clock: () => now,
     ...overrides,
   };
@@ -162,6 +163,35 @@ describe("reviewRoom", () => {
 
     expect(result.revivalsScheduled).toBe(2);
     expect(create).toHaveBeenCalledTimes(2);
+  });
+
+  it("logs an individual scheduling failure and continues with later threads", async () => {
+    const dormantPost2: Post = {
+      ...dormantPost,
+      id: "post-dormant-2",
+      threadRootId: "post-dormant-2",
+    };
+    const create = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("queue unavailable"))
+      .mockResolvedValueOnce({ id: "new-event", type: "thread.revive" });
+    const logger = { warn: vi.fn() };
+    const deps = makeDeps({
+      posts: {
+        findDormantThreadRoots: vi.fn(() => Promise.resolve([dormantPost, dormantPost2])),
+      } as unknown as RoomReviewDeps["posts"],
+      scheduledEvents: { create } as unknown as RoomReviewDeps["scheduledEvents"],
+      logger,
+    });
+
+    const result = await reviewRoom("room-1", deps);
+
+    expect(result.revivalsScheduled).toBe(1);
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ roomId: "room-1", threadRootId: dormantPost.id }),
+      "failed to schedule thread revival; continuing room review",
+    );
   });
 
   it("does not count a revival when the repository returns null (duplicate)", async () => {

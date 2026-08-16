@@ -14,9 +14,8 @@
  *   - A character is only chosen if `shouldReviveThread` returns true for its
  *     profile, so the revival rate is governed by the same profile parameters
  *     as response timing.
- *   - The character posts a standalone `post` action (not a reply) so the
- *     revival appears as a fresh top-level contribution to the thread rather
- *     than a direct reply to the root.
+ *   - The character replies to the dormant thread root so publishing the
+ *     revival advances that thread's `threadActivityAt`.
  *   - If no dormant thread or no willing character is found, the function
  *     returns a `skipped` outcome — this is not an error.
  */
@@ -29,7 +28,6 @@ import type { SimulationRepository } from "./simulation-repository.js";
 import type { RoomMembershipRepository } from "./room-membership-repository.js";
 import type { Rng } from "./responder-selector.js";
 import { resolveProfile, shouldReviveThread } from "./behavior-profiles.js";
-import { selectAction, resolveActionTargets } from "./action-selector.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -66,6 +64,8 @@ export type ThreadRevivalDeps = {
   clock?: Clock;
   /** Injectable Rng for deterministic tests. Defaults to `Math.random`. */
   rng?: Rng;
+  /** Specific dormant root selected by `room.review`, when scheduled from one. */
+  targetPostId?: string;
 };
 
 export type ThreadRevivalResult =
@@ -98,17 +98,31 @@ export async function reviveThread(
     return { outcome: "skipped", reason: "room not found or archived" };
   }
 
-  // Find dormant thread candidates: root posts whose threadActivityAt is old.
   const dormantBefore = new Date(clock().getTime() - DORMANT_THRESHOLD_MS);
-  const dormantRoots = await deps.posts.findDormantThreadRoots(roomId, dormantBefore, CANDIDATE_LIMIT);
-
-  if (dormantRoots.length === 0) {
-    return { outcome: "skipped", reason: "no dormant threads found" };
+  let targetPost;
+  if (deps.targetPostId) {
+    const scheduledTarget = await deps.posts.findById(deps.targetPostId);
+    if (
+      !scheduledTarget ||
+      scheduledTarget.roomId !== roomId ||
+      scheduledTarget.replyTo !== null ||
+      scheduledTarget.threadActivityAt > dormantBefore
+    ) {
+      return { outcome: "skipped", reason: "scheduled target is not a dormant thread root" };
+    }
+    targetPost = scheduledTarget;
+  } else {
+    // Unscoped/manual events choose the most recently active dormant root.
+    const dormantRoots = await deps.posts.findDormantThreadRoots(
+      roomId,
+      dormantBefore,
+      CANDIDATE_LIMIT,
+    );
+    if (dormantRoots.length === 0) {
+      return { outcome: "skipped", reason: "no dormant threads found" };
+    }
+    targetPost = dormantRoots[0]!;
   }
-
-  // Pick the most recently active dormant thread (first in the list, since
-  // findDormantThreadRoots returns them ordered by threadActivityAt DESC).
-  const targetPost = dormantRoots[0]!;
 
   // Load active Cast members for this room.
   const activeCastIds = await deps.memberships.findActiveCastIds(roomId);
@@ -151,14 +165,9 @@ export async function reviveThread(
   ]);
   const resolveHandle = (authorId: string): string => byId.get(authorId) ?? authorId;
 
-  // Select an action and generate the revival post.
+  // A revival must be a reply: only replies advance the root thread's activity.
   try {
-    const action = selectAction({
-      character: reviver,
-      target: thread.target,
-      threadPosts: thread.posts,
-      rng,
-    });
+    const action = "reply" as const;
 
     const generated = await deps.agents.generate({
       character: reviver,
@@ -168,14 +177,12 @@ export async function reviveThread(
       resolveHandle,
     });
 
-    const { replyTo, quoteOf } = resolveActionTargets(action, thread.target);
-
     const post = await deps.posts.publish({
       roomId,
       authorId: reviver.id,
       content: generated.content,
-      replyTo,
-      quoteOf,
+      replyTo: thread.target.id,
+      quoteOf: null,
     });
 
     return { outcome: "revived", characterId: reviver.id, postId: post.id };

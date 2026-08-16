@@ -227,6 +227,10 @@ describe("processEvent thread.revive", () => {
       expect.objectContaining({ characterId: character.id, postId: "post-revived" }),
       "thread revived",
     );
+    expect(reviveThread).toHaveBeenCalledWith(
+      "room-1",
+      expect.objectContaining({ targetPostId: triggerPost.id }),
+    );
   });
 
   it("throws when roomId is missing so the worker retries", async () => {

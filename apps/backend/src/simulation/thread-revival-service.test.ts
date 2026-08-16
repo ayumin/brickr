@@ -88,6 +88,7 @@ function makeDeps(overrides: Partial<ThreadRevivalDeps> = {}): ThreadRevivalDeps
       findActiveCastIds: vi.fn(() => Promise.resolve([eagerCharacter.id])),
     } as unknown as ThreadRevivalDeps["memberships"],
     posts: {
+      findById: vi.fn(() => Promise.resolve(dormantPost)),
       findDormantThreadRoots: vi.fn(() => Promise.resolve([dormantPost])),
       findUsersByIds: vi.fn(() => Promise.resolve([])),
       publish: vi.fn(() => Promise.resolve(revivedPost)),
@@ -194,6 +195,52 @@ describe("reviveThread", () => {
     expect((result as { outcome: "revived"; characterId: string; postId: string }).postId).toBe(
       revivedPost.id,
     );
+    expect(deps.agents.generate).toHaveBeenCalledWith(expect.objectContaining({ action: "reply" }));
+    expect(deps.posts.publish).toHaveBeenCalledWith(
+      expect.objectContaining({ replyTo: dormantPost.id, quoteOf: null }),
+    );
+  });
+
+  it("revives the thread root selected by the scheduled event", async () => {
+    const selected = { ...dormantPost, id: "post-selected", threadRootId: "post-selected" };
+    const findById = vi.fn(() => Promise.resolve(selected));
+    const findDormantThreadRoots = vi.fn(() => Promise.resolve([dormantPost]));
+    const getCurrentThread = vi.fn(() =>
+      Promise.resolve({ target: selected, posts: [selected] }),
+    );
+    const deps = makeDeps({
+      targetPostId: selected.id,
+      posts: {
+        findById,
+        findDormantThreadRoots,
+        findUsersByIds: vi.fn(() => Promise.resolve([])),
+        publish: vi.fn(() => Promise.resolve({ ...revivedPost, replyTo: selected.id })),
+      } as unknown as ThreadRevivalDeps["posts"],
+      threads: { getCurrentThread } as unknown as ThreadRevivalDeps["threads"],
+    });
+
+    await reviveThread("room-1", deps);
+
+    expect(findById).toHaveBeenCalledWith(selected.id);
+    expect(findDormantThreadRoots).not.toHaveBeenCalled();
+    expect(getCurrentThread).toHaveBeenCalledWith(selected.id);
+  });
+
+  it("skips a scheduled target that is no longer dormant", async () => {
+    const deps = makeDeps({
+      targetPostId: dormantPost.id,
+      posts: {
+        findById: vi.fn(() => Promise.resolve({ ...dormantPost, threadActivityAt: now })),
+        findDormantThreadRoots: vi.fn(),
+      } as unknown as ThreadRevivalDeps["posts"],
+    });
+
+    const result = await reviveThread("room-1", deps);
+
+    expect(result).toEqual({
+      outcome: "skipped",
+      reason: "scheduled target is not a dormant thread root",
+    });
   });
 
   it("calls findDormantThreadRoots with the correct dormant threshold", async () => {
