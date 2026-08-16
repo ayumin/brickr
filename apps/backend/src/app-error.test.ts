@@ -1,4 +1,4 @@
-import Fastify, { type FastifyInstance } from "fastify";
+import Fastify, { type FastifyError, type FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it } from "vitest";
 import { AppError } from "./app-error.js";
 
@@ -87,7 +87,7 @@ function buildTestApp(): FastifyInstance {
   });
 
   // Mirror the error handler from app.ts so we test the real logic.
-  app.setErrorHandler((error, _request, reply) => {
+  app.setErrorHandler((error: FastifyError | AppError | Error, _request, reply) => {
     if (error instanceof AppError) {
       return reply.status(error.status).send(error.toResponse());
     }
