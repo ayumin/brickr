@@ -1,9 +1,10 @@
 import cors from "@fastify/cors";
 import { MAX_IMAGE_DATA_URL_LENGTH } from "@brickr/shared";
-import Fastify, { type FastifyError, type FastifyInstance } from "fastify";
+import Fastify, { type FastifyInstance } from "fastify";
 import { sendError } from "./api/errors.js";
 import { registerOpenApi } from "./api/openapi.js";
 import { registerRoutes } from "./api/routes.js";
+import { appErrorHandler, AppError } from "./app-error.js";
 import { registerAuthContext } from "./auth/auth-context.js";
 import { env } from "./config/env.js";
 import type { Db } from "./persistence/prisma.js";
@@ -42,16 +43,19 @@ export async function buildApp(db: Db): Promise<FastifyInstance> {
 
   app.setNotFoundHandler((_request, reply) => sendError(reply, 404, "not_found", "route not found"));
 
-  app.setErrorHandler((error: FastifyError, request, reply) => {
-    request.log.error({ err: error }, "unhandled request error");
-    const status = error.statusCode ?? 500;
-    // Never leak internal failure detail to the client.
-    return sendError(
-      reply,
-      status,
-      "internal_error",
-      status < 500 ? error.message : "internal error",
-    );
+  app.setErrorHandler((error, request, reply) => {
+    // Log 4xx AppErrors at warn level to avoid noise in error monitoring;
+    // reserve error level for 5xx and truly unexpected failures.
+    if (error instanceof AppError) {
+      if (error.status < 500) {
+        request.log.warn({ err: error }, "request error");
+      } else {
+        request.log.error({ err: error }, "request error");
+      }
+    } else {
+      request.log.error({ err: error }, "unhandled request error");
+    }
+    appErrorHandler(error, request, reply);
   });
 
   return app;
