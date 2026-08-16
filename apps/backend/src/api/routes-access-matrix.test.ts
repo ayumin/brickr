@@ -70,6 +70,7 @@ function room(id: string, overrides: Partial<Simulation> = {}): Simulation {
     status: "active",
     scope: "room",
     visibility: "public",
+    tags: [],
     createdAt: NOW,
     lastActivityAt: NOW,
     createdByUserId: ROOM_OWNER.id,
@@ -88,6 +89,7 @@ const FEED_ROOM: Simulation = {
   status: "active",
   scope: "global",
   visibility: "public",
+  tags: [],
   createdAt: NOW,
   lastActivityAt: NOW,
 };

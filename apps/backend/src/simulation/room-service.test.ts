@@ -36,6 +36,7 @@ function makeRoom(overrides: Partial<Simulation> = {}): Simulation {
     status: "active",
     scope: "room",
     visibility: "public",
+    tags: [],
     createdAt: new Date("2026-08-16T00:00:00.000Z"),
     lastActivityAt: new Date("2026-08-16T00:00:00.000Z"),
     createdByUserId: OWNER.id,

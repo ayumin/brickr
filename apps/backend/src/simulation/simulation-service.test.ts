@@ -34,6 +34,7 @@ const SIMULATION: Simulation = {
   status: "active",
   scope: "room",
   visibility: "public",
+  tags: [],
   createdAt: new Date("2026-01-01T00:00:00Z"),
   lastActivityAt: new Date("2026-01-01T00:00:00Z"),
   createdByUserId: USER_AUTHOR_ID,
@@ -751,6 +752,7 @@ describe("SimulationService global feed protection (§8.2)", () => {
     status: "active",
     scope: "global",
     visibility: "public",
+    tags: [],
     createdAt: new Date("2026-01-01T00:00:00Z"),
     lastActivityAt: new Date("2026-01-01T00:00:00Z"),
   };

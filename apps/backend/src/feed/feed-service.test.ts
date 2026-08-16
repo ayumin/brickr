@@ -176,6 +176,7 @@ function toSimulation(room: FeedRoom): Simulation {
     status: room.status,
     scope: room.scope,
     visibility: "public",
+    tags: [],
     createdAt: at(0),
     lastActivityAt: at(0),
     ...(room.createdByUserId ? { createdByUserId: room.createdByUserId } : {}),
