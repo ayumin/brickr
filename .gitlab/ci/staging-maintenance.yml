@@ -40,14 +40,15 @@
       echo "Resetting the staging database with backend image: $BACKEND_IMAGE_REF"
 
       # Override the image entrypoint once. Prisma drops and recreates only
-      # the application schema; the regular entrypoint then generates the
-      # client, seeds initial data, and starts the API server.
+      # the application schema, then a minimal HTTP server makes the reset
+      # revision ready without starting the unseeded application. The restored
+      # default revision below is therefore the only one that runs the seed.
       gcloud run services update "$BACKEND_SERVICE" \
         --project="$GCP_PROJECT_ID" \
         --region="$GCP_REGION" \
         --image="$BACKEND_IMAGE_REF" \
         --command=sh \
-        '--args=^|^-c|pnpm exec prisma db push --skip-generate --force-reset && exec /usr/local/bin/entrypoint.sh pnpm dev' \
+        "--args=^|^-c|pnpm exec prisma db push --skip-generate --force-reset && exec node -e 'require(\"http\").createServer((q,s)=>s.end(\"ok\")).listen(3000)'" \
         --quiet
 
       curl --fail --silent --show-error \
