@@ -77,15 +77,19 @@ model Room {
   scope  String @default("room")
 
   // Extended room metadata (Phase-1 redesign).
+  // These fields are schema scaffolding for a future phase; none of them are
+  // read or enforced by the current application code.
   /// Optional short description shown in the room list.
   description    String? @map("description")
-  /// "public" | "private". Controls who can see the room.
+  /// "public" | "private". Intended to control visibility, but not yet
+  /// enforced — findAllVisibleTo still filters only by status and owner.
+  /// Stored now so the column exists when the enforcement phase lands.
   visibility     String  @default("public") @map("visibility")
-  /// Free-form tags for filtering / discovery.
+  /// Free-form tags for filtering / discovery (unenforced scaffolding).
   tags           String[] @default([]) @map("tags")
-  /// UI theme identifier (e.g. "default", "dark").
+  /// UI theme identifier (e.g. "default", "dark") (unenforced scaffolding).
   theme          String?  @map("theme")
-  /// Whether Cast characters may join this room autonomously.
+  /// Whether Cast characters may join this room autonomously (unenforced scaffolding).
   castAutonomous Boolean  @default(true) @map("cast_autonomous")
 
   /// Public to everyone, unlike Character ownership (§66.6). Null for rooms
