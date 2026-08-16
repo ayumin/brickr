@@ -51,7 +51,7 @@ export class AppError extends Error {
  * production code path.
  */
 export function appErrorHandler(
-  error: FastifyError | AppError | Error,
+  error: unknown,
   _request: FastifyRequest,
   reply: FastifyReply,
 ): void {
