@@ -152,6 +152,33 @@ export class PostRepository {
   }
 
   /**
+   * Returns root posts (top-level threads) in a room whose `threadActivityAt`
+   * is older than `dormantBefore`, ordered by most-recently-active first.
+   *
+   * Used by the `thread.revive` event handler to find threads that have gone
+   * quiet and could benefit from a character revival post.
+   *
+   * Only root posts are returned (`replyTo IS NULL`) because the revival
+   * handler needs the thread root to load the full thread context.
+   */
+  async findDormantThreadRoots(
+    roomId: string,
+    dormantBefore: Date,
+    limit: number,
+  ): Promise<Post[]> {
+    const rows = await this.db.post.findMany({
+      where: {
+        roomId,
+        replyTo: null,
+        threadActivityAt: { lt: dormantBefore },
+      },
+      orderBy: { threadActivityAt: "desc" },
+      take: limit,
+    });
+    return rows.map(toPost);
+  }
+
+  /**
    * `limit` also flips the sort to newest-first so the database can serve it
    * with an index, then the result is reversed back to the oldest-first order
    * every caller expects.

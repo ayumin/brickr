@@ -121,6 +121,21 @@ export class PostService {
   async findUsersByIds(ids: string[]): Promise<UserProfile[]> {
     return this.userProfiles.findByIds(ids);
   }
+
+  /**
+   * Returns root posts (top-level threads) in a room whose last activity is
+   * older than `dormantBefore`, ordered by most-recently-active first.
+   *
+   * Used by the `thread.revive` event handler to find threads that have gone
+   * quiet and could benefit from a character revival post.
+   */
+  async findDormantThreadRoots(
+    roomId: string,
+    dormantBefore: Date,
+    limit: number,
+  ): Promise<Post[]> {
+    return this.posts.findDormantThreadRoots(roomId, dormantBefore, limit);
+  }
 }
 
 export function indexById(characters: Character[]): Map<string, Character> {

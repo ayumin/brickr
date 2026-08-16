@@ -20,6 +20,7 @@ import type { LLMClient } from "../llm/llm-client.js";
 import type { LLMProviderRegistry } from "../llm/provider-registry.js";
 import type { PostService } from "../posts/post-service.js";
 import type { ThreadService } from "../posts/thread-service.js";
+import type { ScheduledEventRepository } from "../scheduled-events/scheduled-event-repository.js";
 import type { ScheduledEvent } from "../scheduled-events/scheduled-event.js";
 import type { SimulationRepository } from "../simulation/simulation-repository.js";
 import type { RoomMembershipRepository } from "../simulation/room-membership-repository.js";
@@ -29,6 +30,8 @@ import {
   processCastJoinRequests,
   publishWelcomePost,
 } from "../simulation/cast-join-service.js";
+import { reviveThread } from "../simulation/thread-revival-service.js";
+import { reviewRoom } from "../simulation/room-review-service.js";
 import type { WorkerLogger } from "./logger.js";
 
 export type EventProcessorDeps = {
@@ -40,6 +43,7 @@ export type EventProcessorDeps = {
   agents: AgentService;
   llm: LLMClient;
   providers: LLMProviderRegistry;
+  scheduledEvents: ScheduledEventRepository;
   logger: WorkerLogger;
 };
 
@@ -71,10 +75,15 @@ export async function processEvent(
       break;
 
     case "thread.revive":
+      await handleThreadRevive(event, deps);
+      break;
+
     case "room.review":
+      await handleRoomReview(event, deps);
+      break;
+
     case "room.analysis.refresh":
-      // These event types are defined in the schema but not yet implemented.
-      // Log and treat as a no-op so they do not block the queue.
+      // Not yet implemented. Log and treat as a no-op so it does not block the queue.
       deps.logger.info(
         { eventId: event.id, type: event.type },
         "event type not yet implemented — skipping",
@@ -329,6 +338,96 @@ async function handleCharacterJoinWelcome(
     deps.logger.info(
       { eventId: event.id, roomId, characterId, reason: result.reason },
       "cast welcome post skipped",
+    );
+  }
+}
+
+/**
+ * Handles a `thread.revive` event.
+ *
+ * Selects a dormant thread in the room and has a willing Cast character post
+ * to it, restarting the conversation. The target thread root is taken from
+ * `event.postId` when present (scheduled by `room.review`), or the service
+ * picks the most recently dormant thread in the room.
+ *
+ * Failure is non-fatal: if no dormant thread or no willing character is found,
+ * the event is treated as a no-op rather than a retry-worthy failure.
+ */
+async function handleThreadRevive(
+  event: ScheduledEvent,
+  deps: EventProcessorDeps,
+): Promise<void> {
+  const { roomId } = event;
+
+  if (!roomId) {
+    throw new Error(`thread.revive event ${event.id} is missing roomId`);
+  }
+
+  const result = await reviveThread(roomId, {
+    simulations: deps.simulations,
+    characters: deps.characters,
+    memberships: deps.memberships,
+    posts: deps.posts,
+    threads: deps.threads,
+    agents: deps.agents,
+    targetPostId: event.postId ?? event.threadRootId ?? undefined,
+  });
+
+  if (result.outcome === "revived") {
+    deps.logger.info(
+      { eventId: event.id, roomId, characterId: result.characterId, postId: result.postId },
+      "thread revived",
+    );
+  } else if (result.outcome === "error") {
+    // Throw so the worker applies retry logic.
+    throw new Error(`thread.revive failed for event ${event.id}: ${result.reason}`);
+  } else {
+    deps.logger.info(
+      { eventId: event.id, roomId, reason: result.reason },
+      "thread revival skipped",
+    );
+  }
+}
+
+/**
+ * Handles a `room.review` event.
+ *
+ * Inspects the room's current state and schedules follow-up events:
+ *   - `thread.revive` for each dormant thread (up to a per-review limit).
+ *
+ * The review itself does not generate any posts. It is a lightweight
+ * scheduling pass that delegates actual work to subsequent events.
+ *
+ * Failure is non-fatal: if the room is archived or has no Cast, the event
+ * is treated as a no-op.
+ */
+async function handleRoomReview(
+  event: ScheduledEvent,
+  deps: EventProcessorDeps,
+): Promise<void> {
+  const { roomId } = event;
+
+  if (!roomId) {
+    throw new Error(`room.review event ${event.id} is missing roomId`);
+  }
+
+  const result = await reviewRoom(roomId, {
+    simulations: deps.simulations,
+    memberships: deps.memberships,
+    posts: deps.posts,
+    scheduledEvents: deps.scheduledEvents,
+    logger: deps.logger,
+  });
+
+  if (result.skippedReason) {
+    deps.logger.info(
+      { eventId: event.id, roomId, reason: result.skippedReason },
+      "room review skipped",
+    );
+  } else {
+    deps.logger.info(
+      { eventId: event.id, roomId, revivalsScheduled: result.revivalsScheduled },
+      "room review completed",
     );
   }
 }
