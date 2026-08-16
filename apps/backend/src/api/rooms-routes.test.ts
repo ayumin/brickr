@@ -174,8 +174,10 @@ describe("rooms route OpenAPI registration", () => {
       (r) => r.operation.operationId === getRoomOpenApiMeta.operationId,
     );
     const parameters = found?.operation.parameters as Array<{ name: string; in: string }> | undefined;
-    expect(parameters).toContainEqual(
-      expect.objectContaining({ name: "id", in: "path" }),
+    expect(
+      parameters?.filter((parameter) => parameter.name === "id" && parameter.in === "path"),
+    ).toEqual(
+      [expect.objectContaining({ name: "id", in: "path" })],
     );
   });
 });

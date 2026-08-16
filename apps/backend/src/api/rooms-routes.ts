@@ -19,7 +19,7 @@ import type { AppServices } from "../services.js";
 import { buildOpenApiOperation, defineRoute } from "./define-route.js";
 
 export const roomIdParams = z.object({
-  id: z.string().trim().min(1).max(64),
+  id: z.string().trim().min(1).max(64).describe("Room ID"),
 });
 
 const roomSummarySchema = z.object({
@@ -56,15 +56,7 @@ export const getRoomOpenApiMeta = {
     "Demonstrates the `defineRoute` pattern (issue #150): auth, Zod validation, " +
     "DomainError mapping, and OpenAPI output all derived from the same definition. " +
     "Mirrors `GET /api/simulations/:id` but implemented via `defineRoute`.",
-  extraParameters: [
-    {
-      name: "id",
-      in: "path" as const,
-      required: true,
-      description: "Room ID",
-      schema: { type: "string" as const, minLength: 1, maxLength: 64 },
-    },
-  ],
+  successDescription: "The room's summary",
   extraResponses: {
     "404": { $ref: "#/components/responses/NotFound" },
   },

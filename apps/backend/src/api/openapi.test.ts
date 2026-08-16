@@ -2,6 +2,7 @@ import { MAX_PASSWORD_LENGTH, MAX_POST_LENGTH, MIN_PASSWORD_LENGTH } from "@bric
 import Fastify from "fastify";
 import { afterEach, describe, expect, it } from "vitest";
 import type { AppServices } from "../services.js";
+import { registeredRoutes } from "./define-route.js";
 import { openApiDocument, registerOpenApi } from "./openapi.js";
 import { registerRoutes } from "./routes.js";
 
@@ -127,6 +128,21 @@ describe("OpenAPI documentation", () => {
         .filter((id): id is string => id !== undefined),
     );
     expect(new Set(operationIds).size).toBe(operationIds.length);
+  });
+
+  it("serves defineRoute operations from the registered source of truth", () => {
+    const registered = registeredRoutes.find(
+      (route) => route.operation.operationId === "getRoomSummary",
+    );
+    expect(registered).toBeDefined();
+    expect(openApiDocument.paths["/api/rooms/{id}"]?.get).toBe(registered?.operation);
+
+    const parameters = registered?.operation.parameters as
+      | Array<{ name: string; in: string }>
+      | undefined;
+    expect(
+      parameters?.filter((parameter) => parameter.name === "id" && parameter.in === "path"),
+    ).toHaveLength(1);
   });
 
   it("stays in sync with the registered API routes", async () => {
