@@ -1,0 +1,123 @@
+include:
+  - template: Security/SAST.gitlab-ci.yml
+  - template: Security/Dependency-Scanning.gitlab-ci.yml
+  - template: Security/Secret-Detection.gitlab-ci.yml
+
+# A shared-package change affects both consumers. Workspace and MR CI changes
+# deliberately run every component to validate the merged configuration.
+.mr-frontend-rules:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - .gitlab-ci.yml
+        - .gitlab/ci/**/*
+        - apps/frontend/**/*
+        - packages/shared/**/*
+        - package.json
+        - pnpm-lock.yaml
+        - pnpm-workspace.yaml
+        - eslint.config.mjs
+
+.mr-backend-rules:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - .gitlab-ci.yml
+        - .gitlab/ci/**/*
+        - apps/backend/**/*
+        - packages/shared/**/*
+        - package.json
+        - pnpm-lock.yaml
+        - pnpm-workspace.yaml
+        - eslint.config.mjs
+
+.mr-shared-rules:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - .gitlab-ci.yml
+        - .gitlab/ci/**/*
+        - packages/shared/**/*
+        - package.json
+        - pnpm-lock.yaml
+        - pnpm-workspace.yaml
+        - eslint.config.mjs
+
+"mr:frontend:lint":
+  extends: [.frontend-lint, .mr-frontend-rules]
+
+"mr:frontend:typecheck":
+  extends: [.frontend-typecheck, .mr-frontend-rules]
+
+"mr:frontend:test":
+  extends: [.frontend-test, .mr-frontend-rules]
+
+"mr:frontend:build":
+  extends: [.frontend-build, .mr-frontend-rules]
+
+"mr:backend:lint":
+  extends: [.backend-lint, .mr-backend-rules]
+
+"mr:backend:typecheck":
+  extends: [.backend-typecheck, .mr-backend-rules]
+
+"mr:backend:test":
+  extends: [.backend-test, .mr-backend-rules]
+
+"mr:backend:build":
+  extends: [.backend-build, .mr-backend-rules]
+
+"mr:shared:lint":
+  extends: [.shared-lint, .mr-shared-rules]
+
+"mr:shared:typecheck":
+  extends: [.shared-typecheck, .mr-shared-rules]
+
+"mr:shared:test":
+  extends: [.shared-test, .mr-shared-rules]
+
+"mr:shared:build":
+  extends: [.shared-build, .mr-shared-rules]
+
+# Scanner images do not contain Node.js. Secret detection remains enabled for
+# every MR, including documentation-only changes, while the heavier scanners
+# follow the files they can actually analyze.
+secret_detection:
+  stage: security
+  before_script: []
+  needs: []
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+semgrep-sast:
+  stage: security
+  before_script: []
+  needs: []
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - .gitlab-ci.yml
+        - .gitlab/ci/**/*
+        - apps/frontend/**/*
+        - apps/backend/**/*
+        - packages/shared/**/*
+        - package.json
+        - pnpm-lock.yaml
+        - pnpm-workspace.yaml
+        - eslint.config.mjs
+
+gemnasium-dependency_scanning:
+  stage: security
+  before_script: []
+  needs: []
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - .gitlab-ci.yml
+        - .gitlab/ci/**/*
+        - package.json
+        - apps/frontend/package.json
+        - apps/backend/package.json
+        - packages/shared/package.json
+        - pnpm-lock.yaml
+        - pnpm-workspace.yaml

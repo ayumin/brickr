@@ -55,18 +55,24 @@ use the same provider versions.
    terraform apply staging.tfplan
    ```
 
-2. Build and push `backend:staging` and `frontend:staging` with Cloud Build. The
-   repository is created separately because Cloud Run rejects image references
-   that have not been pushed yet. The build configuration explicitly targets
-   `linux/amd64`, which Cloud Run requires even when the submitter uses an Arm
-   workstation.
+2. For the initial bootstrap only, build and push `backend:staging` and
+   `frontend:staging` directly to Artifact Registry from the repository root.
+   The repository is created separately because Cloud Run rejects image
+   references that have not been pushed yet. Both builds explicitly target
+   `linux/amd64`, including when the submitter uses an Arm workstation.
 
    ```shell
-   gcloud builds submit \
-     --project=aaizawa-sandbox-505606 \
-     --region=asia-northeast1 \
-     --config=cloudbuild.yaml \
+   cd ..
+   gcloud auth configure-docker asia-northeast1-docker.pkg.dev
+   docker buildx build --platform=linux/amd64 --push \
+     --file=apps/backend/Dockerfile \
+     --tag=asia-northeast1-docker.pkg.dev/aaizawa-sandbox-505606/brickr-staging/backend:staging \
      .
+   docker buildx build --platform=linux/amd64 --push \
+     --file=apps/frontend/Dockerfile \
+     --tag=asia-northeast1-docker.pkg.dev/aaizawa-sandbox-505606/brickr-staging/frontend:staging \
+     .
+   cd infra
    ```
 
    The existing Dockerfiles are development-oriented. Before exposing staging,
@@ -91,23 +97,36 @@ Replace the hostname with the configured `domain_name`.
 
 ## Continuous deployment from GitLab
 
-Terraform creates a Workload Identity Pool and dedicated deploy/build service
-accounts when both `gitlab_namespace_id` and `gitlab_project_id` are set. The
-GitLab job exchanges its OIDC ID token for short-lived Google credentials; no
-service-account key or protected CI variable is required.
+Terraform creates a Workload Identity Pool and a dedicated GitLab deployer
+service account when both `gitlab_namespace_id` and `gitlab_project_id` are set.
+GitLab jobs exchange their OIDC ID tokens for short-lived Google credentials;
+no service-account key or protected CI variable is required.
 
-After `.gitlab-ci.yml` reaches the default branch, every successful `main`
-pipeline performs the following steps:
+The CI configuration is split by purpose under `.gitlab/ci/`:
 
-1. Build and push the frontend and backend images for `linux/amd64`, tagged
-   with `CI_COMMIT_SHA`.
-2. Deploy the backend and then the frontend as new Cloud Run revisions.
-3. Verify `https://terraform-test.a3s.jp/api/health`.
+- Branch pushes run only lint and typecheck for affected components.
+- Merge requests run lint, typecheck, tests, builds, and security scans only
+  for affected components. A shared-package change checks both applications.
+- Infrastructure changes run `terraform fmt`, `terraform init -backend=false`,
+  and `terraform validate` without applying anything.
+- A `main` pipeline re-tests affected components, then waits at the manual
+  `staging:approve` job before building or deploying containers.
 
-Merge-request pipelines run lint, typecheck, tests, builds, and security scans,
-but never receive deployment credentials. The Workload Identity provider also
-rejects tokens unless their immutable GitLab namespace/project IDs match and
-`ref_path` is `refs/heads/main`.
+After `staging:approve` is selected, the `main` pipeline performs the following
+steps:
+
+1. Detect frontend and backend changes independently. Changes to
+   `packages/shared`, workspace manifests, the lockfile, or the CI definition
+   affect both images.
+2. Build only the affected images on GitLab Runner for `linux/amd64`, tag them
+   with `CI_COMMIT_SHA`, and push them directly to Google Artifact Registry.
+3. Deploy only the affected Cloud Run services. When both changed, deploy the
+   backend before the frontend.
+4. Verify the affected frontend or backend endpoint.
+
+Merge-request pipelines never receive deployment credentials. The Workload
+Identity provider also rejects tokens unless their immutable GitLab
+namespace/project IDs match and `ref_path` is `refs/heads/main`.
 
 Cloud Run image revisions are owned by GitLab CI. Terraform ignores subsequent
 image-only changes while continuing to manage service configuration such as

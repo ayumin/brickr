@@ -1,0 +1,178 @@
+.main-frontend-rules:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes:
+        - .dockerignore
+        - .gitlab-ci.yml
+        - .gitlab/ci/common.yml
+        - .gitlab/ci/main.yml
+        - apps/frontend/**/*
+        - packages/shared/**/*
+        - package.json
+        - pnpm-lock.yaml
+        - pnpm-workspace.yaml
+
+.main-backend-rules:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes:
+        - .dockerignore
+        - .gitlab-ci.yml
+        - .gitlab/ci/common.yml
+        - .gitlab/ci/main.yml
+        - apps/backend/**/*
+        - packages/shared/**/*
+        - package.json
+        - pnpm-lock.yaml
+        - pnpm-workspace.yaml
+
+.main-application-rules:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes:
+        - .dockerignore
+        - .gitlab-ci.yml
+        - .gitlab/ci/common.yml
+        - .gitlab/ci/main.yml
+        - apps/frontend/**/*
+        - apps/backend/**/*
+        - packages/shared/**/*
+        - package.json
+        - pnpm-lock.yaml
+        - pnpm-workspace.yaml
+
+"main:scope":
+  stage: validate
+  image: alpine:3.23
+  before_script: []
+  needs: []
+  script:
+    - echo "Selected post-merge checks for $CI_COMMIT_SHA"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# Re-test the merged commit before presenting the staging approval. These jobs
+# are still scoped to the components affected by the merge.
+"main:frontend:test":
+  extends: [.frontend-test, .main-frontend-rules]
+
+"main:backend:test":
+  extends: [.backend-test, .main-backend-rules]
+
+"main:shared:test":
+  extends: .shared-test
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes:
+        - .gitlab-ci.yml
+        - .gitlab/ci/common.yml
+        - .gitlab/ci/main.yml
+        - packages/shared/**/*
+        - package.json
+        - pnpm-lock.yaml
+        - pnpm-workspace.yaml
+
+# One explicit action authorizes both image creation and deployment. All jobs
+# after this gate remain automatic so a staging update needs only one click.
+"staging:approve":
+  extends: .main-application-rules
+  stage: approve
+  image: alpine:3.23
+  before_script: []
+  script:
+    - echo "Approved staging build and deployment for $CI_COMMIT_SHA"
+  when: manual
+  allow_failure: false
+  interruptible: false
+
+.gcp-staging-auth:
+  image: gcr.io/google.com/cloudsdktool/google-cloud-cli:slim
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: https://gitlab.com
+  variables:
+    GCP_PROJECT_ID: aaizawa-sandbox-505606
+    GCP_REGION: asia-northeast1
+    GCP_WIF_PROVIDER: projects/81103042660/locations/global/workloadIdentityPools/brickr-staging-gitlab/providers/gitlab
+    GCP_DEPLOY_SERVICE_ACCOUNT: brickr-staging-deployer@aaizawa-sandbox-505606.iam.gserviceaccount.com
+    BACKEND_IMAGE: asia-northeast1-docker.pkg.dev/aaizawa-sandbox-505606/brickr-staging/backend
+    FRONTEND_IMAGE: asia-northeast1-docker.pkg.dev/aaizawa-sandbox-505606/brickr-staging/frontend
+  before_script:
+    - umask 077
+    - printf '%s' "$GITLAB_OIDC_TOKEN" > "$CI_PROJECT_DIR/.gitlab-oidc-token"
+    - gcloud iam workload-identity-pools create-cred-config "$GCP_WIF_PROVIDER" --service-account="$GCP_DEPLOY_SERVICE_ACCOUNT" --credential-source-file="$CI_PROJECT_DIR/.gitlab-oidc-token" --output-file="$CI_PROJECT_DIR/.gcp-wif-credentials.json"
+    - gcloud auth login --cred-file="$CI_PROJECT_DIR/.gcp-wif-credentials.json" --brief
+    - gcloud config set project "$GCP_PROJECT_ID"
+  after_script:
+    - rm -f "$CI_PROJECT_DIR/.gitlab-oidc-token" "$CI_PROJECT_DIR/.gcp-wif-credentials.json"
+
+.staging-image:
+  extends: .gcp-staging-auth
+  stage: container
+  services:
+    - name: docker:27.5.1-dind
+      alias: docker
+  variables:
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_CERTDIR: /certs
+    DOCKER_CERT_PATH: /certs/client
+    DOCKER_TLS_VERIFY: "1"
+    DOCKER_BUILDKIT: "1"
+  before_script:
+    - !reference [.gcp-staging-auth, before_script]
+    - apt-get update
+    - DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends docker-cli docker-buildx
+    - gcloud auth print-access-token | docker login --username oauth2accesstoken --password-stdin "https://$GCP_REGION-docker.pkg.dev"
+  script:
+    - docker buildx build --pull --platform=linux/amd64 --push --file="$DOCKERFILE" --tag="$IMAGE:$CI_COMMIT_SHA" .
+
+"staging:backend-image":
+  extends: [.staging-image, .main-backend-rules]
+  needs:
+    - job: "staging:approve"
+      artifacts: false
+  variables:
+    DOCKERFILE: apps/backend/Dockerfile
+    IMAGE: asia-northeast1-docker.pkg.dev/aaizawa-sandbox-505606/brickr-staging/backend
+
+"staging:frontend-image":
+  extends: [.staging-image, .main-frontend-rules]
+  needs:
+    - job: "staging:approve"
+      artifacts: false
+  variables:
+    DOCKERFILE: apps/frontend/Dockerfile
+    IMAGE: asia-northeast1-docker.pkg.dev/aaizawa-sandbox-505606/brickr-staging/frontend
+
+"staging:backend-deploy":
+  extends: [.gcp-staging-auth, .main-backend-rules]
+  stage: deploy
+  interruptible: false
+  resource_group: staging
+  needs:
+    - job: "staging:backend-image"
+      artifacts: false
+  script:
+    - gcloud run services update brickr-staging-backend --project="$GCP_PROJECT_ID" --region="$GCP_REGION" --image="$BACKEND_IMAGE:$CI_COMMIT_SHA" --quiet
+    - curl --fail --silent --show-error --retry 12 --retry-delay 10 https://terraform-test.a3s.jp/api/health
+  environment:
+    name: staging
+    url: https://terraform-test.a3s.jp
+
+"staging:frontend-deploy":
+  extends: [.gcp-staging-auth, .main-frontend-rules]
+  stage: deploy
+  interruptible: false
+  resource_group: staging
+  needs:
+    - job: "staging:frontend-image"
+      artifacts: false
+    - job: "staging:backend-deploy"
+      optional: true
+      artifacts: false
+  script:
+    - gcloud run services update brickr-staging-frontend --project="$GCP_PROJECT_ID" --region="$GCP_REGION" --image="$FRONTEND_IMAGE:$CI_COMMIT_SHA" --quiet
+    - curl --fail --silent --show-error --retry 12 --retry-delay 10 --output /dev/null https://terraform-test.a3s.jp/
+  environment:
+    name: staging
+    url: https://terraform-test.a3s.jp

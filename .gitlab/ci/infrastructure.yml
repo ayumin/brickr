@@ -1,0 +1,24 @@
+"infra:validate":
+  stage: validate
+  image:
+    name: hashicorp/terraform:1.15.8
+    entrypoint: [""]
+  before_script: []
+  needs: []
+  cache:
+    key:
+      files:
+        - infra/.terraform.lock.hcl
+    paths:
+      - infra/.terraform/providers/
+  rules:
+    - if: $CI_COMMIT_BRANCH || $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - .gitlab-ci.yml
+        - .gitlab/ci/common.yml
+        - .gitlab/ci/infrastructure.yml
+        - infra/**/*
+  script:
+    - terraform -chdir=infra fmt -check -recursive
+    - terraform -chdir=infra init -backend=false -input=false
+    - terraform -chdir=infra validate
