@@ -1,5 +1,5 @@
 /**
- * Room lifecycle routes (issues #150, #151, #154, #155).
+ * Room lifecycle routes (issues #150, #151, #154, #155, #166).
  *
  * Issue #150 introduced the `defineRoute` pattern with `GET /api/rooms/:id`.
  * Issue #151 adds the full lifecycle:
@@ -18,6 +18,9 @@
  *   POST   /api/rooms/:id/members/:mid/reject  — reject a pending membership
  * Issue #155 adds the visibility-aware room list:
  *   GET    /api/rooms          — list rooms visible to the caller
+ * Issue #166 adds room analysis snapshots:
+ *   GET    /api/rooms/:id/snapshot  — get the current snapshot (active members)
+ *   POST   /api/rooms/:id/snapshot  — generate/update the snapshot (owner/admin)
  *
  * Every route uses `defineRoute` so auth, Zod validation, DomainError mapping,
  * and OpenAPI documentation are all derived from the same definition.
@@ -40,6 +43,34 @@ export const roomIdParams = z.object({
 export const membershipIdParams = z.object({
   id: z.string().trim().min(1).max(64).describe("Room ID"),
   mid: z.string().trim().min(1).max(64).describe("Membership ID"),
+});
+
+// ---------------------------------------------------------------------------
+// Snapshot response schemas
+// ---------------------------------------------------------------------------
+
+const snapshotDtoSchema: z.ZodType = z.lazy(() =>
+  z.object({
+    id: z.string(),
+    roomId: z.string(),
+    postCount: z.number().int().min(0),
+    latestPostId: z.string().nullable(),
+    summary: z.string().nullable(),
+    status: z.enum(["pending", "completed", "failed"]),
+    error: z.string().nullable(),
+    createdAt: z.string(),
+    updatedAt: z.string(),
+    lastSuccessful: snapshotDtoSchema.optional(),
+  }),
+);
+
+export const snapshotResponseSchema = z.object({
+  snapshot: snapshotDtoSchema,
+});
+
+export const updateSnapshotResponseSchema = z.object({
+  snapshot: snapshotDtoSchema,
+  updated: z.boolean(),
 });
 
 // ---------------------------------------------------------------------------
@@ -228,6 +259,40 @@ export const listRoomsOpenApiMeta = {
     "private rooms are only visible to active members. " +
     "Owners receive a pendingCount badge field with the number of pending join requests.",
   successDescription: "The list of visible rooms",
+};
+
+export const getRoomSnapshotOpenApiMeta = {
+  operationId: "getRoomSnapshot",
+  tags: ["Simulations"] as string[],
+  summary: "Get the current room analysis snapshot",
+  description:
+    "Returns the latest analysis snapshot for a room. " +
+    "Active members of the room, the owner, and admins may view. " +
+    "Non-members of closed/private rooms are refused with 403. " +
+    "Returns 404 when no snapshot has been generated yet.",
+  successDescription: "The current room analysis snapshot",
+  extraResponses: {
+    "403": { $ref: "#/components/responses/Forbidden" },
+    "404": { $ref: "#/components/responses/NotFound" },
+  },
+};
+
+export const updateRoomSnapshotOpenApiMeta = {
+  operationId: "updateRoomSnapshot",
+  tags: ["Simulations"] as string[],
+  summary: "Generate or update the room analysis snapshot",
+  description:
+    "Triggers generation of a new analysis snapshot for a room. " +
+    "Only the room owner or an admin may call this endpoint. " +
+    "Archived rooms are refused with 409. " +
+    "When postCount and latestPostId are unchanged since the last completed snapshot, " +
+    "no new snapshot is generated and updated: false is returned.",
+  successDescription: "The snapshot and whether it was regenerated",
+  extraResponses: {
+    "403": { $ref: "#/components/responses/Forbidden" },
+    "404": { $ref: "#/components/responses/NotFound" },
+    "409": { $ref: "#/components/responses/Conflict" },
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -440,6 +505,17 @@ buildOpenApiOperation(
 
 buildOpenApiOperation(
   {
+    method: "GET",
+    path: "/api/rooms/:id/snapshot",
+    auth: "required",
+    params: roomIdParams,
+    response: snapshotResponseSchema,
+  },
+  getRoomSnapshotOpenApiMeta,
+);
+
+buildOpenApiOperation(
+  {
     method: "POST",
     path: "/api/rooms/:id/members/:mid/ban",
     auth: "required",
@@ -480,6 +556,17 @@ buildOpenApiOperation(
     response: z.object({}),
   },
   rejectRoomMemberOpenApiMeta,
+);
+
+buildOpenApiOperation(
+  {
+    method: "POST",
+    path: "/api/rooms/:id/snapshot",
+    auth: "required",
+    params: roomIdParams,
+    response: updateSnapshotResponseSchema,
+  },
+  updateRoomSnapshotOpenApiMeta,
 );
 
 // ---------------------------------------------------------------------------
@@ -670,6 +757,30 @@ export function registerRoomsRoutes(app: FastifyInstance, services: AppServices)
     handler: async ({ user, params, reply }) => {
       await services.roomMemberships.reject(params.id, params.mid, user);
       return reply.status(204).send();
+    },
+  }).register(app);
+
+  // GET /api/rooms/:id/snapshot — get the current analysis snapshot (issue #166)
+  defineRoute({
+    method: "GET",
+    path: "/api/rooms/:id/snapshot",
+    auth: "required",
+    params: roomIdParams,
+    response: snapshotResponseSchema,
+    handler: async ({ user, params }) => {
+      return services.roomAnalysisSnapshot.get(params.id, user);
+    },
+  }).register(app);
+
+  // POST /api/rooms/:id/snapshot — generate/update the analysis snapshot (issue #166)
+  defineRoute({
+    method: "POST",
+    path: "/api/rooms/:id/snapshot",
+    auth: "required",
+    params: roomIdParams,
+    response: updateSnapshotResponseSchema,
+    handler: async ({ user, params }) => {
+      return services.roomAnalysisSnapshot.update(params.id, user);
     },
   }).register(app);
 }
