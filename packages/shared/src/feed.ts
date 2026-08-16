@@ -10,18 +10,21 @@ export const FEED_FILTERS = ["all", "mine"] as const;
 
 export type FeedFilter = (typeof FEED_FILTERS)[number];
 
+/** The REST/SSE source consumed by a thread feed. */
+export type ThreadFeedSource =
+  | { kind: "all" }
+  | { kind: "room"; roomId: string };
+
 /**
  * The room a thread lives in, as the feed shows it.
  *
- * `isFeed` marks the reserved global simulation (§8.2), so the client can label
- * it「フィード」without being told about `scope`, which stays internal. Whether a
- * room is stopped is deliberately absent: that shows up only through
- * `capabilities`, never as a label on the feed (§16.3).
+ * The unified feed is a view across rooms, not a room of its own. Consequently
+ * this reference contains no global-feed marker. Whether the caller may enter
+ * or interact with the room is expressed only through `capabilities`.
  */
 export type FeedRoomRefDto = {
   id: string;
   title: string;
-  isFeed: boolean;
 };
 
 /**

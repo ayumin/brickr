@@ -1,14 +1,13 @@
-import type { FeedThreadDto } from "./feed.js";
-
 /**
- * SSE event names sent on `GET /api/feed/events` and `GET /api/simulations/:id/events`.
+ * State-change notifications sent by the Feed and Room SSE streams.
  *
- * Every one of them is anonymous (§11.2). The old `character.*` events named the
- * character that was generating, which made the feed's anonymity pointless: a
- * subscriber could match a name against a post and know its author was an AI.
+ * SSE is not a state-recovery mechanism. Payloads deliberately contain only
+ * identifiers and minimal transient state; clients re-fetch authoritative data
+ * over REST. Delivery order is not guaranteed and clients should discard recent
+ * duplicate `eventId` values.
  */
 export const SSE_EVENT_TYPES = [
-  "feed.post-created",
+  "post.created",
   "response.started",
   "response.finished",
 ] as const;
@@ -20,17 +19,20 @@ export const RESPONSE_OUTCOMES = ["posted", "skipped", "failed"] as const;
 
 export type ResponseOutcome = (typeof RESPONSE_OUTCOMES)[number];
 
-/**
- * A post was created, carrying the thread as it now stands.
- *
- * The whole thread rather than the single post: reply count, the newest two
- * replies, `lastActivityAt` and `capabilities` would otherwise have to be
- * recomputed by every client, which is the same feed logic implemented twice and
- * guaranteed to drift (§11.3). The server stays the only source of truth.
- */
-export type FeedPostCreatedEvent = {
-  type: "feed.post-created";
-  thread: FeedThreadDto;
+export type SseEventBase<T extends SseEventType> = {
+  /** Unique delivery identifier used by clients for short-term deduplication. */
+  eventId: string;
+  /** The affected room. `null` is reserved for feed-wide state changes. */
+  roomId: string | null;
+  type: T;
+  /** ISO 8601 time at which the notification was published. */
+  timestamp: string;
+};
+
+/** A post changed a thread. Fetch the relevant feed or thread over REST. */
+export type PostCreatedEvent = SseEventBase<"post.created"> & {
+  postId: string;
+  threadRootId: string;
 };
 
 /**
@@ -39,22 +41,18 @@ export type FeedPostCreatedEvent = {
  * `activityId` means nothing outside this pair of events: it exists only so a
  * client can match a finish to a start and say "n responses in flight" (§11.3).
  */
-export type ResponseStartedEvent = {
-  type: "response.started";
+export type ResponseStartedEvent = SseEventBase<"response.started"> & {
   activityId: string;
-  roomId: string;
   targetPostId: string;
   threadRootId: string;
 };
 
 /** The end of one `response.started`. Exactly one arrives for every start. */
-export type ResponseFinishedEvent = {
-  type: "response.finished";
+export type ResponseFinishedEvent = SseEventBase<"response.finished"> & {
   activityId: string;
-  roomId: string;
   targetPostId: string;
   threadRootId: string;
   outcome: ResponseOutcome;
 };
 
-export type SseEvent = FeedPostCreatedEvent | ResponseStartedEvent | ResponseFinishedEvent;
+export type SseEvent = PostCreatedEvent | ResponseStartedEvent | ResponseFinishedEvent;
