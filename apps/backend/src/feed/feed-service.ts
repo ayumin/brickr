@@ -373,8 +373,8 @@ function withConcerningReply(previews: Post[], concerning: Post | undefined): Po
   if (!concerning || previews.some((post) => post.id === concerning.id)) {
     return previews;
   }
-  const newestExisting = previews.at(-1);
-  const merged = newestExisting ? [concerning, newestExisting] : [concerning];
+  const kept = previews.slice(-(REPLY_PREVIEW_COUNT - 1));
+  const merged = [concerning, ...kept];
   return merged.sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime());
 }
 
