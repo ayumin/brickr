@@ -1,13 +1,24 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Icon } from "./Icon";
 
 export type SecretResult = { title: string; value: string };
 
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+function focusableElements(container: HTMLElement): HTMLElement[] {
+  return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
+}
+
 /**
  * Shown exactly once (CLAUDE.md §66.10): the invite code or temporary
  * password is never retrievable again after this, so closing requires an
  * explicit click rather than a background click that could happen by accident.
+ * Deliberately does not use the shared `Dialog` (its backdrop-click-to-close
+ * would violate that "explicit click only" requirement), but still needs the
+ * same keyboard accessibility as `Dialog`: a focus trap, Escape-to-close, and
+ * focus restored to the trigger on close (§27).
  *
  * Shared by `UserManagementList` (reset-password) and `InviteSettings`
  * (invite code) — both surface a one-time secret the same way.
@@ -21,11 +32,57 @@ export function SecretResultDialog({
 }) {
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
+    const target = containerRef.current ? focusableElements(containerRef.current)[0] : null;
+    target?.focus();
+
+    return () => {
+      previouslyFocusedRef.current?.focus();
+    };
+    // Deliberately runs once per mount only, matching Dialog.tsx's rationale.
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const container = containerRef.current;
+      if (!container) return;
+      const elements = focusableElements(container);
+      if (elements.length === 0) return;
+      const first = elements[0];
+      const last = elements[elements.length - 1];
+      const active = document.activeElement;
+      if (event.shiftKey) {
+        if (active === first || !container.contains(active)) {
+          event.preventDefault();
+          last?.focus();
+        }
+      } else if (active === last || !container.contains(active)) {
+        event.preventDefault();
+        first?.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [onClose]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
       <div
+        ref={containerRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="secret-result-title"
