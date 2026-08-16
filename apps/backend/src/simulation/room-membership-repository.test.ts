@@ -10,12 +10,7 @@ describe("RoomMembershipRepository.updateStatus", () => {
     const db = { roomMembership: { update } } as unknown as Db;
 
     await expect(
-      new RoomMembershipRepository(db).updateStatus(
-        "room-1",
-        "character",
-        "char-1",
-        "active",
-      ),
+      new RoomMembershipRepository(db).updateStatus("membership-1", "active"),
     ).resolves.toBeNull();
   });
 
@@ -25,12 +20,7 @@ describe("RoomMembershipRepository.updateStatus", () => {
     const db = { roomMembership: { update } } as unknown as Db;
 
     await expect(
-      new RoomMembershipRepository(db).updateStatus(
-        "room-1",
-        "character",
-        "char-1",
-        "active",
-      ),
+      new RoomMembershipRepository(db).updateStatus("membership-1", "active"),
     ).rejects.toBe(databaseError);
   });
 });
