@@ -209,6 +209,14 @@ resource "google_cloud_run_v2_service" "frontend" {
         value = ""
       }
 
+      # The staging image currently runs Vite's development server. Permit
+      # only the hostname owned by this environment instead of disabling
+      # Vite's DNS-rebinding protection globally.
+      env {
+        name  = "__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS"
+        value = var.domain_name
+      }
+
       startup_probe {
         initial_delay_seconds = 2
         timeout_seconds       = 3
