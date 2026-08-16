@@ -4,7 +4,6 @@ import { toFeedCapabilities, type FeedCapabilityInput } from "./feed-capabilitie
 function input(overrides: Partial<FeedCapabilityInput> = {}): FeedCapabilityInput {
   return {
     isSignedIn: true,
-    isFeedRoom: false,
     isStoppedRoom: false,
     isRoomOwnerOrAdmin: false,
     replyCount: 0,
@@ -29,12 +28,6 @@ describe("feed capabilities (§10.1, §16.3)", () => {
       canQuote: true,
       canLoadMoreReplies: true,
     });
-  });
-
-  /** The global row is the feed itself; there is no room screen to open (§10.2). */
-  it("never offers to open the feed as a room", () => {
-    expect(toFeedCapabilities(input({ isFeedRoom: true })).canOpenRoom).toBe(false);
-    expect(toFeedCapabilities(input({ isFeedRoom: true })).canReply).toBe(true);
   });
 
   /**

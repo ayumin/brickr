@@ -5,7 +5,6 @@ import {
   bulkCreateCharactersSchema,
   bulkDeleteCharactersSchema,
   createPostSchema,
-  createSimulationSchema,
   handleParams,
   loginSchema,
   llmBudgetProviderParams,
@@ -14,7 +13,6 @@ import {
   setBudgetLimitSchema,
   signupSchema,
   updateApplicationSettingsSchema,
-  updateSimulationSchema,
 } from "./schemas.js";
 
 const VALID_CHARACTER: z.input<typeof saveCharacterSchema> = {
@@ -42,20 +40,6 @@ const VALID_SIGNUP: z.input<typeof signupSchema> = {
 };
 
 const PNG_DATA_URL = "data:image/png;base64,iVBORw0KGgo=";
-
-describe("simulation title validation", () => {
-  it("accepts a non-empty name and trims it", () => {
-    expect(createSimulationSchema.parse({ title: "  議論  " }).title).toBe("議論");
-    expect(updateSimulationSchema.parse({ title: "  過去の議論  " }).title).toBe(
-      "過去の議論",
-    );
-  });
-
-  it("rejects an empty or overlong name when renaming", () => {
-    expect(updateSimulationSchema.safeParse({ title: "   " }).success).toBe(false);
-    expect(updateSimulationSchema.safeParse({ title: "a".repeat(121) }).success).toBe(false);
-  });
-});
 
 describe("LLM budget validation", () => {
   it("accepts only registered provider ids", () => {

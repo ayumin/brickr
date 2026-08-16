@@ -8,7 +8,6 @@ import { DomainError } from "../domain-error.js";
 import { optionalField } from "../persistence/repository-mapping.js";
 import type { PostService } from "../posts/post-service.js";
 import type { Post } from "../posts/post.js";
-import { isGlobalSimulation } from "../simulation/simulation.js";
 import type { SimulationRepository } from "../simulation/simulation-repository.js";
 import {
   assertRoomReadable,
@@ -360,7 +359,6 @@ export class FeedService {
       lastActivityAt: row.root.threadActivityAt.toISOString(),
       capabilities: toFeedCapabilities({
         isSignedIn: reader !== null,
-        isFeedRoom: isGlobalSimulation(row.room),
         isStoppedRoom: row.room.status === "archived",
         isRoomOwnerOrAdmin: reader !== null && isSimulationOwnerOrAdmin(row.room, reader),
         replyCount: input.replyCount,

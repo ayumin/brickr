@@ -1,9 +1,9 @@
 import type {
   PostDto,
-  SimulationAnalysisDto,
-  SimulationAuthorRankingDto,
-  SimulationPostRankingDto,
-  SimulationContentSummaryDto,
+  RoomAnalysisDto,
+  RoomAuthorRankingDto,
+  RoomPostRankingDto,
+  RoomContentSummaryDto,
 } from "@brickr/shared";
 import { z } from "zod";
 import type { LLMClient } from "../llm/llm-client.js";
@@ -11,7 +11,6 @@ import type { LLMProviderRegistry } from "../llm/provider-registry.js";
 import type { PostService } from "../posts/post-service.js";
 import type { SimulationRepository } from "./simulation-repository.js";
 import {
-  assertNotGlobalSimulation,
   assertSimulationOwnerOrAdmin,
   SimulationNotFoundError,
   toSimulationDto,
@@ -38,11 +37,9 @@ export class SimulationAnalysisService {
     private readonly providers: LLMProviderRegistry,
   ) {}
 
-  async analyze(id: string, actor: SimulationActor): Promise<SimulationAnalysisDto> {
+  async analyze(id: string, actor: SimulationActor): Promise<RoomAnalysisDto> {
     const simulation = await this.simulations.findById(id);
     if (!simulation) throw new SimulationNotFoundError(id);
-    // The feed is not a room, so it has no room analysis (§8.2).
-    assertNotGlobalSimulation(simulation);
     assertSimulationOwnerOrAdmin(simulation, actor);
 
     const posts = await this.posts.listByRoom(id);
@@ -61,7 +58,7 @@ export class SimulationAnalysisService {
     };
   }
 
-  private async summarize(posts: PostDto[]): Promise<SimulationContentSummaryDto> {
+  private async summarize(posts: PostDto[]): Promise<RoomContentSummaryDto> {
     if (posts.length === 0) return emptySummary();
 
     const provider = this.providers.preferred();
@@ -112,14 +109,14 @@ const simulationSummaryJsonSchema = {
   required: ["overallTopics", "postOverview", "highEngagementTopics", "lowEngagementTopics"],
 };
 
-export function parseSimulationSummary(text: string): SimulationContentSummaryDto {
+export function parseSimulationSummary(text: string): RoomContentSummaryDto {
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
   if (start < 0 || end < start) throw new Error("summary JSON was not found");
   return summarySchema.parse(JSON.parse(text.slice(start, end + 1)));
 }
 
-export function rankPosts(posts: PostDto[]): SimulationPostRankingDto[] {
+export function rankPosts(posts: PostDto[]): RoomPostRankingDto[] {
   const reactions = receivedReactionCounts(posts);
 
   return posts
@@ -144,10 +141,10 @@ export function rankPosts(posts: PostDto[]): SimulationPostRankingDto[] {
     .slice(0, RANKING_LIMIT);
 }
 
-export function rankAuthors(posts: PostDto[]): SimulationAuthorRankingDto[] {
+export function rankAuthors(posts: PostDto[]): RoomAuthorRankingDto[] {
   const received = receivedReactionCounts(posts);
 
-  const authors = new Map<string, SimulationAuthorRankingDto>();
+  const authors = new Map<string, RoomAuthorRankingDto>();
   for (const post of posts) {
     const current = authors.get(post.author.id) ?? {
       author: post.author,
@@ -174,7 +171,7 @@ export function rankAuthors(posts: PostDto[]): SimulationAuthorRankingDto[] {
     .slice(0, AUTHOR_RANKING_LIMIT);
 }
 
-function fallbackSummary(posts: PostDto[]): SimulationContentSummaryDto {
+function fallbackSummary(posts: PostDto[]): RoomContentSummaryDto {
   const topics = posts
     .filter((post) => post.content.trim().length > 0)
     .slice(0, 3)
@@ -208,7 +205,7 @@ function fallbackSummary(posts: PostDto[]): SimulationContentSummaryDto {
   };
 }
 
-function emptySummary(): SimulationContentSummaryDto {
+function emptySummary(): RoomContentSummaryDto {
   return {
     overallTopics: "まだ話題はありません。",
     postOverview: "このシミュレーションにはまだ投稿がありません。",

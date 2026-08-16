@@ -1,4 +1,4 @@
-import { GLOBAL_SIMULATION_ID, GLOBAL_SIMULATION_TITLE, type PostDto } from "@brickr/shared";
+import type { PostDto } from "@brickr/shared";
 import { describe, expect, it, vi } from "vitest";
 import type { PostService } from "../posts/post-service.js";
 import type { Post } from "../posts/post.js";
@@ -24,14 +24,6 @@ const ROOM: FeedRoom = {
   scope: "room",
   visibility: "public",
   createdByUserId: "owner-1",
-};
-
-const FEED_ROOM: FeedRoom = {
-  id: GLOBAL_SIMULATION_ID,
-  title: GLOBAL_SIMULATION_TITLE,
-  status: "active",
-  scope: "global",
-  visibility: "public",
 };
 
 const STOPPED_ROOM: FeedRoom = { ...ROOM, id: "room-2", title: "止まった部屋", status: "archived" };
@@ -396,18 +388,6 @@ describe("FeedService reply previews (§12.2)", () => {
 });
 
 describe("FeedService rooms and capabilities (§10.1, §16.3)", () => {
-  it("labels the reserved global row as the feed", async () => {
-    const globalPost = post({ id: "root-1", roomId: GLOBAL_SIMULATION_ID });
-    const { service } = makeHarness({ posts: [globalPost], rooms: [FEED_ROOM] });
-
-    const page = await service.getUnifiedFeed({ reader: READER, filter: "all" });
-
-    expect(page.threads[0]?.room).toEqual({
-      id: GLOBAL_SIMULATION_ID,
-      title: GLOBAL_SIMULATION_TITLE,
-    });
-  });
-
   it("keeps stopped rooms in the unified feed but refuses to write to them", async () => {
     const stopped = post({ id: "root-1", roomId: STOPPED_ROOM.id });
     const { service } = makeHarness({ posts: [stopped], rooms: [STOPPED_ROOM] });
@@ -459,7 +439,6 @@ describe("FeedService rooms and capabilities (§10.1, §16.3)", () => {
     const page = await service.getUnifiedFeed({ reader: READER, filter: "all" });
 
     expect(page.threads[0]?.room.title).toBe("無題のルーム");
-    expect(page.threads[0]?.room).not.toHaveProperty("isFeed");
   });
 });
 
@@ -619,18 +598,6 @@ describe("FeedService room feed (§10.2, §10.4)", () => {
     const page = await service.getRoomFeed(ROOM.id, { reader: READER, filter: "all" });
 
     expect(page.threads.map((thread) => thread.root.id)).toEqual(["root-1"]);
-  });
-
-  /** The global row is the feed; serving it here would give it a second surface. */
-  it("refuses the reserved global simulation", async () => {
-    const { service } = makeHarness({
-      posts: [post({ id: "root-1", roomId: GLOBAL_SIMULATION_ID })],
-      rooms: [FEED_ROOM],
-    });
-
-    await expect(
-      service.getRoomFeed(GLOBAL_SIMULATION_ID, { reader: READER, filter: "all" }),
-    ).rejects.toThrow(SimulationNotFoundError);
   });
 
   it("answers as if a stopped room did not exist for anyone else", async () => {
@@ -961,18 +928,6 @@ describe("FeedService.buildThreadActivity (§11.3)", () => {
       status: "active",
       scope: "room",
       createdByUserId: "owner-1",
-    });
-  });
-
-  it("labels a post in the reserved global row as the feed", async () => {
-    const globalPost = post({ id: "root-2", roomId: GLOBAL_SIMULATION_ID });
-    const { service } = makeHarness({ posts: [globalPost], rooms: [FEED_ROOM] });
-
-    const activity = await service.buildThreadActivity(globalPost);
-
-    expect(activity.thread.room).toEqual({
-      id: GLOBAL_SIMULATION_ID,
-      title: GLOBAL_SIMULATION_TITLE,
     });
   });
 

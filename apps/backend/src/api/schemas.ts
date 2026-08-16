@@ -32,14 +32,6 @@ export const setBudgetLimitSchema = z.object({
   tokenLimit: z.number().int().min(0),
 });
 
-export const createSimulationSchema = z.object({
-  title: z.string().trim().min(1).max(120).optional(),
-});
-
-export const updateSimulationSchema = z.object({
-  title: z.string().trim().min(1).max(120),
-});
-
 const imageDataUrl = z
   .string()
   .max(MAX_IMAGE_DATA_URL_LENGTH)
@@ -176,7 +168,7 @@ export const idParams = z.object({ id });
 export const threadRootParams = z.object({ threadRootId: id });
 
 /**
- * `GET /api/feed` and `GET /api/simulations/:id/feed` (§9.4, §10.1).
+ * `GET /api/feed` (§9.4, §10.1).
  *
  * The page size is not accepted here: it is fixed server-side so a client cannot
  * ask for a page that makes the feed slow. The cursor is passed through as an

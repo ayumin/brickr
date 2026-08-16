@@ -24,7 +24,6 @@ import type { RoomMembershipRepository } from "./room-membership-repository.js";
 import type { RoomMembership } from "./room-membership-repository.js";
 import { CannotModifyOwnerError } from "./room-membership-errors.js";
 import {
-  assertNotGlobalSimulation,
   isSimulationOwnerOrAdmin,
   type SimulationActor,
 } from "./simulation-service.js";
@@ -130,7 +129,6 @@ export class RoomMembershipService {
    */
   async invite(input: InviteInput, actor: SimulationActor): Promise<RoomMembershipDto> {
     const room = await this.requireRoom(input.roomId);
-    assertNotGlobalSimulation(room);
     this.assertOwnerOrAdmin(room, actor, input.roomId);
 
     if (room.status === "archived") {
@@ -189,7 +187,6 @@ export class RoomMembershipService {
     actor: SimulationActor,
   ): Promise<RoomMembershipDto> {
     const room = await this.requireRoom(roomId);
-    assertNotGlobalSimulation(room);
     this.assertOwnerOrAdmin(room, actor, roomId);
 
     if (room.status === "archived") {
@@ -229,7 +226,6 @@ export class RoomMembershipService {
     actor: SimulationActor,
   ): Promise<RoomMembershipDto> {
     const room = await this.requireRoom(roomId);
-    assertNotGlobalSimulation(room);
     this.assertOwnerOrAdmin(room, actor, roomId);
 
     if (room.status === "archived") {
@@ -265,7 +261,6 @@ export class RoomMembershipService {
     actor: SimulationActor,
   ): Promise<RoomMembershipDto> {
     const room = await this.requireRoom(roomId);
-    assertNotGlobalSimulation(room);
     this.assertOwnerOrAdmin(room, actor, roomId);
 
     const membership = await this.requireMembership(membershipId, roomId);
@@ -288,7 +283,6 @@ export class RoomMembershipService {
     actor: SimulationActor,
   ): Promise<RoomMembershipDto[]> {
     const room = await this.requireRoom(roomId);
-    assertNotGlobalSimulation(room);
     this.assertOwnerOrAdmin(room, actor, roomId);
 
     const memberships = await this.deps.memberships.findByRoom(roomId, "pending");
@@ -305,7 +299,6 @@ export class RoomMembershipService {
     actor: SimulationActor,
   ): Promise<RoomMembershipDto> {
     const room = await this.requireRoom(roomId);
-    assertNotGlobalSimulation(room);
     this.assertOwnerOrAdmin(room, actor, roomId);
 
     if (room.status === "archived") {
@@ -333,7 +326,6 @@ export class RoomMembershipService {
     actor: SimulationActor,
   ): Promise<void> {
     const room = await this.requireRoom(roomId);
-    assertNotGlobalSimulation(room);
     this.assertOwnerOrAdmin(room, actor, roomId);
 
     const membership = await this.requireMembership(membershipId, roomId);

@@ -4,7 +4,7 @@
  * Verifies:
  *   - create: room + owner membership created in a transaction
  *   - update: title update, visibility immutability, owner/admin only
- *   - archive: owner/admin only, global room rejected
+ *   - archive: owner/admin only
  *   - delete: archived rooms only, owner/admin only
  *   - archiveOwnedBy: called on owner suspension
  *   - join: public auto-join, open pending, closed/private rejected
@@ -30,8 +30,7 @@ import {
 import { CannotModifyOwnerError } from "./room-membership-errors.js";
 import type { Simulation, SimulationActor } from "./simulation.js";
 import type { RoomMembership } from "./room-membership-repository.js";
-import { GLOBAL_SIMULATION_ID } from "@brickr/shared";
-import { GlobalSimulationMutationError } from "./simulation-service.js";
+
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -237,17 +236,6 @@ describe("RoomService.update", () => {
     );
   });
 
-  it("throws GlobalSimulationMutationError for the global room", async () => {
-    const { service } = makeService({
-      findById: vi.fn(() =>
-        Promise.resolve(makeRoom({ id: GLOBAL_SIMULATION_ID, scope: "global" })),
-      ),
-    });
-
-    await expect(
-      service.update(GLOBAL_SIMULATION_ID, { title: "x" }, ADMIN),
-    ).rejects.toThrow(GlobalSimulationMutationError);
-  });
 });
 
 // ── archive ───────────────────────────────────────────────────────────────────
@@ -284,17 +272,6 @@ describe("RoomService.archive", () => {
     await expect(service.archive("missing", OWNER)).rejects.toThrow(RoomNotFoundError);
   });
 
-  it("throws GlobalSimulationMutationError for the global room", async () => {
-    const { service } = makeService({
-      findById: vi.fn(() =>
-        Promise.resolve(makeRoom({ id: GLOBAL_SIMULATION_ID, scope: "global" })),
-      ),
-    });
-
-    await expect(service.archive(GLOBAL_SIMULATION_ID, ADMIN)).rejects.toThrow(
-      GlobalSimulationMutationError,
-    );
-  });
 });
 
 // ── delete ────────────────────────────────────────────────────────────────────
@@ -344,17 +321,6 @@ describe("RoomService.delete", () => {
     await expect(service.delete("room-1", OWNER)).rejects.toThrow(RoomNotArchivedError);
   });
 
-  it("throws GlobalSimulationMutationError for the global room", async () => {
-    const { service } = makeService({
-      findById: vi.fn(() =>
-        Promise.resolve(makeRoom({ id: GLOBAL_SIMULATION_ID, scope: "global", status: "archived" })),
-      ),
-    });
-
-    await expect(service.delete(GLOBAL_SIMULATION_ID, ADMIN)).rejects.toThrow(
-      GlobalSimulationMutationError,
-    );
-  });
 });
 
 // ── archiveOwnedBy ────────────────────────────────────────────────────────────
@@ -648,17 +614,6 @@ describe("RoomService.removeMembership", () => {
     expect(memberships.updateStatusByMember).not.toHaveBeenCalled();
   });
 
-  it("refuses to mutate the global room", async () => {
-    const { service } = makeService({
-      findById: vi.fn(() =>
-        Promise.resolve(makeRoom({ id: GLOBAL_SIMULATION_ID, scope: "global" })),
-      ),
-    });
-
-    await expect(
-      service.removeMembership(GLOBAL_SIMULATION_ID, OTHER.id, ADMIN),
-    ).rejects.toThrow(GlobalSimulationMutationError);
-  });
 });
 
 // ── banMember ─────────────────────────────────────────────────────────────────
@@ -707,15 +662,4 @@ describe("RoomService.banMember", () => {
     expect(memberships.updateStatusByMember).not.toHaveBeenCalled();
   });
 
-  it("refuses to mutate the global room", async () => {
-    const { service } = makeService({
-      findById: vi.fn(() =>
-        Promise.resolve(makeRoom({ id: GLOBAL_SIMULATION_ID, scope: "global" })),
-      ),
-    });
-
-    await expect(
-      service.banMember(GLOBAL_SIMULATION_ID, OTHER.id, ADMIN),
-    ).rejects.toThrow(GlobalSimulationMutationError);
-  });
 });

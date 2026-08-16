@@ -109,7 +109,7 @@ const roomSummarySchema = z.object({
   canManage: z.boolean(),
 });
 
-// The service returns { simulation: SimulationSummaryDto }; the response schema
+// The service returns { simulation: RoomSummaryDto }; the response schema
 // mirrors that shape for OpenAPI documentation.
 export const roomSummaryResponseSchema = z.object({
   simulation: roomSummarySchema,
