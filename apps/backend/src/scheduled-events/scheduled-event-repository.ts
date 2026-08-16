@@ -1,10 +1,25 @@
-import { Prisma, type Db } from "../persistence/prisma.js";
+import { DomainError } from "../domain-error.js";
+import { Prisma, isRecordNotFoundError, type Db } from "../persistence/prisma.js";
 import type {
   EventStatus,
   NewScheduledEvent,
   ScheduledEvent,
   ScheduledEventType,
 } from "./scheduled-event.js";
+
+/**
+ * Raised by `markCompleted`, `markFailed`, and `resetForRetry` when the event
+ * no longer exists at the time of the update — e.g. it was concurrently
+ * cancelled or reclaimed and then deleted. Callers should treat this as a
+ * no-op rather than a fatal error.
+ */
+export class ScheduledEventNotFoundError extends DomainError {
+  readonly httpStatus = 404;
+  readonly errorCode = "not_found" as const;
+  constructor(id: string) {
+    super(`scheduled event "${id}" not found`);
+  }
+}
 
 /**
  * How long a worker lock is considered valid before another worker may reclaim
@@ -244,37 +259,59 @@ export class ScheduledEventRepository {
 
   /**
    * Marks an event as completed. Called by the worker after successful execution.
+   *
+   * Throws `ScheduledEventNotFoundError` if the event no longer exists (e.g. it
+   * was concurrently cancelled between the worker claiming it and finishing).
    */
   async markCompleted(id: string): Promise<ScheduledEvent> {
-    const row = await this.db.scheduledEvent.update({
-      where: { id },
-      data: { status: "completed", lockedBy: null, lockedAt: null },
-    });
-    return fromPrismaRow(row);
+    try {
+      const row = await this.db.scheduledEvent.update({
+        where: { id },
+        data: { status: "completed", lockedBy: null, lockedAt: null },
+      });
+      return fromPrismaRow(row);
+    } catch (error) {
+      if (isRecordNotFoundError(error)) throw new ScheduledEventNotFoundError(id);
+      throw error;
+    }
   }
 
   /**
    * Marks an event as failed and records the error. The worker decides whether
    * to retry (by resetting to pending) based on the attempt count.
+   *
+   * Throws `ScheduledEventNotFoundError` if the event no longer exists.
    */
   async markFailed(id: string, error: string): Promise<ScheduledEvent> {
-    const row = await this.db.scheduledEvent.update({
-      where: { id },
-      data: { status: "failed", lockedBy: null, lockedAt: null, lastError: error },
-    });
-    return fromPrismaRow(row);
+    try {
+      const row = await this.db.scheduledEvent.update({
+        where: { id },
+        data: { status: "failed", lockedBy: null, lockedAt: null, lastError: error },
+      });
+      return fromPrismaRow(row);
+    } catch (err) {
+      if (isRecordNotFoundError(err)) throw new ScheduledEventNotFoundError(id);
+      throw err;
+    }
   }
 
   /**
    * Resets a failed event to pending for retry. The caller is responsible for
    * checking the attempt count before calling this.
+   *
+   * Throws `ScheduledEventNotFoundError` if the event no longer exists.
    */
   async resetForRetry(id: string, scheduledAt: Date): Promise<ScheduledEvent> {
-    const row = await this.db.scheduledEvent.update({
-      where: { id },
-      data: { status: "pending", lockedBy: null, lockedAt: null, scheduledAt },
-    });
-    return fromPrismaRow(row);
+    try {
+      const row = await this.db.scheduledEvent.update({
+        where: { id },
+        data: { status: "pending", lockedBy: null, lockedAt: null, scheduledAt },
+      });
+      return fromPrismaRow(row);
+    } catch (error) {
+      if (isRecordNotFoundError(error)) throw new ScheduledEventNotFoundError(id);
+      throw error;
+    }
   }
 
   /**

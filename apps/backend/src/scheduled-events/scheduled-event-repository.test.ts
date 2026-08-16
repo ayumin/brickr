@@ -15,7 +15,7 @@
  */
 import { describe, expect, it, vi } from "vitest";
 import type { Db } from "../persistence/prisma.js";
-import { ScheduledEventRepository } from "./scheduled-event-repository.js";
+import { ScheduledEventNotFoundError, ScheduledEventRepository } from "./scheduled-event-repository.js";
 import type { NewScheduledEvent, ScheduledEvent } from "./scheduled-event.js";
 
 // ---------------------------------------------------------------------------
@@ -487,6 +487,46 @@ describe("ScheduledEventRepository lifecycle transitions", () => {
       where: { id: "event-1" },
       data: { status: "pending", lockedBy: null, lockedAt: null, scheduledAt: retryAt },
     });
+  });
+
+  it("markCompleted throws ScheduledEventNotFoundError on Prisma P2025", async () => {
+    const p2025 = Object.assign(new Error("Record not found"), { code: "P2025" });
+    const update = vi.fn(() => Promise.reject(p2025));
+    const db = makeDb({ update });
+
+    await expect(
+      new ScheduledEventRepository(db).markCompleted("event-gone"),
+    ).rejects.toBeInstanceOf(ScheduledEventNotFoundError);
+  });
+
+  it("markFailed throws ScheduledEventNotFoundError on Prisma P2025", async () => {
+    const p2025 = Object.assign(new Error("Record not found"), { code: "P2025" });
+    const update = vi.fn(() => Promise.reject(p2025));
+    const db = makeDb({ update });
+
+    await expect(
+      new ScheduledEventRepository(db).markFailed("event-gone", "timeout"),
+    ).rejects.toBeInstanceOf(ScheduledEventNotFoundError);
+  });
+
+  it("resetForRetry throws ScheduledEventNotFoundError on Prisma P2025", async () => {
+    const p2025 = Object.assign(new Error("Record not found"), { code: "P2025" });
+    const update = vi.fn(() => Promise.reject(p2025));
+    const db = makeDb({ update });
+
+    await expect(
+      new ScheduledEventRepository(db).resetForRetry("event-gone", new Date()),
+    ).rejects.toBeInstanceOf(ScheduledEventNotFoundError);
+  });
+
+  it("markCompleted re-throws non-P2025 errors unchanged", async () => {
+    const unexpected = new Error("connection lost");
+    const update = vi.fn(() => Promise.reject(unexpected));
+    const db = makeDb({ update });
+
+    await expect(
+      new ScheduledEventRepository(db).markCompleted("event-1"),
+    ).rejects.toBe(unexpected);
   });
 });
 
