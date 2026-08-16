@@ -1,0 +1,66 @@
+# Destructive staging maintenance is deliberately separate from the normal
+# deployment path. The job is optional, main-only, and requires an explicit
+# confirmation in the GitLab UI.
+"staging:database-reset":
+  extends: .gcp-staging-auth
+  stage: deploy
+  interruptible: false
+  resource_group: staging
+  needs: []
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
+      allow_failure: true
+  manual_confirmation: "ステージングDBの全データを削除し、seed後にbackendを再デプロイします。実行しますか？"
+  script:
+    - |
+      set -eu
+
+      restore_default_entrypoint() {
+        echo "Restoring the backend image's default entrypoint"
+        gcloud run services update "$BACKEND_SERVICE" \
+          --project="$GCP_PROJECT_ID" \
+          --region="$GCP_REGION" \
+          --command='' \
+          --args='' \
+          --quiet
+      }
+
+      # Always remove the destructive one-shot command, including when the
+      # reset revision fails to become ready.
+      trap restore_default_entrypoint EXIT
+
+      BACKEND_IMAGE_REF="$(
+        gcloud run services describe "$BACKEND_SERVICE" \
+          --project="$GCP_PROJECT_ID" \
+          --region="$GCP_REGION" \
+          --format='value(spec.template.spec.containers[0].image)'
+      )"
+      test -n "$BACKEND_IMAGE_REF"
+      echo "Resetting the staging database with backend image: $BACKEND_IMAGE_REF"
+
+      # Override the image entrypoint once. Prisma drops and recreates only
+      # the application schema, then a minimal HTTP server makes the reset
+      # revision ready without starting the unseeded application. The restored
+      # default revision below is therefore the only one that runs the seed.
+      gcloud run services update "$BACKEND_SERVICE" \
+        --project="$GCP_PROJECT_ID" \
+        --region="$GCP_REGION" \
+        --image="$BACKEND_IMAGE_REF" \
+        --command=sh \
+        "--args=^|^-c|pnpm exec prisma db push --skip-generate --force-reset && exec node -e 'require(\"http\").createServer((q,s)=>s.end(\"ok\")).listen(3000)'" \
+        --quiet
+
+      curl --fail --silent --show-error \
+        --retry 12 --retry-delay 10 \
+        "https://$STAGING_DOMAIN/api/health"
+
+      restore_default_entrypoint
+      trap - EXIT
+
+      curl --fail --silent --show-error \
+        --retry 12 --retry-delay 10 \
+        "https://$STAGING_DOMAIN/api/health"
+  environment:
+    name: staging
+    url: https://$STAGING_DOMAIN
