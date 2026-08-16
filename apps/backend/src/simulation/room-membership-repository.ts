@@ -130,4 +130,79 @@ export class RoomMembershipRepository {
     });
     return rows.map((row: { roomId: string }) => row.roomId);
   }
+
+  /**
+   * Updates the status of an existing membership record.
+   *
+   * Used by the Cast join flow to transition a membership from `pending` to
+   * `active` (approval) or to `removed`/`banned` (rejection).
+   */
+  async updateStatus(
+    roomId: string,
+    memberKind: MemberKind,
+    memberId: string,
+    status: MembershipStatus,
+  ): Promise<RoomMembership | null> {
+    try {
+      const row = await this.db.roomMembership.update({
+        where: { roomId_memberKind_memberId: { roomId, memberKind, memberId } },
+        data: { status },
+      });
+      return toMembership(row);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Counts the number of pending Cast memberships in a room.
+   *
+   * Used to enforce the per-room pending Cast limit (issue #164: "同時に pending
+   * 状態の Cast 数を制限").
+   */
+  async countPendingCasts(roomId: string): Promise<number> {
+    return this.db.roomMembership.count({
+      where: { roomId, memberKind: "character", status: "pending" },
+    });
+  }
+
+  /**
+   * Returns the IDs of all characters that are active members of a room.
+   *
+   * Used by the Cast recommendation scorer to exclude characters that are
+   * already in the room from the candidate pool.
+   */
+  async findActiveCastIds(roomId: string): Promise<string[]> {
+    const rows = await this.db.roomMembership.findMany({
+      where: { roomId, memberKind: "character", status: "active" },
+      select: { memberId: true },
+    });
+    return rows.map((row: { memberId: string }) => row.memberId);
+  }
+
+  /**
+   * Returns the IDs of all characters that are banned from a room.
+   *
+   * Used by the Cast recommendation scorer to exclude banned characters from
+   * the candidate pool.
+   */
+  async findBannedCastIds(roomId: string): Promise<string[]> {
+    const rows = await this.db.roomMembership.findMany({
+      where: { roomId, memberKind: "character", status: "banned" },
+      select: { memberId: true },
+    });
+    return rows.map((row: { memberId: string }) => row.memberId);
+  }
+
+  /**
+   * Returns the number of active rooms a character currently belongs to.
+   *
+   * Used by the Cast recommendation scorer to penalise characters that are
+   * already spread across many rooms (overload prevention).
+   */
+  async countActiveRoomsForCast(characterId: string): Promise<number> {
+    return this.db.roomMembership.count({
+      where: { memberId: characterId, memberKind: "character", status: "active" },
+    });
+  }
 }

@@ -70,6 +70,13 @@ function makeDeps(generate: () => Promise<unknown>) {
   const deps = {
     simulations: { findById: () => Promise.resolve(room) },
     characters: { findAll: () => Promise.resolve([character]) },
+    memberships: {
+      findActiveCastIds: () => Promise.resolve([]),
+      findBannedCastIds: () => Promise.resolve([]),
+      countPendingCasts: () => Promise.resolve(0),
+      countActiveRoomsForCast: () => Promise.resolve(0),
+      create: vi.fn(),
+    },
     posts: {
       findById: () => Promise.resolve(triggerPost),
       findUsersByIds: () => Promise.resolve([]),
@@ -79,6 +86,15 @@ function makeDeps(generate: () => Promise<unknown>) {
       getCurrentThread: () => Promise.resolve({ target: triggerPost, posts: [triggerPost] }),
     },
     agents: { generate },
+    llm: {
+      generate: () =>
+        Promise.resolve({
+          text: JSON.stringify({ shouldJoin: false, reason: "test" }),
+          providerId: "mock",
+          model: "test",
+        }),
+    },
+    providers: { preferred: () => null },
     logger,
   } as unknown as EventProcessorDeps;
   return { deps, publish, logger };
