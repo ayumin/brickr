@@ -47,6 +47,11 @@ describe("Room API error contract", () => {
   it("exposes Room and membership errors without Simulation-specific codes", () => {
     expect(API_ERROR_CODES).toEqual(
       expect.arrayContaining([
+        "cannot_modify_owner",
+        "invalid_status_transition",
+        "member_already_exists",
+        "member_banned",
+        "membership_not_found",
         "membership_required",
         "room_archived",
         "room_not_archived",
