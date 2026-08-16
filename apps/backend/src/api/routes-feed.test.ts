@@ -135,6 +135,42 @@ describe("GET /api/feed (§10.1)", () => {
   });
 });
 
+describe("GET /api/rooms/:id/feed (§10.2)", () => {
+  const apps: FastifyInstance[] = [];
+
+  afterEach(async () => {
+    await Promise.all(apps.splice(0).map((app) => app.close()));
+  });
+
+  async function start(currentUser: UserAccount | null) {
+    const { services, feed } = makeServices();
+    const app = await buildApp(services, currentUser);
+    apps.push(app);
+    return { app, feed };
+  }
+
+  it("requires a session", async () => {
+    const { app, feed } = await start(null);
+    const response = await app.inject({ method: "GET", url: "/api/rooms/room-1/feed" });
+    expect(response.statusCode).toBe(401);
+    expect(feed.getRoomFeed).not.toHaveBeenCalled();
+  });
+
+  it("passes the room, filter, cursor, and reader to the service", async () => {
+    const { app, feed } = await start(user);
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/rooms/room-1/feed?filter=mine&cursor=abc",
+    });
+    expect(response.statusCode).toBe(200);
+    expect(feed.getRoomFeed).toHaveBeenCalledWith("room-1", {
+      reader: { id: "user-1", isAdmin: false, handle: "hanako" },
+      filter: "mine",
+      cursor: "abc",
+    });
+  });
+});
+
 describe("GET /api/posts/:threadRootId/replies (§12.2)", () => {
   const apps: FastifyInstance[] = [];
 
@@ -171,5 +207,56 @@ describe("GET /api/posts/:threadRootId/replies (§12.2)", () => {
       isAdmin: false,
       handle: "hanako",
     });
+  });
+});
+
+describe("/api/rooms/:id/posts", () => {
+  const apps: FastifyInstance[] = [];
+
+  afterEach(async () => {
+    await Promise.all(apps.splice(0).map((app) => app.close()));
+  });
+
+  async function start() {
+    const post = { id: "post-1", roomId: "room-1", content: "hello" };
+    const requireReadableRoom = vi.fn(() => Promise.resolve());
+    const listByRoom = vi.fn(() => Promise.resolve([post]));
+    const submitUserPost = vi.fn(() => Promise.resolve(post));
+    const buildThreadForReader = vi.fn(() => Promise.resolve({ root: post, replies: [] }));
+    const services = {
+      simulations: { requireReadableRoom, submitUserPost },
+      posts: { listByRoom },
+      feed: { buildThreadForReader },
+    } as unknown as AppServices;
+    const app = await buildApp(services, user);
+    apps.push(app);
+    return { app, requireReadableRoom, listByRoom, submitUserPost };
+  }
+
+  it("lists posts through the Room API", async () => {
+    const { app, requireReadableRoom, listByRoom } = await start();
+    const response = await app.inject({ method: "GET", url: "/api/rooms/room-1/posts" });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      posts: [{ id: "post-1", roomId: "room-1", content: "hello" }],
+    });
+    expect(requireReadableRoom).toHaveBeenCalledWith("room-1", user);
+    expect(listByRoom).toHaveBeenCalledWith("room-1");
+  });
+
+  it("creates posts through the Room API", async () => {
+    const { app, submitUserPost } = await start();
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/rooms/room-1/posts",
+      payload: { content: "hello" },
+    });
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toMatchObject({ post: { id: "post-1" } });
+    expect(submitUserPost).toHaveBeenCalledWith(expect.objectContaining({
+      roomId: "room-1",
+      authorId: "user-1",
+      content: "hello",
+    }));
   });
 });

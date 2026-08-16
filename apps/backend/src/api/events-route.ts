@@ -1,8 +1,13 @@
 import type { SseEvent } from "@brickr/shared";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { requireUser } from "../auth/auth-context.js";
 import { toPublicEvent } from "../feed/public-events.js";
 import type { AppServices } from "../services.js";
 import type { EventListener } from "../simulation/event-hub.js";
+import { SimulationNotFoundError } from "../simulation/simulation-service.js";
+import { sendError } from "./errors.js";
+import { toFeedReader } from "./feed-reader.js";
+import { idParams } from "./schemas.js";
 
 /** Comment frames keep proxies from closing an idle stream. */
 const HEARTBEAT_MS = 20_000;
@@ -110,6 +115,29 @@ export function registerEventsRoute(app: FastifyInstance, services: AppServices)
       request,
       reply,
       (listener) => services.events.subscribeAll(listener),
+    );
+  });
+
+  app.get("/api/rooms/:id/events", async (request, reply) => {
+    const user = requireUser(request, reply);
+    if (!user) return reply;
+
+    const params = idParams.safeParse(request.params);
+    if (!params.success) return sendError(reply, 400, "invalid_params", "room id is invalid");
+
+    try {
+      await services.feed.assertRoomFeedReadable(params.data.id, toFeedReader(user));
+    } catch (error) {
+      if (error instanceof SimulationNotFoundError) {
+        return sendError(reply, 404, "not_found", error.message);
+      }
+      throw error;
+    }
+
+    return streamEvents(
+      request,
+      reply,
+      (listener) => services.events.subscribe(params.data.id, listener),
     );
   });
 }

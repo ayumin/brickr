@@ -927,6 +927,55 @@ export const openApiDocument: OpenAPIV3.Document = {
         },
       },
     },
+    "/api/rooms/{id}/feed": {
+      get: {
+        operationId: "getRoomFeed",
+        security: sessionSecurity,
+        tags: ["Feed"],
+        summary: "Read one room's feed",
+        parameters: [idParameter("Room ID"), ...feedParameters],
+        responses: {
+          "200": jsonResponse("One page of threads", ref("FeedPage")),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          ...errorResponses,
+        },
+      },
+    },
+    "/api/rooms/{id}/posts": {
+      get: {
+        operationId: "listRoomPosts",
+        security: sessionSecurity,
+        tags: ["Posts"],
+        summary: "List every post in a room",
+        parameters: [idParameter("Room ID")],
+        responses: {
+          "200": jsonResponse("Room posts", {
+            type: "object",
+            required: ["posts"],
+            properties: { posts: { type: "array", items: ref("Post") } },
+          }),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          ...errorResponses,
+        },
+      },
+      post: {
+        operationId: "createRoomPost",
+        security: sessionSecurity,
+        tags: ["Posts"],
+        summary: "Create a user post and start AI responses",
+        parameters: [idParameter("Room ID")],
+        requestBody: jsonBody(ref("CreatePost")),
+        responses: {
+          "201": jsonResponse("Created post and its thread", {
+            type: "object",
+            required: ["post", "thread"],
+            properties: { post: ref("Post"), thread: ref("FeedThread") },
+          }),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          ...errorResponses,
+        },
+      },
+    },
     "/api/posts/{id}": {
       get: {
         operationId: "getPostThread",
@@ -989,6 +1038,23 @@ export const openApiDocument: OpenAPIV3.Document = {
             description: "Named Server-Sent Events stream",
             content: { "text/event-stream": { schema: { type: "string" } } },
           },
+          ...errorResponses,
+        },
+      },
+    },
+    "/api/rooms/{id}/events": {
+      get: {
+        operationId: "streamRoomEvents",
+        security: sessionSecurity,
+        tags: ["Events"],
+        summary: "Stream one room's events",
+        parameters: [idParameter("Room ID")],
+        responses: {
+          "200": {
+            description: "Named Server-Sent Events stream",
+            content: { "text/event-stream": { schema: { type: "string" } } },
+          },
+          "401": { $ref: "#/components/responses/Unauthorized" },
           ...errorResponses,
         },
       },

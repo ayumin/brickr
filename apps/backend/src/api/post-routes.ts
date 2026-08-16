@@ -4,9 +4,47 @@ import type { AppServices } from "../services.js";
 import { sendError } from "./errors.js";
 import { toFeedReader } from "./feed-reader.js";
 import { parseOr400, withDomainErrors } from "./route-helpers.js";
-import { idParams, threadRootParams } from "./schemas.js";
+import { createPostSchema, idParams, threadRootParams } from "./schemas.js";
 
 export function registerPostRoutes(app: FastifyInstance, services: AppServices): void {
+  app.get("/api/rooms/:id/posts", async (request, reply) => {
+    const user = requireUser(request, reply);
+    if (!user) return reply;
+
+    const params = parseOr400(idParams, request.params, reply, "invalid_params", "room id is invalid");
+    if (!params) return reply;
+
+    return withDomainErrors(reply, async () => {
+      await services.simulations.requireReadableRoom(params.id, user);
+      return { posts: await services.posts.listByRoom(params.id) };
+    });
+  });
+
+  app.post("/api/rooms/:id/posts", async (request, reply) => {
+    const user = requireUser(request, reply);
+    if (!user) return reply;
+
+    const params = parseOr400(idParams, request.params, reply, "invalid_params", "room id is invalid");
+    if (!params) return reply;
+
+    const body = parseOr400(createPostSchema, request.body, reply, "invalid_body", "post body is invalid");
+    if (!body) return reply;
+
+    return withDomainErrors(reply, async () => {
+      const post = await services.simulations.submitUserPost({
+        roomId: params.id,
+        authorId: user.id,
+        content: body.content,
+        imageUrl: body.imageUrl,
+        responderIds: body.responderIds ?? [],
+        replyTo: body.replyTo ?? null,
+        quoteOf: body.quoteOf ?? null,
+      });
+      const thread = await services.feed.buildThreadForReader(post, toFeedReader(user));
+      return reply.status(201).send({ post: thread.root, thread });
+    });
+  });
+
   /**
    * One post, with the same anonymous author shape the feed uses (§10.8).
    *

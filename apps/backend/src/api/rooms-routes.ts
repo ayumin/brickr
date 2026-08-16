@@ -257,6 +257,30 @@ export const deleteRoomOpenApiMeta = {
   },
 };
 
+export const stopRoomOpenApiMeta = {
+  operationId: "stopRoom",
+  tags: ["Rooms"] as string[],
+  summary: "Stop response generation in a room",
+  description: "Owner or administrator only.",
+  successDescription: "The stopped room",
+};
+
+export const resumeRoomOpenApiMeta = {
+  operationId: "resumeRoom",
+  tags: ["Rooms"] as string[],
+  summary: "Resume response generation in a room",
+  description: "Owner or administrator only.",
+  successDescription: "The resumed room",
+};
+
+export const analyzeRoomOpenApiMeta = {
+  operationId: "analyzeRoom",
+  tags: ["Rooms"] as string[],
+  summary: "Analyze posts in a room",
+  description: "Owner or administrator only.",
+  successDescription: "The room analysis",
+};
+
 export const listRoomsOpenApiMeta = {
   operationId: "listRooms",
   tags: ["Simulations"] as string[],
@@ -558,6 +582,39 @@ buildOpenApiOperation(
 
 buildOpenApiOperation(
   {
+    method: "POST",
+    path: "/api/rooms/:id/stop",
+    auth: "required",
+    params: roomIdParams,
+    response: roomDtoResponseSchema,
+  },
+  stopRoomOpenApiMeta,
+);
+
+buildOpenApiOperation(
+  {
+    method: "POST",
+    path: "/api/rooms/:id/resume",
+    auth: "required",
+    params: roomIdParams,
+    response: roomDtoResponseSchema,
+  },
+  resumeRoomOpenApiMeta,
+);
+
+buildOpenApiOperation(
+  {
+    method: "GET",
+    path: "/api/rooms/:id/analysis",
+    auth: "required",
+    params: roomIdParams,
+    response: z.object({ analysis: z.unknown() }),
+  },
+  analyzeRoomOpenApiMeta,
+);
+
+buildOpenApiOperation(
+  {
     method: "DELETE",
     path: "/api/rooms/:id",
     auth: "required",
@@ -808,6 +865,40 @@ export function registerRoomsRoutes(app: FastifyInstance, services: AppServices)
       const simulation = await services.rooms.archive(params.id, user);
       return { simulation };
     },
+  }).register(app);
+
+  // Room lifecycle controls used by the room information panel.
+  defineRoute({
+    method: "POST",
+    path: "/api/rooms/:id/stop",
+    auth: "required",
+    params: roomIdParams,
+    response: roomDtoResponseSchema,
+    handler: async ({ user, params }) => ({
+      simulation: await services.simulations.stop(params.id, user),
+    }),
+  }).register(app);
+
+  defineRoute({
+    method: "POST",
+    path: "/api/rooms/:id/resume",
+    auth: "required",
+    params: roomIdParams,
+    response: roomDtoResponseSchema,
+    handler: async ({ user, params }) => ({
+      simulation: await services.simulations.resume(params.id, user),
+    }),
+  }).register(app);
+
+  defineRoute({
+    method: "GET",
+    path: "/api/rooms/:id/analysis",
+    auth: "required",
+    params: roomIdParams,
+    response: z.object({ analysis: z.unknown() }),
+    handler: async ({ user, params }) => ({
+      analysis: await services.simulationAnalysis.analyze(params.id, user),
+    }),
   }).register(app);
 
   // DELETE /api/rooms/:id — delete an archived room

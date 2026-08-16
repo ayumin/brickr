@@ -42,6 +42,11 @@ const characterBody = {
 
 /** Every route that must refuse a signed-out caller. */
 const writeRoutes = [
+  { method: "POST" as const, url: "/api/rooms", payload: {} },
+  { method: "PUT" as const, url: "/api/rooms/s1", payload: { title: "t" } },
+  { method: "POST" as const, url: "/api/rooms/s1/stop", payload: undefined },
+  { method: "POST" as const, url: "/api/rooms/s1/resume", payload: undefined },
+  { method: "POST" as const, url: "/api/rooms/s1/posts", payload: { content: "hi" } },
   { method: "POST" as const, url: "/api/characters", payload: characterBody },
   { method: "PUT" as const, url: "/api/characters/c1", payload: characterBody },
   { method: "DELETE" as const, url: "/api/characters/c1", payload: undefined },
@@ -73,6 +78,11 @@ const publicRoutes = ["/api/health", "/api/auth/session"];
  * nothing would break, the data would just be public again.
  */
 const protectedReadRoutes = [
+  "/api/rooms",
+  "/api/rooms/s1",
+  "/api/rooms/s1/feed",
+  "/api/rooms/s1/posts",
+  "/api/rooms/s1/analysis",
   "/api/characters",
   "/api/characters/management",
   "/api/characters/export",

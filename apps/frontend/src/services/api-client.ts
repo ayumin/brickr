@@ -52,8 +52,6 @@ import type {
   RoomAnalysisResponse,
   RoomDto,
   RoomResponse,
-  RoomsResponse,
-  RoomSummaryDto,
   UpdateRoomRequest,
   UserCharactersResponse,
   UserDetailResponse,
@@ -456,7 +454,7 @@ export const api = {
     body: CreateRoomRequest = {},
     signal?: AbortSignal,
   ): Promise<RoomDto> {
-    const data = await request<CreateRoomResponse>("/api/simulations", {
+    const data = await request<CreateRoomResponse>("/api/rooms", {
       method: "POST",
       body,
       ...(signal ? { signal } : {}),
@@ -585,17 +583,9 @@ export const api = {
     const query = new URLSearchParams({ filter });
     if (cursor) query.set("cursor", cursor);
     return request<FeedPageDto>(
-      `/api/simulations/${encodeURIComponent(roomId)}/feed?${query.toString()}`,
+      `/api/rooms/${encodeURIComponent(roomId)}/feed?${query.toString()}`,
       signal ? { signal } : {},
     );
-  },
-
-  async getSimulations(signal?: AbortSignal): Promise<RoomSummaryDto[]> {
-    const data = await request<RoomsResponse>(
-      "/api/simulations",
-      signal ? { signal } : {},
-    );
-    return data.simulations;
   },
 
   async updateSimulation(
@@ -603,7 +593,7 @@ export const api = {
     body: UpdateRoomRequest,
   ): Promise<RoomDto> {
     const data = await request<{ simulation: RoomDto }>(
-      `/api/simulations/${encodeURIComponent(id)}`,
+      `/api/rooms/${encodeURIComponent(id)}`,
       { method: "PUT", body },
     );
     return data.simulation;
@@ -614,7 +604,7 @@ export const api = {
     signal?: AbortSignal,
   ): Promise<RoomAnalysisDto> {
     const data = await request<RoomAnalysisResponse>(
-      `/api/simulations/${encodeURIComponent(id)}/analysis`,
+      `/api/rooms/${encodeURIComponent(id)}/analysis`,
       signal ? { signal } : {},
     );
     return data.analysis;
@@ -625,7 +615,7 @@ export const api = {
     signal?: AbortSignal,
   ): Promise<RoomResponse> {
     return request<RoomResponse>(
-      `/api/simulations/${encodeURIComponent(id)}`,
+      `/api/rooms/${encodeURIComponent(id)}`,
       signal ? { signal } : {},
     );
   },
@@ -635,7 +625,7 @@ export const api = {
     signal?: AbortSignal,
   ): Promise<RoomDto> {
     const data = await request<{ simulation: RoomDto }>(
-      `/api/simulations/${encodeURIComponent(id)}/stop`,
+      `/api/rooms/${encodeURIComponent(id)}/stop`,
       { method: "POST", ...(signal ? { signal } : {}) },
     );
     return data.simulation;
@@ -646,7 +636,7 @@ export const api = {
     signal?: AbortSignal,
   ): Promise<RoomDto> {
     const data = await request<{ simulation: RoomDto }>(
-      `/api/simulations/${encodeURIComponent(id)}/resume`,
+      `/api/rooms/${encodeURIComponent(id)}/resume`,
       { method: "POST", ...(signal ? { signal } : {}) },
     );
     return data.simulation;
@@ -654,7 +644,7 @@ export const api = {
 
   async getPosts(simulationId: string, signal?: AbortSignal): Promise<PostDto[]> {
     const data = await request<PostsResponse>(
-      `/api/simulations/${encodeURIComponent(simulationId)}/posts`,
+      `/api/rooms/${encodeURIComponent(simulationId)}/posts`,
       signal ? { signal } : {},
     );
     return data.posts;
@@ -671,7 +661,7 @@ export const api = {
     signal?: AbortSignal,
   ): Promise<CreatePostResponse> {
     return request<CreatePostResponse>(
-      `/api/simulations/${encodeURIComponent(simulationId)}/posts`,
+      `/api/rooms/${encodeURIComponent(simulationId)}/posts`,
       { method: "POST", body, ...(signal ? { signal } : {}) },
     );
   },
@@ -785,7 +775,7 @@ export const api = {
 
 /** URL of the SSE stream for one simulation. */
 export function simulationEventsUrl(simulationId: string): string {
-  return `${API_BASE_URL}/api/simulations/${encodeURIComponent(simulationId)}/events`;
+  return `${API_BASE_URL}/api/rooms/${encodeURIComponent(simulationId)}/events`;
 }
 
 /**

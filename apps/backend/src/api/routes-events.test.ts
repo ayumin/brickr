@@ -1,8 +1,9 @@
 import Fastify, { type FastifyInstance } from "fastify";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { UserAccount } from "../auth/user-account.js";
 import type { AppServices } from "../services.js";
 import { EventHub } from "../simulation/event-hub.js";
+import { SimulationNotFoundError } from "../simulation/simulation-service.js";
 import { registerRoutes } from "./routes.js";
 
 /**
@@ -23,11 +24,15 @@ const user: UserAccount = {
   interests: [],
 };
 
-function makeServices() {
+function makeServices(readable = true) {
   const events = new EventHub();
+  const assertRoomFeedReadable = vi.fn((roomId: string) =>
+    readable ? Promise.resolve() : Promise.reject(new SimulationNotFoundError(roomId)),
+  );
   return {
-    services: { events } as unknown as AppServices,
+    services: { events, feed: { assertRoomFeedReadable } } as unknown as AppServices,
     events,
+    assertRoomFeedReadable,
   };
 }
 
@@ -84,5 +89,51 @@ describe("GET /api/feed/events (§11.1)", () => {
     expect(response.statusCode).toBe(200);
     expect(events.feedSubscriberCount()).toBe(1);
     response.stream().destroy();
+  });
+});
+
+describe("GET /api/rooms/:id/events (§11.1)", () => {
+  const apps: FastifyInstance[] = [];
+
+  afterEach(async () => {
+    await Promise.all(apps.splice(0).map((app) => app.close()));
+  });
+
+  it("requires a session", async () => {
+    const { services, events, assertRoomFeedReadable } = makeServices();
+    const app = await buildApp(services, null);
+    apps.push(app);
+    const response = await app.inject({ method: "GET", url: "/api/rooms/room-1/events" });
+    expect(response.statusCode).toBe(401);
+    expect(assertRoomFeedReadable).not.toHaveBeenCalled();
+    expect(events.subscriberCount("room-1")).toBe(0);
+  });
+
+  it("subscribes a signed-in reader to a readable room", async () => {
+    const { services, events, assertRoomFeedReadable } = makeServices();
+    const app = await buildApp(services, user);
+    apps.push(app);
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/rooms/room-1/events",
+      payloadAsStream: true,
+    });
+    expect(response.statusCode).toBe(200);
+    expect(assertRoomFeedReadable).toHaveBeenCalledWith("room-1", {
+      id: "user-1",
+      isAdmin: false,
+      handle: "hanako",
+    });
+    expect(events.subscriberCount("room-1")).toBe(1);
+    response.stream().destroy();
+  });
+
+  it("answers 404 for an unreadable room", async () => {
+    const { services, events } = makeServices(false);
+    const app = await buildApp(services, user);
+    apps.push(app);
+    const response = await app.inject({ method: "GET", url: "/api/rooms/room-9/events" });
+    expect(response.statusCode).toBe(404);
+    expect(events.subscriberCount("room-9")).toBe(0);
   });
 });

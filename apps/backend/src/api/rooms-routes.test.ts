@@ -159,7 +159,12 @@ function makeServices(
     simulations: {
       get: () => Promise.resolve({ simulation: roomSummary }),
       listRooms: () => Promise.resolve([]),
+      stop: () => Promise.resolve({ ...roomDto, status: "archived" as const }),
+      resume: () => Promise.resolve(roomDto),
       ...simulationsOverrides,
+    },
+    simulationAnalysis: {
+      analyze: () => Promise.resolve({ simulation: roomDto, postCount: 0 }),
     },
     rooms: makeRoomService(roomsOverrides),
     roomMemberships: makeRoomMembershipService(roomMembershipsOverrides),
@@ -182,6 +187,33 @@ async function buildApp(
   await app.ready();
   return app;
 }
+
+describe("Room API compatibility operations", () => {
+  const apps: FastifyInstance[] = [];
+
+  afterEach(async () => {
+    await Promise.all(apps.splice(0).map((app) => app.close()));
+  });
+
+  it.each([
+    ["stop", "archived"],
+    ["resume", "active"],
+  ] as const)("POST /api/rooms/:id/%s updates lifecycle state", async (action, status) => {
+    const app = await buildApp(signedInUser);
+    apps.push(app);
+    const response = await app.inject({ method: "POST", url: `/api/rooms/room-1/${action}` });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ simulation: { id: "room-1", status } });
+  });
+
+  it("GET /api/rooms/:id/analysis returns the room analysis", async () => {
+    const app = await buildApp(signedInUser);
+    apps.push(app);
+    const response = await app.inject({ method: "GET", url: "/api/rooms/room-1/analysis" });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ analysis: { postCount: 0 } });
+  });
+});
 
 // ── GET /api/rooms/:id ────────────────────────────────────────────────────────
 
