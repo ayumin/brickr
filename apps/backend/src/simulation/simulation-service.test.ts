@@ -231,6 +231,7 @@ function makeHarness(options: HarnessOptions): Harness {
       return Promise.resolve({
         type: "thread.activity",
         simulationId: post.simulationId,
+        postId: post.id,
         room: {
           id: simulation.id,
           title: simulation.title,
@@ -239,7 +240,7 @@ function makeHarness(options: HarnessOptions): Harness {
         },
         thread: {
           root: toDto(posts.find((entry) => entry.id === post.threadRootId) ?? post),
-          room: { id: simulation.id, title: simulation.title ?? "", isFeed: false },
+          room: { id: simulation.id, title: simulation.title ?? "" },
           latestReplies: [],
           replyCount: 0,
           lastActivityAt: post.threadActivityAt.toISOString(),

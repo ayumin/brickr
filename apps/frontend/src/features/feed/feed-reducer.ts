@@ -37,6 +37,7 @@ export type FeedAction =
   | { kind: "reset" }
   | { kind: "initialLoadStarted" }
   | { kind: "initialLoaded"; page: FeedPageDto }
+  | { kind: "refreshed"; page: FeedPageDto }
   | { kind: "initialLoadFailed"; message: string }
   | { kind: "loadMoreStarted" }
   | { kind: "loadMoreLoaded"; page: FeedPageDto }
@@ -76,6 +77,9 @@ export function reduceFeed(state: FeedState, action: FeedAction): FeedState {
       return { ...state, loadingInitial: true, initialError: null };
 
     case "initialLoaded": {
+      // A live refresh may have completed after this request started. Its REST
+      // snapshot is newer, so do not let the older initial response replace it.
+      if (!state.loadingInitial) return state;
       // A fresh page replaces the list outright — this is what makes a filter
       // switch or an explicit reload start from a known-clean state instead of
       // merging stale threads from a different query.
@@ -92,6 +96,22 @@ export function reduceFeed(state: FeedState, action: FeedAction): FeedState {
 
     case "initialLoadFailed":
       return { ...state, loadingInitial: false, initialError: action.message };
+
+    case "refreshed": {
+      // Live refreshes update the newest page without discarding older pages
+      // already loaded by the reader or replacing their pagination cursor.
+      const byId = new Map(state.byId);
+      for (const thread of action.page.threads) {
+        byId.set(thread.root.id, thread);
+      }
+      return {
+        ...state,
+        byId,
+        orderedIds: sortedIds(byId),
+        loadingInitial: false,
+        initialError: null,
+      };
+    }
 
     case "loadMoreStarted":
       return { ...state, loadingMore: true, loadMoreError: null };

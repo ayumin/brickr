@@ -16,7 +16,7 @@ import { FeedThreadList } from "./FeedThreadList";
 import { useFeed } from "./useFeed";
 
 /** Stable module-level reference for the global feed scope. */
-const GLOBAL_FEED_SCOPE = { kind: "global" } as const;
+const GLOBAL_FEED_SCOPE = { kind: "all" } as const;
 
 /**
  * The unified feed (§5.1, §5.2, §16.1, §16.4).

@@ -1,7 +1,7 @@
 import type { FeedThreadDto, SseEvent } from "@brickr/shared";
 import { isGlobalSimulation } from "../simulation/simulation.js";
 import { isSimulationOwnerOrAdmin } from "../simulation/simulation-service.js";
-import type { InternalSseEvent } from "../simulation/public-events.js";
+import type { PublishedInternalSseEvent } from "../simulation/public-events.js";
 import { toFeedCapabilities } from "./feed-capabilities.js";
 import type { FeedRoom } from "./feed-repository.js";
 import type { FeedReader } from "./feed-service.js";
@@ -42,37 +42,43 @@ export function withReaderCapabilities(
  * - Internal-only events return `null` and are dropped. A new event type is
  *   therefore invisible until somebody deliberately maps it, rather than leaking
  *   by default.
- * - `capabilities` are computed for *this* subscriber. Everything else in the
- *   payload is identical for everyone, because the feed is a surface that looks
- *   the same for all readers (§10.1) — a stopped room's thread arrives with the
- *   same content whether or not you own it.
+ * - Public events contain identifiers and minimal transient state only. DTOs,
+ *   content and per-reader capabilities remain authoritative in REST responses.
  *
  * Character identity never reaches this function: the service publishes an
  * `activityId` instead of a character, so there is nothing here to strip. Details
  * worth investigating stay in the backend log.
  */
-export function toPublicEvent(event: InternalSseEvent, reader: FeedReader): SseEvent | null {
+export function toPublicEvent(event: PublishedInternalSseEvent): SseEvent | null {
+  const metadata = {
+    eventId: event.eventId,
+    roomId: event.simulationId,
+    timestamp: event.timestamp,
+  };
+
   switch (event.type) {
     case "thread.activity":
       return {
-        type: "feed.post-created",
-        thread: withReaderCapabilities(event.thread, event.room, reader),
+        ...metadata,
+        type: "post.created",
+        postId: event.postId,
+        threadRootId: event.thread.root.id,
       };
 
     case "response.started":
       return {
+        ...metadata,
         type: "response.started",
         activityId: event.activityId,
-        roomId: event.simulationId,
         targetPostId: event.targetPostId,
         threadRootId: event.threadRootId,
       };
 
     case "response.finished":
       return {
+        ...metadata,
         type: "response.finished",
         activityId: event.activityId,
-        roomId: event.simulationId,
         targetPostId: event.targetPostId,
         threadRootId: event.threadRootId,
         outcome: event.outcome,

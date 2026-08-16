@@ -1,8 +1,10 @@
-import { GLOBAL_SIMULATION_ID, type FeedThreadDto, type PostDto } from "@brickr/shared";
+import type { FeedThreadDto, PostDto } from "@brickr/shared";
 import { describe, expect, it } from "vitest";
-import type { InternalSseEvent } from "../simulation/public-events.js";
+import type {
+  InternalSseEvent,
+  PublishedInternalSseEvent,
+} from "../simulation/public-events.js";
 import type { FeedRoom } from "./feed-repository.js";
-import type { FeedReader } from "./feed-service.js";
 import { toPublicEvent } from "./public-events.js";
 
 const ROOM: FeedRoom = {
@@ -13,7 +15,8 @@ const ROOM: FeedRoom = {
   createdByUserId: "owner-1",
 };
 
-const READER: NonNullable<FeedReader> = { id: "reader-1", isAdmin: false, handle: "hanako" };
+const EVENT_ID = "0198b570-0000-7000-8000-000000000001";
+const TIMESTAMP = "2026-08-17T00:00:00.000Z";
 
 function post(id: string): PostDto {
   return {
@@ -29,10 +32,10 @@ function post(id: string): PostDto {
   };
 }
 
-function thread(overrides: Partial<FeedThreadDto> = {}): FeedThreadDto {
+function thread(): FeedThreadDto {
   return {
     root: post("root-1"),
-    room: { id: ROOM.id, title: "設計の部屋", isFeed: false },
+    room: { id: ROOM.id, title: "設計の部屋" },
     latestReplies: [post("reply-1")],
     replyCount: 3,
     lastActivityAt: "2026-08-13T10:05:00.000Z",
@@ -44,180 +47,100 @@ function thread(overrides: Partial<FeedThreadDto> = {}): FeedThreadDto {
       canQuote: false,
       canLoadMoreReplies: false,
     },
-    ...overrides,
   };
 }
 
-function threadActivity(room: FeedRoom = ROOM): InternalSseEvent {
-  return { type: "thread.activity", simulationId: room.id, room, thread: thread() };
+function published(event: InternalSseEvent): PublishedInternalSseEvent {
+  return { ...event, eventId: EVENT_ID, timestamp: TIMESTAMP };
 }
 
-describe("toPublicEvent thread activity (§11.3)", () => {
-  it("publishes the thread and resolves capabilities for the subscriber", () => {
-    const anonymous = toPublicEvent(threadActivity(), null);
-    const signedIn = toPublicEvent(threadActivity(), READER);
-
-    expect(anonymous).toMatchObject({ type: "feed.post-created" });
-    expect(anonymous?.type === "feed.post-created" && anonymous.thread.capabilities).toEqual({
-      canOpenAuthor: false,
-      canOpenRoom: false,
-      canOpenThread: false,
-      canReply: false,
-      canQuote: false,
-      canLoadMoreReplies: false,
-    });
-    expect(signedIn?.type === "feed.post-created" && signedIn.thread.capabilities).toEqual({
-      canOpenAuthor: true,
-      canOpenRoom: true,
-      canOpenThread: true,
-      canReply: true,
-      canQuote: true,
-      canLoadMoreReplies: true,
-    });
-  });
-
-  /** Everything except capabilities is identical for everyone (§10.1). */
-  it("gives every subscriber the same thread contents", () => {
-    const anonymous = toPublicEvent(threadActivity(), null);
-    const signedIn = toPublicEvent(threadActivity(), READER);
-
-    if (anonymous?.type !== "feed.post-created" || signedIn?.type !== "feed.post-created") {
-      throw new Error("expected feed.post-created");
-    }
-    expect({ ...anonymous.thread, capabilities: null }).toEqual({
-      ...signedIn.thread,
-      capabilities: null,
-    });
-  });
-
-  it("never offers to open the feed as a room", () => {
-    const feedRoom: FeedRoom = { id: GLOBAL_SIMULATION_ID, title: "フィード", status: "active", scope: "global" };
-
-    const event = toPublicEvent(threadActivity(feedRoom), READER);
-
-    expect(event?.type === "feed.post-created" && event.thread.capabilities.canOpenRoom).toBe(
-      false,
-    );
-  });
-
-  /** A stopped room can still receive an update through a repair or a backfill. */
-  it("keeps a stopped room's thread unwritable, and readable only for its owner", () => {
-    const stopped: FeedRoom = { ...ROOM, status: "archived" };
-
-    const stranger = toPublicEvent(threadActivity(stopped), READER);
-    const owner = toPublicEvent(threadActivity(stopped), {
-      id: "owner-1",
-      isAdmin: false,
-      handle: "owner",
-    });
-
-    expect(stranger?.type === "feed.post-created" && stranger.thread.capabilities).toMatchObject({
-      canReply: false,
-      canOpenThread: false,
-    });
-    expect(owner?.type === "feed.post-created" && owner.thread.capabilities).toMatchObject({
-      canReply: false,
-      canOpenThread: true,
-    });
-  });
-});
-
-describe("toPublicEvent response activity (§11.2)", () => {
-  const started: InternalSseEvent = {
-    type: "response.started",
+function threadActivity(): PublishedInternalSseEvent {
+  return published({
+    type: "thread.activity",
     simulationId: ROOM.id,
-    activityId: "activity-1",
-    targetPostId: "root-1",
-    threadRootId: "root-1",
-  };
+    postId: "reply-1",
+    room: ROOM,
+    thread: thread(),
+  });
+}
 
-  it("passes the activity through, and nothing else", () => {
-    expect(toPublicEvent(started, READER)).toEqual({
-      type: "response.started",
-      activityId: "activity-1",
+describe("toPublicEvent state changes", () => {
+  it("publishes only identifiers for a created post", () => {
+    expect(toPublicEvent(threadActivity())).toEqual({
+      eventId: EVENT_ID,
       roomId: ROOM.id,
-      targetPostId: "root-1",
+      type: "post.created",
+      timestamp: TIMESTAMP,
+      postId: "reply-1",
       threadRootId: "root-1",
     });
   });
 
-  it("reports how a response ended, never why", () => {
-    const finished = toPublicEvent(
-      { ...started, type: "response.finished", outcome: "failed" },
-      READER,
-    );
-
-    expect(finished).toEqual({
-      type: "response.finished",
+  it("passes minimal response activity state through", () => {
+    const started = published({
+      type: "response.started",
+      simulationId: ROOM.id,
       activityId: "activity-1",
+      targetPostId: "root-1",
+      threadRootId: "root-1",
+    });
+
+    expect(toPublicEvent(started)).toEqual({
+      eventId: EVENT_ID,
       roomId: ROOM.id,
+      type: "response.started",
+      timestamp: TIMESTAMP,
+      activityId: "activity-1",
+      targetPostId: "root-1",
+      threadRootId: "root-1",
+    });
+    const finished = published({
+      type: "response.finished",
+      simulationId: ROOM.id,
+      activityId: "activity-1",
+      targetPostId: "root-1",
+      threadRootId: "root-1",
+      outcome: "failed",
+    });
+    expect(toPublicEvent(finished)).toEqual({
+      eventId: EVENT_ID,
+      roomId: ROOM.id,
+      type: "response.finished",
+      timestamp: TIMESTAMP,
+      activityId: "activity-1",
       targetPostId: "root-1",
       threadRootId: "root-1",
       outcome: "failed",
     });
   });
-});
 
-describe("toPublicEvent internal events (§11.4)", () => {
-  /**
-   * The default of this boundary is silence: an event nobody mapped is dropped
-   * rather than forwarded, so adding one cannot leak by accident.
-   */
-  const internal: InternalSseEvent[] = [
-    {
-      type: "generation.completed",
-      simulationId: ROOM.id,
-      triggerPostId: "root-1",
-      generatedPostIds: ["post-2"],
-    },
-    { type: "generation.failed", simulationId: ROOM.id, reason: "provider unavailable" },
-  ];
-
-  it.each(internal)("drops $type instead of publishing it", (event) => {
-    expect(toPublicEvent(event, READER)).toBeNull();
-    expect(toPublicEvent(event, null)).toBeNull();
-  });
-});
-
-describe("public event privacy (§25)", () => {
-  /**
-   * The guarantee the feed's anonymity rests on: whatever a subscriber receives,
-   * it cannot be matched against a character.
-   */
-  it("contains no character identity, model or failure reason", () => {
-    const events: InternalSseEvent[] = [
-      threadActivity(),
+  it("drops internal-only events", () => {
+    const internal: InternalSseEvent[] = [
       {
-        type: "response.started",
+        type: "generation.completed",
         simulationId: ROOM.id,
-        activityId: "activity-1",
-        targetPostId: "root-1",
-        threadRootId: "root-1",
+        triggerPostId: "root-1",
+        generatedPostIds: ["post-2"],
       },
-      {
-        type: "response.finished",
-        simulationId: ROOM.id,
-        activityId: "activity-1",
-        targetPostId: "root-1",
-        threadRootId: "root-1",
-        outcome: "failed",
-      },
-      { type: "generation.failed", simulationId: ROOM.id, reason: "gpt-4o rate limited" },
+      { type: "generation.failed", simulationId: ROOM.id, reason: "provider unavailable" },
     ];
 
-    const published = events
-      .flatMap((event) => [toPublicEvent(event, READER), toPublicEvent(event, null)])
-      .filter((event) => event !== null);
-    const payload = JSON.stringify(published);
+    for (const event of internal) {
+      expect(toPublicEvent(published(event))).toBeNull();
+    }
+  });
+
+  it("contains no post body, character identity, model, or failure reason", () => {
+    const payload = JSON.stringify(toPublicEvent(threadActivity()));
 
     for (const forbidden of [
+      "本文",
+      "author_1",
       "characterId",
-      "handle:",
-      "displayName:",
+      "displayName",
       "providerId",
       "model",
       "reason",
-      "rate limited",
     ]) {
       expect(payload, forbidden).not.toContain(forbidden);
     }

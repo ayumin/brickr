@@ -1,7 +1,6 @@
 import type { SseEvent } from "@brickr/shared";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { requireUser } from "../auth/auth-context.js";
-import type { FeedReader } from "../feed/feed-service.js";
 import { toPublicEvent } from "../feed/public-events.js";
 import type { AppServices } from "../services.js";
 import type { EventListener } from "../simulation/event-hub.js";
@@ -46,7 +45,6 @@ function streamEvents(
   request: FastifyRequest,
   reply: FastifyReply,
   subscribe: (listener: EventListener) => () => void,
-  reader: FeedReader,
 ): Promise<void> {
   reply.raw.writeHead(200, {
     // Writing to `reply.raw` bypasses Fastify's header serialisation, so the
@@ -73,10 +71,12 @@ function streamEvents(
 
   const unsubscribe = subscribe((event) => {
     // The one conversion point (§11.4). Internal events map to nothing and are
-    // never written, and capabilities are resolved for this connection's reader.
-    const publicEvent: SseEvent | null = toPublicEvent(event, reader);
+    // never written; public events contain notification metadata and target ids.
+    const publicEvent: SseEvent | null = toPublicEvent(event);
     if (!publicEvent) return;
-    write(`event: ${publicEvent.type}\ndata: ${JSON.stringify(publicEvent)}\n\n`);
+    write(
+      `id: ${publicEvent.eventId}\nevent: ${publicEvent.type}\ndata: ${JSON.stringify(publicEvent)}\n\n`,
+    );
   });
 
   const heartbeat = setInterval(() => write(": ping\n\n"), HEARTBEAT_MS);
@@ -111,13 +111,10 @@ export function registerEventsRoute(app: FastifyInstance, services: AppServices)
    * watches the same threads appear and receives capabilities that permit nothing.
    */
   app.get("/api/feed/events", async (request, reply) => {
-    const reader = request.currentUser ? toFeedReader(request.currentUser) : null;
-
     return streamEvents(
       request,
       reply,
       (listener) => services.events.subscribeAll(listener),
-      reader,
     );
   });
 
@@ -153,7 +150,6 @@ export function registerEventsRoute(app: FastifyInstance, services: AppServices)
       request,
       reply,
       (listener) => services.events.subscribe(simulationId, listener),
-      reader,
     );
   });
 }

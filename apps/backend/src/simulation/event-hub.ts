@@ -1,6 +1,7 @@
-import type { InternalSseEvent } from "./public-events.js";
+import { randomUUID } from "node:crypto";
+import type { InternalSseEvent, PublishedInternalSseEvent } from "./public-events.js";
 
-export type EventListener = (event: InternalSseEvent) => void;
+export type EventListener = (event: PublishedInternalSseEvent) => void;
 
 /**
  * In-process pub/sub for SSE.
@@ -46,13 +47,18 @@ export class EventHub {
   }
 
   /**
-   * The routing key is passed explicitly rather than read off the event, because
-   * not every public event carries a simulation id — the thread event carries the
-   * thread instead (§11.3).
+   * The current internal domain still passes its routing key explicitly. Event
+   * metadata is assigned once here so room and feed subscribers receive the same
+   * identity and timestamp.
    */
   publish(simulationId: string, event: InternalSseEvent): void {
-    this.deliver(this.bySimulation.get(simulationId), event);
-    this.deliver(this.global, event);
+    const published: PublishedInternalSseEvent = {
+      ...event,
+      eventId: randomUUID(),
+      timestamp: new Date().toISOString(),
+    };
+    this.deliver(this.bySimulation.get(simulationId), published);
+    this.deliver(this.global, published);
   }
 
   subscriberCount(simulationId: string): number {
@@ -74,7 +80,10 @@ export class EventHub {
     return this.subscriberCount(simulationId) > 0 || this.feedSubscriberCount() > 0;
   }
 
-  private deliver(listeners: Set<EventListener> | undefined, event: InternalSseEvent): void {
+  private deliver(
+    listeners: Set<EventListener> | undefined,
+    event: PublishedInternalSseEvent,
+  ): void {
     if (!listeners) return;
     for (const listener of [...listeners]) {
       // One broken subscriber must not stop delivery to the others.

@@ -60,9 +60,8 @@ export type CreatePostRequest = {
  * thread from `post` on the client — would reimplement the reply preview, the
  * reply count and `capabilities` a second time and drift from the feed (§11.3).
  *
- * It is the same shape `feed.post-created` carries, keyed by the same
- * `thread.root.id`, so the stream's echo of this post updates the entry this
- * response created instead of duplicating it.
+ * SSE only announces state changes, so this REST response remains the
+ * authoritative representation used for the caller's optimistic update.
  */
 export type CreatePostResponse = {
   post: PostDto;

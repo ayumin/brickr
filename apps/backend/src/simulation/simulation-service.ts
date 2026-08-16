@@ -89,7 +89,7 @@ export class SimulationNotFoundError extends DomainError {
 
 export class SimulationStoppedError extends DomainError {
   readonly httpStatus = 409;
-  readonly errorCode = "simulation_stopped" as const;
+  readonly errorCode = "room_archived" as const;
   constructor(id: string) {
     super(`simulation "${id}" has been stopped`);
   }

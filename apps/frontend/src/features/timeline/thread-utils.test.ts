@@ -413,7 +413,7 @@ function makeThread(
 ): FeedThreadDto {
   return {
     root,
-    room: { id: root.roomId, title: "ルーム", isFeed: false },
+    room: { id: root.roomId, title: "ルーム" },
     latestReplies,
     replyCount: overrides.replyCount ?? latestReplies.length,
     lastActivityAt: root.createdAt,

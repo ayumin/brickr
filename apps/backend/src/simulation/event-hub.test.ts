@@ -25,6 +25,11 @@ describe("EventHub (§11.4)", () => {
 
     expect(room).toHaveBeenCalledTimes(1);
     expect(feed).toHaveBeenCalledTimes(1);
+    const roomEvent = room.mock.calls[0]?.[0];
+    const feedEvent = feed.mock.calls[0]?.[0];
+    expect(roomEvent).toBe(feedEvent);
+    expect(roomEvent?.eventId).toMatch(/^[0-9a-f-]{36}$/u);
+    expect(Number.isNaN(Date.parse(roomEvent?.timestamp ?? ""))).toBe(false);
   });
 
   it("keeps one room's events out of another room's stream", () => {

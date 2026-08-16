@@ -67,7 +67,7 @@ const CASES: Array<{ error: Error; status: number; code: string }> = [
   { error: new CharacterGenerationError(), status: 502, code: "character_generation_failed" },
   { error: new CharacterCsvError("bad row"), status: 400, code: "invalid_csv" },
   { error: new SimulationNotFoundError("sim-1"), status: 404, code: "not_found" },
-  { error: new SimulationStoppedError("sim-1"), status: 409, code: "simulation_stopped" },
+  { error: new SimulationStoppedError("sim-1"), status: 409, code: "room_archived" },
   { error: new SimulationForbiddenError("sim-1"), status: 403, code: "forbidden" },
   { error: new PostNotFoundError("post-1"), status: 404, code: "not_found" },
   { error: new ThreadRootNotFoundError("post-1"), status: 404, code: "not_found" },

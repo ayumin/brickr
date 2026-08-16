@@ -1,12 +1,17 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import type { FeedFilter, FeedPageDto, FeedThreadDto } from "@brickr/shared";
+import type {
+  FeedFilter,
+  FeedPageDto,
+  FeedThreadDto,
+  ThreadFeedSource,
+} from "@brickr/shared";
 
 import { api, isAbortError, toErrorMessage } from "../../services/api-client";
 import type { ConnectionState } from "../../types";
 import { INITIAL_FEED_STATE, reduceFeed } from "./feed-reducer";
-import { useFeedEvents, type FeedScope } from "./useFeedEvents";
+import { useFeedEvents } from "./useFeedEvents";
 
-export type { FeedScope } from "./useFeedEvents";
+export type FeedScope = ThreadFeedSource;
 
 export type UseFeedResult = {
   threads: FeedThreadDto[];
@@ -26,7 +31,7 @@ export type UseFeedResult = {
 };
 
 function fetchPage(
-  scope: FeedScope,
+  scope: ThreadFeedSource,
   filter: FeedFilter,
   cursor: string | null,
   signal: AbortSignal,
@@ -42,10 +47,16 @@ function fetchPage(
  * caller's job (`features/rooms/{feed-filter,selected-room}-storage.ts`) -
  * this hook only reacts to whatever filter it is given.
  */
-export function useFeed(scope: FeedScope, filter: FeedFilter, enabled: boolean = true): UseFeedResult {
+export function useFeed(
+  scope: ThreadFeedSource,
+  filter: FeedFilter,
+  enabled: boolean = true,
+): UseFeedResult {
   const [state, dispatch] = useReducer(reduceFeed, INITIAL_FEED_STATE);
   const [reloadToken, setReloadToken] = useState(0);
+  const [refreshToken, setRefreshToken] = useState(0);
   const roomId = scope.kind === "room" ? scope.roomId : null;
+  const refreshScopeRef = useRef<{ roomId: string | null; filter: FeedFilter } | null>(null);
 
   // Tracks the room/filter pair that is currently "active". Updated in the
   // same effect that resets state so that any in-flight loadMore request
@@ -60,10 +71,19 @@ export function useFeed(scope: FeedScope, filter: FeedFilter, enabled: boolean =
     dispatch({ kind: "reset" });
   }, [roomId, filter]);
 
+  const reload = useCallback(() => {
+    setReloadToken((value) => value + 1);
+  }, []);
+
+  const refresh = useCallback(() => {
+    refreshScopeRef.current = { roomId, filter };
+    setRefreshToken((value) => value + 1);
+  }, [roomId, filter]);
+
   // Subscribed before the initial fetch runs below (effects fire in the order
   // they're declared), so a thread updated while the request is in flight is
   // not lost - the same guarantee `useSimulationEvents` makes.
-  useFeedEvents(scope, filter, dispatch, enabled);
+  useFeedEvents(scope, dispatch, enabled, refresh);
 
   useEffect(() => {
     if (!enabled) return;
@@ -89,6 +109,28 @@ export function useFeed(scope: FeedScope, filter: FeedFilter, enabled: boolean =
     // the latest `scope` from its own render's closure.
   }, [roomId, filter, enabled, reloadToken]);
 
+  useEffect(() => {
+    if (!enabled || refreshToken === 0) return;
+    const requestedScope = refreshScopeRef.current;
+    if (requestedScope?.roomId !== roomId || requestedScope.filter !== filter) return;
+
+    let cancelled = false;
+    const controller = new AbortController();
+    fetchPage(scope, filter, null, controller.signal)
+      .then((page) => {
+        if (!cancelled) dispatch({ kind: "refreshed", page });
+      })
+      .catch((cause: unknown) => {
+        if (cancelled || isAbortError(cause)) return;
+        // A transient live-refresh failure must not replace already-visible data.
+      });
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [roomId, filter, enabled, refreshToken]);
+
   const loadMore = useCallback(() => {
     if (!enabled || state.nextCursor === null || state.loadingMore) return;
     dispatch({ kind: "loadMoreStarted" });
@@ -110,10 +152,6 @@ export function useFeed(scope: FeedScope, filter: FeedFilter, enabled: boolean =
         dispatch({ kind: "loadMoreFailed", message: toErrorMessage(cause) });
       });
   }, [roomId, filter, state.nextCursor, state.loadingMore, enabled]);
-
-  const reload = useCallback(() => {
-    setReloadToken((value) => value + 1);
-  }, []);
 
   const upsertThread = useCallback((thread: FeedThreadDto) => {
     // Pass the active filter so the reducer's mine-guard (§4 論点2(iii)) can

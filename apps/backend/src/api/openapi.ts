@@ -1050,10 +1050,9 @@ export const openApiDocument: OpenAPIV3.Document = {
         summary: "Create a user post and start AI responses",
         description:
           "Images are accepted only on top-level posts. Replies and quotes cannot contain imageUrl. " +
-          "The response carries the thread the post now belongs to as well as the post, in the same " +
-          "shape feed.post-created sends and keyed by the same thread.root.id, so a client can show " +
-          "its own post immediately and have the stream's echo update that entry rather than " +
-          "duplicate it (13.4).",
+          "The response carries the authoritative thread shape as well as the post, so a client can " +
+          "show its own post immediately. SSE only announces the state change and clients re-fetch " +
+          "over REST (13.4).",
         parameters: [idParameter("Simulation ID")],
         requestBody: jsonBody(ref("CreatePost")),
         responses: {
@@ -1119,9 +1118,9 @@ export const openApiDocument: OpenAPIV3.Document = {
         tags: ["Events"],
         summary: "Stream events from every simulation",
         description:
-          "Server-Sent Events stream behind the unified feed. Event names: feed.post-created, " +
-          "response.started and response.finished. Authentication is optional, like the feed itself: " +
-          "an anonymous reader receives the same events with capabilities that permit nothing. No " +
+          "Server-Sent Events stream behind the unified feed. Event names: post.created, " +
+          "response.started and response.finished. Authentication is optional, like the feed itself. " +
+          "Events contain identifiers and minimal state; clients re-fetch authoritative data. No " +
           "payload identifies who is generating a response — there is no character id, handle, " +
           "display name, model or failure reason in any event.",
         responses: {
@@ -1733,14 +1732,13 @@ export const openApiDocument: OpenAPIV3.Document = {
       },
       FeedRoomRef: {
         type: "object",
-        required: ["id", "title", "isFeed"],
+        required: ["id", "title"],
         description:
-          "The simulation a thread belongs to. `isFeed` marks the reserved global one, shown as the " +
-          "feed rather than as a room. Whether it is stopped is expressed only through capabilities.",
+          "The room a thread belongs to. The unified feed is a cross-room view, not a synthetic room. " +
+          "Whether it is actionable is expressed only through capabilities.",
         properties: {
           id: { type: "string" },
           title: { type: "string" },
-          isFeed: { type: "boolean" },
         },
       },
       FeedCapabilities: {

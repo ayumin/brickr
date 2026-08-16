@@ -355,7 +355,6 @@ describe("FeedService rooms and capabilities (§10.1, §16.3)", () => {
     expect(page.threads[0]?.room).toEqual({
       id: GLOBAL_SIMULATION_ID,
       title: GLOBAL_SIMULATION_TITLE,
-      isFeed: true,
     });
   });
 
@@ -410,7 +409,7 @@ describe("FeedService rooms and capabilities (§10.1, §16.3)", () => {
     const page = await service.getUnifiedFeed({ reader: READER, filter: "all" });
 
     expect(page.threads[0]?.room.title).toBe("無題のルーム");
-    expect(page.threads[0]?.room.isFeed).toBe(false);
+    expect(page.threads[0]?.room).not.toHaveProperty("isFeed");
   });
 });
 
@@ -765,7 +764,6 @@ describe("FeedService.buildThreadActivity (§11.3)", () => {
     expect(activity.thread.room).toEqual({
       id: GLOBAL_SIMULATION_ID,
       title: GLOBAL_SIMULATION_TITLE,
-      isFeed: true,
     });
   });
 

@@ -1,5 +1,4 @@
 import {
-  GLOBAL_SIMULATION_TITLE,
   type FeedFilter,
   type FeedPageDto,
   type FeedThreadDto,
@@ -196,7 +195,13 @@ export class FeedService {
       dtoById: new Map(dtos.map((dto) => [dto.id, dto])),
     });
 
-    return { type: "thread.activity", simulationId: root.simulationId, room, thread };
+    return {
+      type: "thread.activity",
+      simulationId: root.simulationId,
+      postId: post.id,
+      room,
+      thread,
+    };
   }
 
   /**
@@ -335,15 +340,13 @@ export class FeedService {
 }
 
 /**
- * The global row is labelled as the feed, never as a room (§10.1). `isFeed` is
- * what the client keys on, so `scope` itself never leaves the backend.
+ * Feed DTOs always reference a real room. The cross-room feed itself is a view
+ * selected by `ThreadFeedSource`, not a synthetic room exposed to clients.
  */
 function toRoomRef(room: FeedRoom): FeedThreadDto["room"] {
-  const isFeed = isGlobalSimulation(room);
   return {
     id: room.id,
-    title: isFeed ? GLOBAL_SIMULATION_TITLE : (room.title ?? UNTITLED_ROOM_TITLE),
-    isFeed,
+    title: room.title ?? UNTITLED_ROOM_TITLE,
   };
 }
 
