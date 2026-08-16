@@ -163,6 +163,9 @@ function makeServices(
     },
     rooms: makeRoomService(roomsOverrides),
     roomMemberships: makeRoomMembershipService(roomMembershipsOverrides),
+    events: {
+      closeRoom: vi.fn(),
+    },
   } as unknown as AppServices;
 }
 
@@ -486,7 +489,8 @@ describe("POST /api/rooms/:id/archive", () => {
   });
 
   it("archives the room and returns the archived DTO", async () => {
-    const app = await buildApp(signedInUser);
+    const services = makeServices();
+    const app = await buildApp(signedInUser, services);
     apps.push(app);
 
     const response = await app.inject({
@@ -496,6 +500,7 @@ describe("POST /api/rooms/:id/archive", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ simulation: { status: "archived" } });
+    expect(services.events.closeRoom).toHaveBeenCalledWith("room-1");
   });
 
   it("maps RoomForbiddenError to 403", async () => {
