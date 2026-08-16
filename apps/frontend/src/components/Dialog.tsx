@@ -1,13 +1,6 @@
-import { useEffect, useRef } from "react";
 import type { ReactNode, RefObject } from "react";
+import { useFocusTrap } from "../hooks/useFocusTrap";
 import { Icon } from "./Icon";
-
-const FOCUSABLE_SELECTOR =
-  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
-function focusableElements(container: HTMLElement): HTMLElement[] {
-  return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
-}
 
 export type DialogProps = {
   titleId: string;
@@ -49,54 +42,8 @@ export function Dialog({
   placement = "center",
   children,
 }: DialogProps) {
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+  const containerRef = useFocusTrap<HTMLDivElement>({ onClose, closeDisabled, initialFocusRef });
   const isBottomSheet = placement === "bottom-sheet";
-
-  useEffect(() => {
-    previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
-    const target = initialFocusRef?.current ?? (containerRef.current ? focusableElements(containerRef.current)[0] : null);
-    target?.focus();
-
-    return () => {
-      previouslyFocusedRef.current?.focus();
-    };
-    // Deliberately runs once per mount only: re-running on every re-render
-    // would steal focus back from whatever the user just interacted with.
-  }, []);
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === "Escape") {
-        if (closeDisabled) return;
-        event.preventDefault();
-        onClose();
-        return;
-      }
-      if (event.key !== "Tab") return;
-      const container = containerRef.current;
-      if (!container) return;
-      const elements = focusableElements(container);
-      if (elements.length === 0) return;
-      const first = elements[0];
-      const last = elements[elements.length - 1];
-      const active = document.activeElement;
-      if (event.shiftKey) {
-        if (active === first || !container.contains(active)) {
-          event.preventDefault();
-          last?.focus();
-        }
-      } else if (active === last || !container.contains(active)) {
-        event.preventDefault();
-        first?.focus();
-      }
-    };
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [closeDisabled, onClose]);
 
   return (
     <div
