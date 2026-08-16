@@ -1,12 +1,9 @@
 import { useEffect } from "react";
 import type { Dispatch } from "react";
-import type { FeedFilter, SseEvent } from "@brickr/shared";
+import type { SseEvent, ThreadFeedSource } from "@brickr/shared";
 
 import { subscribeToFeedEvents, subscribeToSimulationEvents } from "../../services/sse-client";
 import type { FeedAction } from "./feed-reducer";
-
-/** What a feed hydrates from: the unified feed, or one room's own feed (§10.1, §10.2). */
-export type FeedScope = { kind: "global" } | { kind: "room"; roomId: string };
 
 /**
  * Owns the EventSource behind one feed scope and dispatches its events into
@@ -14,12 +11,12 @@ export type FeedScope = { kind: "global" } | { kind: "room"; roomId: string };
  * the UI into 「再接続中」 — never a hand-rolled retry (CLAUDE.md §43, §44).
  */
 export function useFeedEvents(
-  scope: FeedScope,
-  filter: FeedFilter,
+  source: ThreadFeedSource,
   dispatch: Dispatch<FeedAction>,
   enabled: boolean,
+  onInvalidate: () => void,
 ): void {
-  const roomId = scope.kind === "room" ? scope.roomId : null;
+  const roomId = source.kind === "room" ? source.roomId : null;
 
   useEffect(() => {
     if (!enabled) {
@@ -29,23 +26,24 @@ export function useFeedEvents(
 
     dispatch({ kind: "connection", connection: "connecting" });
 
-    // A room-scoped feed reuses the room's own event stream, which carries
-    // every simulation's events (§11.1) - so it must filter to this room the
-    // same way `useSimulationEvents` does.
-    const matchesScope = (eventSimulationId: string): boolean =>
-      roomId === null || eventSimulationId === roomId;
+    // A room-scoped feed accepts only notifications for its room. The all-room
+    // feed accepts every notification delivered by its visibility-filtered stream.
+    const matchesScope = (eventRoomId: string): boolean =>
+      roomId === null || eventRoomId === roomId;
 
     const handleEvent = (event: SseEvent): void => {
       switch (event.type) {
-        case "feed.post-created":
-          if (!matchesScope(event.thread.root.roomId)) return;
-          dispatch({ kind: "upsertThread", thread: event.thread, filter });
+        case "post.created":
+          if (event.roomId === null || !matchesScope(event.roomId)) return;
+          onInvalidate();
           break;
         case "response.started":
+          if (event.roomId === null) return;
           if (!matchesScope(event.roomId)) return;
           dispatch({ kind: "responseStarted", activityId: event.activityId });
           break;
         case "response.finished":
+          if (event.roomId === null) return;
           if (!matchesScope(event.roomId)) return;
           dispatch({
             kind: "responseFinished",
@@ -68,5 +66,5 @@ export function useFeedEvents(
       roomId !== null ? subscribeToSimulationEvents(roomId, handlers) : subscribeToFeedEvents(handlers);
 
     return () => subscription.close();
-  }, [roomId, filter, dispatch, enabled]);
+  }, [roomId, dispatch, enabled, onInvalidate]);
 }

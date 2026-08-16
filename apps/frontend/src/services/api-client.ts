@@ -573,8 +573,8 @@ export const api = {
 
   /**
    * Both halves reach the caller: `post` for a flat timeline, `thread` for the
-   * feed's optimistic upsert (§13.4) - the same DTO shape a `feed.post-created`
-   * SSE event carries, so the two sources dedupe by root id for free.
+   * feed's optimistic upsert (§13.4). SSE carries only a state-change
+   * notification, so this REST response remains the authoritative DTO.
    */
   createPost(
     simulationId: string,

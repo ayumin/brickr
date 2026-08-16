@@ -21,7 +21,7 @@ function post(id: string, overrides: Partial<PostDto> = {}): PostDto {
 function thread(rootId: string, lastActivityAt: string, overrides: Partial<FeedThreadDto> = {}): FeedThreadDto {
   return {
     root: post(rootId, { createdAt: lastActivityAt }),
-    room: { id: "room-1", title: "ルーム1", isFeed: false },
+    room: { id: "room-1", title: "ルーム1" },
     latestReplies: [],
     replyCount: 0,
     lastActivityAt,

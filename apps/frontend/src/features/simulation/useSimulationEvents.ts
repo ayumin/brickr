@@ -56,15 +56,9 @@ export function useSimulationEvents(
       if (cancelled) return;
 
       switch (event.type) {
-        case "feed.post-created": {
-          // The event carries the whole thread (§11.3). This screen shows a flat
-          // timeline, so it takes the posts and lets the server keep owning the
-          // counts and capabilities.
-          if (event.thread.root.roomId !== simulationId) return;
-          dispatch({
-            kind: "upsertPosts",
-            posts: [event.thread.root, ...event.thread.latestReplies],
-          });
+        case "post.created": {
+          if (event.roomId !== simulationId) return;
+          setReloadToken((value) => value + 1);
           break;
         }
         case "response.started":

@@ -31,10 +31,18 @@ function parseSseEvent(type: SseEventType, data: string): SseEvent | null {
   if (typeof parsed !== "object" || parsed === null) {
     return null;
   }
+  const record = parsed as Record<string, unknown>;
+  if (
+    typeof record.eventId !== "string" ||
+    (typeof record.roomId !== "string" && record.roomId !== null) ||
+    typeof record.timestamp !== "string"
+  ) {
+    return null;
+  }
   // Single boundary cast: the SSE event name is authoritative for the union tag,
   // so we normalise `type` from it instead of trusting the payload.
   return {
-    ...(parsed as Record<string, unknown>),
+    ...record,
     type,
   } as unknown as SseEvent;
 }
@@ -56,6 +64,8 @@ function subscribe(url: string, handlers: SseHandlers): SseSubscription {
   source.addEventListener("error", onError);
 
   const registered: Array<[SseEventType, EventListener]> = [];
+  const recentEventIds = new Set<string>();
+  const recentEventIdOrder: string[] = [];
 
   for (const type of SSE_EVENT_TYPES) {
     const listener: EventListener = (raw) => {
@@ -68,6 +78,13 @@ function subscribe(url: string, handlers: SseHandlers): SseSubscription {
       }
       const event = parseSseEvent(type, data);
       if (event) {
+        if (recentEventIds.has(event.eventId)) return;
+        recentEventIds.add(event.eventId);
+        recentEventIdOrder.push(event.eventId);
+        if (recentEventIdOrder.length > 256) {
+          const oldest = recentEventIdOrder.shift();
+          if (oldest !== undefined) recentEventIds.delete(oldest);
+        }
         handlers.onEvent(event);
       }
     };
