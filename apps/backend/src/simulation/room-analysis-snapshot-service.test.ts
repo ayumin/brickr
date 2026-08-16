@@ -93,19 +93,21 @@ function makeSimulations(room: Simulation | null): SimulationRepository {
 function makeSnapshots(snapshot: RoomAnalysisSnapshot | null): RoomAnalysisSnapshotRepository {
   return {
     findByRoom: () => Promise.resolve(snapshot),
-    upsert: vi.fn((input) =>
-      Promise.resolve({
+    upsert: vi.fn((input) => {
+      const preserveSuccessful =
+        input.status === "failed" && snapshot !== null && snapshot.summary !== null;
+      return Promise.resolve({
         id: "snap-new",
         roomId: input.roomId,
-        postCount: input.postCount,
-        latestPostId: input.latestPostId,
-        summary: input.summary,
+        postCount: preserveSuccessful ? snapshot.postCount : input.postCount,
+        latestPostId: preserveSuccessful ? snapshot.latestPostId : input.latestPostId,
+        summary: preserveSuccessful ? snapshot.summary : input.summary,
         status: input.status,
         error: input.error,
         createdAt: new Date("2026-08-16T00:00:00Z"),
         updatedAt: new Date("2026-08-16T00:00:00Z"),
-      } satisfies RoomAnalysisSnapshot),
-    ),
+      } satisfies RoomAnalysisSnapshot);
+    }),
   } as unknown as RoomAnalysisSnapshotRepository;
 }
 
@@ -386,6 +388,52 @@ describe("RoomAnalysisSnapshotService.update() LLM outcomes", () => {
     expect(result.snapshot.status).toBe("failed");
     expect(result.snapshot.error).toBe("LLM timeout");
     expect(result.updated).toBe(true);
+  });
+
+  it("preserves and returns the last successful analysis when regeneration fails", async () => {
+    const service = makeService({
+      snapshot: completedSnapshot,
+      posts: [makePost("post-1"), makePost("post-2"), makePost("post-4")],
+      llmResult: new Error("LLM timeout"),
+    });
+
+    const result = await service.update("room-1", { id: "owner-1", isAdmin: false });
+
+    expect(result.snapshot).toMatchObject({
+      status: "failed",
+      error: "LLM timeout",
+      summary: completedSnapshot.summary,
+      postCount: completedSnapshot.postCount,
+      latestPostId: completedSnapshot.latestPostId,
+      lastSuccessful: {
+        status: "completed",
+        error: null,
+        summary: completedSnapshot.summary,
+        postCount: completedSnapshot.postCount,
+        latestPostId: completedSnapshot.latestPostId,
+      },
+    });
+  });
+
+  it("fetches room posts only once while generating a summary", async () => {
+    const listByRoom = vi.fn(() => Promise.resolve([makePost("post-1")]));
+    const service = new RoomAnalysisSnapshotService({
+      snapshots: makeSnapshots(null),
+      simulations: makeSimulations(activeRoom),
+      memberships: makeMemberships(),
+      posts: { listByRoom } as unknown as PostService,
+      llm: makeLLM(JSON.stringify({
+        overallTopics: "話題",
+        postOverview: "概要",
+        highEngagementTopics: "高",
+        lowEngagementTopics: "低",
+      })),
+      providers: makeProviders(true),
+    });
+
+    await service.update("room-1", { id: "owner-1", isAdmin: false });
+
+    expect(listByRoom).toHaveBeenCalledTimes(1);
   });
 
   it("produces a non-null summary when no LLM provider is available", async () => {

@@ -19,7 +19,7 @@
  *   - Archived rooms: update is refused for everyone.
  */
 import { z } from "zod";
-import type { RoomAnalysisSnapshotDto } from "@brickr/shared";
+import type { PostDto, RoomAnalysisSnapshotDto } from "@brickr/shared";
 import { DomainError } from "../domain-error.js";
 import type { LLMClient } from "../llm/llm-client.js";
 import type { LLMProviderRegistry } from "../llm/provider-registry.js";
@@ -104,7 +104,7 @@ const snapshotSummaryJsonSchema = {
 // ---------------------------------------------------------------------------
 
 function toDto(snapshot: RoomAnalysisSnapshot): RoomAnalysisSnapshotDto {
-  return {
+  const dto: RoomAnalysisSnapshotDto = {
     id: snapshot.id,
     roomId: snapshot.roomId,
     postCount: snapshot.postCount,
@@ -115,6 +115,19 @@ function toDto(snapshot: RoomAnalysisSnapshot): RoomAnalysisSnapshotDto {
     createdAt: snapshot.createdAt.toISOString(),
     updatedAt: snapshot.updatedAt.toISOString(),
   };
+
+  // Failed updates retain the previous completed analysis fields in the same
+  // row. Re-expose those fields as a completed nested DTO while the outer DTO
+  // carries the latest failure status and error.
+  if (snapshot.status === "failed" && snapshot.summary !== null) {
+    dto.lastSuccessful = {
+      ...dto,
+      status: "completed",
+      error: null,
+    };
+  }
+
+  return dto;
 }
 
 // ---------------------------------------------------------------------------
@@ -152,19 +165,7 @@ export class RoomAnalysisSnapshotService {
     const snapshot = await this.deps.snapshots.findByRoom(roomId);
     if (!snapshot) throw new SnapshotNotFoundError(roomId);
 
-    const dto = toDto(snapshot);
-
-    // When the current snapshot failed, attach the last successful one so the
-    // caller can still display useful data.
-    if (snapshot.status === "failed") {
-      // The repository keeps only one row per room, so we cannot look up a
-      // prior completed snapshot from the DB. Instead we surface the error
-      // clearly and leave `lastSuccessful` absent — the caller must handle
-      // the case where no successful snapshot has ever been produced.
-      return { snapshot: dto };
-    }
-
-    return { snapshot: dto };
+    return { snapshot: toDto(snapshot) };
   }
 
   /**
@@ -216,7 +217,7 @@ export class RoomAnalysisSnapshotService {
     let status: "completed" | "failed" = "completed";
 
     try {
-      summary = await this.generateSummary(roomId, postCount);
+      summary = await this.generateSummary(posts, postCount);
     } catch (err) {
       status = "failed";
       error = err instanceof Error ? err.message : String(err);
@@ -231,13 +232,7 @@ export class RoomAnalysisSnapshotService {
       error,
     });
 
-    const dto = toDto(snapshot);
-
-    // When the update failed, attach the last successful snapshot if one exists.
-    // Since we keep only one row per room, we cannot retrieve a prior completed
-    // snapshot from the DB after overwriting it. We surface the error clearly
-    // and leave `lastSuccessful` absent.
-    return { snapshot: dto, updated: true };
+    return { snapshot: toDto(snapshot), updated: true };
   }
 
   // ---------------------------------------------------------------------------
@@ -281,7 +276,7 @@ export class RoomAnalysisSnapshotService {
    * Throws when the LLM call fails so the caller can record the error.
    */
   private async generateSummary(
-    roomId: string,
+    posts: PostDto[],
     postCount: number,
   ): Promise<string> {
     if (postCount === 0) {
@@ -304,9 +299,7 @@ export class RoomAnalysisSnapshotService {
       });
     }
 
-    // Load the most recent posts for the transcript.
-    const recentPosts = await this.deps.posts.listByRoom(roomId);
-    const sliced = recentPosts.slice(-SNAPSHOT_POST_LIMIT);
+    const sliced = posts.slice(-SNAPSHOT_POST_LIMIT);
 
     const transcript = sliced
       .map((post) =>

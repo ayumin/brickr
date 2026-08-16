@@ -2,8 +2,8 @@
  * Persistence layer for room analysis snapshots (issue #166).
  *
  * One row per room — the unique constraint on `roomId` ensures only the latest
- * snapshot is kept. Upsert is used for all writes so the caller never needs to
- * check whether a row already exists.
+ * attempt is kept. Failed writes preserve the prior successful summary and its
+ * post coordinates so callers still have a last-known-good snapshot.
  */
 import type { SnapshotStatus } from "@brickr/shared";
 import type { Db } from "../persistence/prisma.js";
@@ -70,8 +70,9 @@ export class RoomAnalysisSnapshotRepository {
    * Upserts the snapshot for a room.
    *
    * Because only one snapshot is kept per room (unique on `roomId`), this
-   * always overwrites the previous row. The `id` and `createdAt` of the
-   * existing row are preserved on update so the snapshot's identity is stable.
+   * A completed attempt replaces the analysis fields. A failed attempt updates
+   * only status/error, preserving the previous completed analysis when one
+   * exists. The `id` and `createdAt` remain stable across both paths.
    */
   async upsert(input: UpsertSnapshotInput): Promise<RoomAnalysisSnapshot> {
     const row = await this.db.roomAnalysisSnapshot.upsert({
@@ -84,13 +85,19 @@ export class RoomAnalysisSnapshotRepository {
         status: input.status,
         error: input.error,
       },
-      update: {
-        postCount: input.postCount,
-        latestPostId: input.latestPostId,
-        summary: input.summary,
-        status: input.status,
-        error: input.error,
-      },
+      update:
+        input.status === "failed"
+          ? {
+              status: input.status,
+              error: input.error,
+            }
+          : {
+              postCount: input.postCount,
+              latestPostId: input.latestPostId,
+              summary: input.summary,
+              status: input.status,
+              error: input.error,
+            },
     });
     return toSnapshot(row);
   }
