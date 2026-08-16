@@ -104,8 +104,9 @@ model Character {
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
 
-  modelProfile  ModelProfile @relation(fields: [modelProfileId], references: [id])
-  createdByUser UserProfile? @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  modelProfile    ModelProfile     @relation(fields: [modelProfileId], references: [id])
+  createdByUser   UserProfile?     @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  scheduledEvents ScheduledEvent[]
 
   @@index([handle])
   @@index([createdByUserId])
@@ -147,9 +148,10 @@ model Room {
   /// list can order by activity without aggregating posts (§8.1).
   lastActivityAt  DateTime @default(now()) @map("last_activity_at")
 
-  posts         Post[]
-  memberships   RoomMembership[]
-  createdByUser UserProfile?     @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  posts           Post[]
+  memberships     RoomMembership[]
+  scheduledEvents ScheduledEvent[]
+  createdByUser   UserProfile?     @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
 
   @@index([createdByUserId])
   @@index([scope, status, lastActivityAt])
@@ -193,6 +195,9 @@ model Post {
 
   quoteOfPost Post?  @relation("PostQuotes", fields: [quoteOf], references: [id], onDelete: SetNull, onUpdate: NoAction)
   quotedBy    Post[] @relation("PostQuotes")
+
+  scheduledEvents           ScheduledEvent[] @relation("ScheduledEventPost")
+  scheduledEventsAsRoot     ScheduledEvent[] @relation("ScheduledEventThreadRoot")
 
   @@index([roomId, createdAt])
   @@index([replyTo])
@@ -385,6 +390,11 @@ model ScheduledEvent {
   threadRootId String?     @map("thread_root_id")
   /// The character this event is for, if applicable.
   characterId  String?     @map("character_id")
+
+  room         Room?       @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  post         Post?       @relation("ScheduledEventPost", fields: [postId], references: [id], onDelete: SetNull)
+  threadRoot   Post?       @relation("ScheduledEventThreadRoot", fields: [threadRootId], references: [id], onDelete: SetNull)
+  character    Character?  @relation(fields: [characterId], references: [id], onDelete: SetNull)
 
   /// Worker that currently holds the lock. Null when status is not processing.
   lockedBy     String?     @map("locked_by")
