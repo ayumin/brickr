@@ -1,4 +1,5 @@
 import type { ApiErrorBody, ApiErrorCode } from "@brickr/shared";
+import type { FastifyError, FastifyReply, FastifyRequest } from "fastify";
 
 /**
  * A concrete, directly-instantiable application error that carries everything
@@ -38,4 +39,32 @@ export class AppError extends Error {
       },
     };
   }
+}
+
+/**
+ * Fastify error handler that converts `AppError` instances into their defined
+ * HTTP status + error envelope, and maps every other exception to a safe 500
+ * `internal_error` response so that no internal detail leaks to the client.
+ *
+ * Extracted here (independent of Prisma) so that both `app.ts` and the test
+ * suite can import the same function and the tests validate the real
+ * production code path.
+ */
+export function appErrorHandler(
+  error: FastifyError | AppError | Error,
+  _request: FastifyRequest,
+  reply: FastifyReply,
+): void {
+  if (error instanceof AppError) {
+    reply.status(error.status).send(error.toResponse());
+    return;
+  }
+
+  const status = (error as FastifyError).statusCode ?? 500;
+  reply.status(status).send({
+    error: {
+      code: "internal_error",
+      message: status < 500 ? error.message : "internal error",
+    },
+  });
 }

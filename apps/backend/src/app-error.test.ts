@@ -1,6 +1,6 @@
-import Fastify, { type FastifyError, type FastifyInstance } from "fastify";
+import Fastify, { type FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it } from "vitest";
-import { AppError } from "./app-error.js";
+import { appErrorHandler, AppError } from "./app-error.js";
 
 // ---------------------------------------------------------------------------
 // Unit tests for AppError itself
@@ -64,10 +64,10 @@ describe("AppError", () => {
 // ---------------------------------------------------------------------------
 
 /**
- * A minimal Fastify app that wires the same error handler logic as buildApp,
- * without importing app.ts (which transitively pulls in Prisma and requires a
- * generated client). This lets us verify the two completion criteria from
- * issue #149 in a pure unit-test environment:
+ * A minimal Fastify app that wires the real `appErrorHandler` exported from
+ * `app-error.ts` — the same function used by `buildApp` in `app.ts`. This
+ * ensures the tests validate the actual production code path without pulling
+ * in Prisma or any other infrastructure dependency.
  *   1. A known AppError → its defined status and code.
  *   2. An unknown exception → safe 500 internal_error envelope.
  */
@@ -86,19 +86,7 @@ function buildTestApp(): FastifyInstance {
     throw new Error("something exploded internally");
   });
 
-  // Mirror the error handler from app.ts so we test the real logic.
-  app.setErrorHandler((error: FastifyError | AppError | Error, _request, reply) => {
-    if (error instanceof AppError) {
-      return reply.status(error.status).send(error.toResponse());
-    }
-    const status = (error as { statusCode?: number }).statusCode ?? 500;
-    return reply.status(status).send({
-      error: {
-        code: "internal_error",
-        message: status < 500 ? error.message : "internal error",
-      },
-    });
-  });
+  app.setErrorHandler(appErrorHandler);
 
   return app;
 }
