@@ -4,6 +4,7 @@ stages:
   - test
   - build
   - security
+  - deploy
 
 include:
   - template: Security/SAST.gitlab-ci.yml
@@ -192,3 +193,38 @@ semgrep-sast:
 gemnasium-dependency_scanning:
   before_script: []
   needs: []
+
+"staging:deploy":
+  stage: deploy
+  image: gcr.io/google.com/cloudsdktool/google-cloud-cli:slim
+  interruptible: false
+  resource_group: staging
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: https://gitlab.com
+  variables:
+    GCP_PROJECT_ID: aaizawa-sandbox-505606
+    GCP_REGION: asia-northeast1
+    GCP_WIF_PROVIDER: projects/81103042660/locations/global/workloadIdentityPools/brickr-staging-gitlab/providers/gitlab
+    GCP_DEPLOY_SERVICE_ACCOUNT: brickr-staging-deployer@aaizawa-sandbox-505606.iam.gserviceaccount.com
+    GCP_BUILD_SERVICE_ACCOUNT: projects/aaizawa-sandbox-505606/serviceAccounts/brickr-staging-builder@aaizawa-sandbox-505606.iam.gserviceaccount.com
+    BACKEND_IMAGE: asia-northeast1-docker.pkg.dev/aaizawa-sandbox-505606/brickr-staging/backend
+    FRONTEND_IMAGE: asia-northeast1-docker.pkg.dev/aaizawa-sandbox-505606/brickr-staging/frontend
+  before_script:
+    - umask 077
+    - printf '%s' "$GITLAB_OIDC_TOKEN" > "$CI_PROJECT_DIR/.gitlab-oidc-token"
+    - gcloud iam workload-identity-pools create-cred-config "$GCP_WIF_PROVIDER" --service-account="$GCP_DEPLOY_SERVICE_ACCOUNT" --credential-source-file="$CI_PROJECT_DIR/.gitlab-oidc-token" --output-file="$CI_PROJECT_DIR/.gcp-wif-credentials.json"
+    - gcloud auth login --cred-file="$CI_PROJECT_DIR/.gcp-wif-credentials.json" --brief
+    - gcloud config set project "$GCP_PROJECT_ID"
+  script:
+    - gcloud builds submit --project="$GCP_PROJECT_ID" --region="$GCP_REGION" --config=cloudbuild.yaml --service-account="$GCP_BUILD_SERVICE_ACCOUNT" --substitutions="_IMAGE_TAG=$CI_COMMIT_SHA" .
+    - gcloud run services update brickr-staging-backend --project="$GCP_PROJECT_ID" --region="$GCP_REGION" --image="$BACKEND_IMAGE:$CI_COMMIT_SHA" --quiet
+    - gcloud run services update brickr-staging-frontend --project="$GCP_PROJECT_ID" --region="$GCP_REGION" --image="$FRONTEND_IMAGE:$CI_COMMIT_SHA" --quiet
+    - curl --fail --silent --show-error --retry 12 --retry-delay 10 https://terraform-test.a3s.jp/api/health
+  after_script:
+    - rm -f "$CI_PROJECT_DIR/.gitlab-oidc-token" "$CI_PROJECT_DIR/.gcp-wif-credentials.json"
+  environment:
+    name: staging
+    url: https://terraform-test.a3s.jp

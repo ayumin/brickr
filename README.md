@@ -169,6 +169,12 @@ docker compose down
 Frontendだけ、またはBackendだけを起動する場合は、それぞれ `pnpm dev:frontend`、
 `pnpm dev:backend` を使用します。
 
+## Stagingへのデプロイ
+
+Google Cloudのstaging基盤はTerraformで管理します。Cloud Run、Cloud SQL、Artifact Registry、
+Secret Manager、HTTPS Load Balancerを含む構成と適用手順は
+[`infra/README.md`](./infra/README.md)を参照してください。
+
 ## 環境変数
 
 すべての設定例は [`.env.example`](./.env.example) にあります。主な項目は次のとおりです。
