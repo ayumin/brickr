@@ -138,6 +138,8 @@ export function RoomScreen({ roomId }: { roomId: string }) {
     },
     onStop: selectedRoom.stop,
     onResume: selectedRoom.resume,
+    onArchive: selectedRoom.archive,
+    onDelete: selectedRoom.delete,
   };
 
   return (

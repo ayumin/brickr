@@ -42,6 +42,8 @@ import type {
   PublicProfileResponse,
   ResetPasswordResponse,
   RestoreCharacterResponse,
+  RoomListResponse,
+  RoomMembershipDto,
   SaveCharacterRequest,
   SaveUserProfileRequest,
   SessionResponse,
@@ -460,6 +462,93 @@ export const api = {
       ...(signal ? { signal } : {}),
     });
     return data.simulation;
+  },
+
+  /**
+   * Visibility-aware room list (issue #155). Returns full entries for
+   * public/open rooms and restricted entries for closed rooms where the
+   * caller is not an active member.
+   */
+  async listRooms(signal?: AbortSignal): Promise<RoomListResponse> {
+    return request<RoomListResponse>("/api/rooms", signal ? { signal } : {});
+  },
+
+  /**
+   * Archives a room (owner/admin only). The room must be active.
+   * Use `deleteRoom` to permanently remove an archived room.
+   */
+  async archiveRoom(id: string): Promise<SimulationDto> {
+    const data = await request<{ simulation: SimulationDto }>(
+      `/api/rooms/${encodeURIComponent(id)}/archive`,
+      { method: "POST" },
+    );
+    return data.simulation;
+  },
+
+  /**
+   * Hard-deletes an archived room (owner/admin only).
+   * The room must already be archived — call `archiveRoom` first.
+   */
+  async deleteRoom(id: string): Promise<void> {
+    await request<Record<string, never>>(
+      `/api/rooms/${encodeURIComponent(id)}`,
+      { method: "DELETE" },
+    );
+  },
+
+  /**
+   * Requests to join a room. For public rooms this auto-joins; for open rooms
+   * it creates a pending membership awaiting owner approval.
+   */
+  async joinRoom(id: string): Promise<RoomMembershipDto> {
+    const data = await request<{ membership: RoomMembershipDto }>(
+      `/api/rooms/${encodeURIComponent(id)}/join`,
+      { method: "POST" },
+    );
+    return data.membership;
+  },
+
+  /**
+   * Invites a user (by handle) to a room (owner/admin only).
+   */
+  async inviteUserToRoom(id: string, handle: string): Promise<RoomMembershipDto> {
+    const data = await request<{ membership: RoomMembershipDto }>(
+      `/api/rooms/${encodeURIComponent(id)}/invite`,
+      { method: "POST", body: { handle } },
+    );
+    return data.membership;
+  },
+
+  /**
+   * Lists all memberships for a room (owner/admin only).
+   */
+  async getRoomMemberships(id: string, signal?: AbortSignal): Promise<RoomMembershipDto[]> {
+    const data = await request<{ memberships: RoomMembershipDto[] }>(
+      `/api/rooms/${encodeURIComponent(id)}/memberships`,
+      signal ? { signal } : {},
+    );
+    return data.memberships;
+  },
+
+  /**
+   * Approves a pending membership (owner/admin only).
+   */
+  async approveRoomMembership(roomId: string, memberId: string): Promise<RoomMembershipDto> {
+    const data = await request<{ membership: RoomMembershipDto }>(
+      `/api/rooms/${encodeURIComponent(roomId)}/memberships/${encodeURIComponent(memberId)}/approve`,
+      { method: "POST" },
+    );
+    return data.membership;
+  },
+
+  /**
+   * Rejects/removes a membership (owner/admin only).
+   */
+  async removeRoomMembership(roomId: string, memberId: string): Promise<void> {
+    await request<Record<string, never>>(
+      `/api/rooms/${encodeURIComponent(roomId)}/memberships/${encodeURIComponent(memberId)}`,
+      { method: "DELETE" },
+    );
   },
 
   /**

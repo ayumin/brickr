@@ -1,11 +1,16 @@
 /**
- * Tests for room lifecycle routes (issues #150, #151, #154, #155).
+ * Tests for room lifecycle routes (issues #150, #151, #154, #155, #169).
  *
  * Issue #150: GET /api/rooms/:id (defineRoute demo)
  * Issue #151: POST /api/rooms, PUT /api/rooms/:id, POST /api/rooms/:id/archive,
  *             DELETE /api/rooms/:id
  * Issue #154: membership management endpoints
  * Issue #155: GET /api/rooms (visibility-aware room list)
+ * Issue #169: POST /api/rooms/:id/join, POST /api/rooms/:id/invite,
+ *             GET /api/rooms/:id/memberships,
+ *             POST /api/rooms/:id/memberships/:memberId/approve,
+ *             DELETE /api/rooms/:id/memberships/:memberId,
+ *             POST /api/rooms/:id/memberships/:memberId/ban
  *
  * Verifies for each route:
  *   - auth: "required" → 401 when signed out
@@ -34,6 +39,12 @@ import {
   unbanRoomMemberOpenApiMeta,
   approveRoomMemberOpenApiMeta,
   rejectRoomMemberOpenApiMeta,
+  joinRoomOpenApiMeta,
+  inviteToRoomOpenApiMeta,
+  listMembershipsOpenApiMeta,
+  approveMembershipOpenApiMeta,
+  removeMembershipOpenApiMeta,
+  banMemberOpenApiMeta,
   registerRoomsRoutes,
 } from "./rooms-routes.js";
 import type { RoomService } from "../simulation/room-service.js";
@@ -42,6 +53,10 @@ import {
   RoomForbiddenError,
   RoomArchivedError,
   RoomNotArchivedError,
+  RoomJoinNotAllowedError,
+  RoomAlreadyMemberError,
+  RoomMemberBannedError,
+  UserNotFoundError,
   VisibilityImmutableError,
 } from "../simulation/room-service.js";
 import type { RoomMembershipService } from "../simulation/room-membership-service.js";
@@ -111,6 +126,11 @@ function makeRoomService(overrides: Partial<RoomService> = {}): RoomService {
     delete: vi.fn(() => Promise.resolve()),
     archiveOwnedBy: vi.fn(() => Promise.resolve()),
     listMemberships: vi.fn(() => Promise.resolve([])),
+    join: vi.fn(() => Promise.resolve(membershipDto)),
+    inviteByHandle: vi.fn(() => Promise.resolve(membershipDto)),
+    approveMembership: vi.fn(() => Promise.resolve({ ...membershipDto, status: "active" as const })),
+    removeMembership: vi.fn(() => Promise.resolve()),
+    banMember: vi.fn(() => Promise.resolve()),
     ...overrides,
   } as unknown as RoomService;
 }
@@ -1087,6 +1107,7 @@ describe("GET /api/rooms", () => {
       lastActivityAt: "2026-08-16T00:00:00.000Z",
       creator: null,
       canManage: false,
+      isMember: false,
     };
     const services = makeServices({ listRooms: () => Promise.resolve([publicRoom]) });
     const app = await buildApp(signedInUser, services);
@@ -1134,6 +1155,7 @@ describe("GET /api/rooms", () => {
       lastActivityAt: "2026-08-16T00:00:00.000Z",
       creator: { id: signedInUser.id, handle: "hanako", displayName: "花子" },
       canManage: true,
+      isMember: true,
       pendingCount: 3,
     };
     const services = makeServices({ listRooms: () => Promise.resolve([ownerRoom]) });
@@ -1291,6 +1313,33 @@ describe("rooms route OpenAPI registration", () => {
     expect(found?.openApiPath).toBe("/api/rooms/{id}/members/{mid}/unban");
   });
 
+  it("registers the joinRoom operation", () => {
+    const found = registeredRoutes.find(
+      (r) => r.operation.operationId === joinRoomOpenApiMeta.operationId,
+    );
+    expect(found).toBeDefined();
+    expect(found?.method).toBe("POST");
+    expect(found?.openApiPath).toBe("/api/rooms/{id}/join");
+  });
+
+  it("registers the inviteToRoom operation", () => {
+    const found = registeredRoutes.find(
+      (r) => r.operation.operationId === inviteToRoomOpenApiMeta.operationId,
+    );
+    expect(found).toBeDefined();
+    expect(found?.method).toBe("POST");
+    expect(found?.openApiPath).toBe("/api/rooms/{id}/invite");
+  });
+
+  it("registers the listRoomMemberships operation", () => {
+    const found = registeredRoutes.find(
+      (r) => r.operation.operationId === listMembershipsOpenApiMeta.operationId,
+    );
+    expect(found).toBeDefined();
+    expect(found?.method).toBe("GET");
+    expect(found?.openApiPath).toBe("/api/rooms/{id}/memberships");
+  });
+
   it("registers the approveRoomMembership operation", () => {
     const found = registeredRoutes.find(
       (r) => r.operation.operationId === approveRoomMemberOpenApiMeta.operationId,
@@ -1307,5 +1356,387 @@ describe("rooms route OpenAPI registration", () => {
     expect(found).toBeDefined();
     expect(found?.method).toBe("POST");
     expect(found?.openApiPath).toBe("/api/rooms/{id}/members/{mid}/reject");
+  });
+});
+
+describe("room management route OpenAPI registration", () => {
+  it("registers the approveRoomMembershipByMemberId operation", () => {
+    const found = registeredRoutes.find(
+      (r) => r.operation.operationId === approveMembershipOpenApiMeta.operationId,
+    );
+    expect(found).toBeDefined();
+    expect(found?.method).toBe("POST");
+    expect(found?.openApiPath).toBe("/api/rooms/{id}/memberships/{memberId}/approve");
+  });
+
+  it("registers the removeRoomMembership operation", () => {
+    const found = registeredRoutes.find(
+      (r) => r.operation.operationId === removeMembershipOpenApiMeta.operationId,
+    );
+    expect(found).toBeDefined();
+    expect(found?.method).toBe("DELETE");
+    expect(found?.openApiPath).toBe("/api/rooms/{id}/memberships/{memberId}");
+  });
+
+  it("registers the banRoomMember operation", () => {
+    const found = registeredRoutes.find(
+      (r) => r.operation.operationId === banMemberOpenApiMeta.operationId,
+    );
+    expect(found).toBeDefined();
+    expect(found?.method).toBe("POST");
+    expect(found?.openApiPath).toBe("/api/rooms/{id}/memberships/{memberId}/ban");
+  });
+});
+
+// ── POST /api/rooms/:id/join ──────────────────────────────────────────────────
+
+describe("POST /api/rooms/:id/join", () => {
+  const apps: FastifyInstance[] = [];
+
+  afterEach(async () => {
+    await Promise.all(apps.splice(0).map((app) => app.close()));
+  });
+
+  it("answers 401 when signed out", async () => {
+    const app = await buildApp(null);
+    apps.push(app);
+
+    const response = await app.inject({ method: "POST", url: "/api/rooms/room-1/join" });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it("joins the room and returns the membership", async () => {
+    const app = await buildApp(signedInUser);
+    apps.push(app);
+
+    const response = await app.inject({ method: "POST", url: "/api/rooms/room-1/join" });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ membership: { id: "mem-1", status: "active" } });
+  });
+
+  it("maps RoomJoinNotAllowedError to 403", async () => {
+    const services = makeServices(
+      {},
+      { join: () => Promise.reject(new RoomJoinNotAllowedError("room-1")) },
+    );
+    const app = await buildApp(signedInUser, services);
+    apps.push(app);
+
+    const response = await app.inject({ method: "POST", url: "/api/rooms/room-1/join" });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toMatchObject({ error: { code: "room_join_not_allowed" } });
+  });
+
+  it("maps RoomAlreadyMemberError to 409", async () => {
+    const services = makeServices(
+      {},
+      { join: () => Promise.reject(new RoomAlreadyMemberError("room-1")) },
+    );
+    const app = await buildApp(signedInUser, services);
+    apps.push(app);
+
+    const response = await app.inject({ method: "POST", url: "/api/rooms/room-1/join" });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({ error: { code: "room_already_member" } });
+  });
+
+  it("maps RoomMemberBannedError to 403", async () => {
+    const services = makeServices(
+      {},
+      { join: () => Promise.reject(new RoomMemberBannedError("room-1")) },
+    );
+    const app = await buildApp(signedInUser, services);
+    apps.push(app);
+
+    const response = await app.inject({ method: "POST", url: "/api/rooms/room-1/join" });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toMatchObject({ error: { code: "room_member_banned" } });
+  });
+});
+
+// ── POST /api/rooms/:id/invite ────────────────────────────────────────────────
+
+describe("POST /api/rooms/:id/invite", () => {
+  const apps: FastifyInstance[] = [];
+
+  afterEach(async () => {
+    await Promise.all(apps.splice(0).map((app) => app.close()));
+  });
+
+  it("answers 401 when signed out", async () => {
+    const app = await buildApp(null);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/rooms/room-1/invite",
+      payload: { handle: "someuser" },
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it("invites a user and returns the membership", async () => {
+    const app = await buildApp(signedInUser);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/rooms/room-1/invite",
+      payload: { handle: "someuser" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ membership: { id: "mem-1" } });
+  });
+
+  it("answers 400 when handle is missing", async () => {
+    const app = await buildApp(signedInUser);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/rooms/room-1/invite",
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ error: { code: "invalid_body" } });
+  });
+
+  it("maps RoomForbiddenError to 403", async () => {
+    const services = makeServices(
+      {},
+      { inviteByHandle: () => Promise.reject(new RoomForbiddenError("room-1")) },
+    );
+    const app = await buildApp(signedInUser, services);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/rooms/room-1/invite",
+      payload: { handle: "someuser" },
+    });
+
+    expect(response.statusCode).toBe(403);
+  });
+
+  it("maps UserNotFoundError to 404", async () => {
+    const services = makeServices(
+      {},
+      { inviteByHandle: () => Promise.reject(new UserNotFoundError("nobody")) },
+    );
+    const app = await buildApp(signedInUser, services);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/rooms/room-1/invite",
+      payload: { handle: "nobody" },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({ error: { code: "user_not_found" } });
+  });
+});
+
+// ── GET /api/rooms/:id/memberships ────────────────────────────────────────────
+
+describe("GET /api/rooms/:id/memberships", () => {
+  const apps: FastifyInstance[] = [];
+
+  afterEach(async () => {
+    await Promise.all(apps.splice(0).map((app) => app.close()));
+  });
+
+  it("answers 401 when signed out", async () => {
+    const app = await buildApp(null);
+    apps.push(app);
+
+    const response = await app.inject({ method: "GET", url: "/api/rooms/room-1/memberships" });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it("returns memberships for the room owner", async () => {
+    const services = makeServices(
+      { get: () => Promise.resolve({ simulation: { ...roomSummary, canManage: true } }) },
+      { listMemberships: () => Promise.resolve([membershipDto]) },
+    );
+    const app = await buildApp(signedInUser, services);
+    apps.push(app);
+
+    const response = await app.inject({ method: "GET", url: "/api/rooms/room-1/memberships" });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ memberships: [{ id: "mem-1" }] });
+  });
+
+  it("answers 403 for a non-owner", async () => {
+    const services = makeServices({
+      get: () => Promise.resolve({ simulation: { ...roomSummary, canManage: false } }),
+    });
+    const app = await buildApp(signedInUser, services);
+    apps.push(app);
+
+    const response = await app.inject({ method: "GET", url: "/api/rooms/room-1/memberships" });
+
+    expect(response.statusCode).toBe(403);
+  });
+});
+
+// ── POST /api/rooms/:id/memberships/:memberId/approve ─────────────────────────
+
+describe("POST /api/rooms/:id/memberships/:memberId/approve", () => {
+  const apps: FastifyInstance[] = [];
+
+  afterEach(async () => {
+    await Promise.all(apps.splice(0).map((app) => app.close()));
+  });
+
+  it("answers 401 when signed out", async () => {
+    const app = await buildApp(null);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/rooms/room-1/memberships/user-2/approve",
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it("approves the membership and returns it", async () => {
+    const app = await buildApp(signedInUser);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/rooms/room-1/memberships/user-2/approve",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ membership: { status: "active" } });
+  });
+
+  it("maps RoomForbiddenError to 403", async () => {
+    const services = makeServices(
+      {},
+      { approveMembership: () => Promise.reject(new RoomForbiddenError("room-1")) },
+    );
+    const app = await buildApp(signedInUser, services);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/rooms/room-1/memberships/user-2/approve",
+    });
+
+    expect(response.statusCode).toBe(403);
+  });
+});
+
+// ── DELETE /api/rooms/:id/memberships/:memberId ───────────────────────────────
+
+describe("DELETE /api/rooms/:id/memberships/:memberId", () => {
+  const apps: FastifyInstance[] = [];
+
+  afterEach(async () => {
+    await Promise.all(apps.splice(0).map((app) => app.close()));
+  });
+
+  it("answers 401 when signed out", async () => {
+    const app = await buildApp(null);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/api/rooms/room-1/memberships/user-2",
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it("removes the membership and returns 204", async () => {
+    const app = await buildApp(signedInUser);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/api/rooms/room-1/memberships/user-2",
+    });
+
+    expect(response.statusCode).toBe(204);
+  });
+
+  it("maps RoomForbiddenError to 403", async () => {
+    const services = makeServices(
+      {},
+      { removeMembership: () => Promise.reject(new RoomForbiddenError("room-1")) },
+    );
+    const app = await buildApp(signedInUser, services);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/api/rooms/room-1/memberships/user-2",
+    });
+
+    expect(response.statusCode).toBe(403);
+  });
+});
+
+// ── POST /api/rooms/:id/memberships/:memberId/ban ─────────────────────────────
+
+describe("POST /api/rooms/:id/memberships/:memberId/ban", () => {
+  const apps: FastifyInstance[] = [];
+
+  afterEach(async () => {
+    await Promise.all(apps.splice(0).map((app) => app.close()));
+  });
+
+  it("answers 401 when signed out", async () => {
+    const app = await buildApp(null);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/rooms/room-1/memberships/user-2/ban",
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it("bans the member and returns 204", async () => {
+    const app = await buildApp(signedInUser);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/rooms/room-1/memberships/user-2/ban",
+    });
+
+    expect(response.statusCode).toBe(204);
+  });
+
+  it("maps RoomForbiddenError to 403", async () => {
+    const services = makeServices(
+      {},
+      { banMember: () => Promise.reject(new RoomForbiddenError("room-1")) },
+    );
+    const app = await buildApp(signedInUser, services);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/rooms/room-1/memberships/user-2/ban",
+    });
+
+    expect(response.statusCode).toBe(403);
   });
 });

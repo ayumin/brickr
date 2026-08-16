@@ -25,6 +25,8 @@ export type UseSelectedRoomResult = {
   rename: (title: string) => Promise<void>;
   stop: () => Promise<void>;
   resume: () => Promise<void>;
+  archive: () => Promise<void>;
+  delete: () => Promise<void>;
 };
 
 /**
@@ -93,5 +95,16 @@ export function useSelectedRoom(roomId: string): UseSelectedRoomResult {
     reload();
   }, [roomId, reload]);
 
-  return { state, reload, rename, stop, resume };
+  const archive = useCallback(async (): Promise<void> => {
+    await api.archiveRoom(roomId);
+    reload();
+  }, [roomId, reload]);
+
+  const deleteRoom = useCallback(async (): Promise<void> => {
+    await api.deleteRoom(roomId);
+    // After deletion, navigate away — the room no longer exists.
+    navigate("/rooms", { replace: true });
+  }, [roomId, navigate]);
+
+  return { state, reload, rename, stop, resume, archive, delete: deleteRoom };
 }

@@ -146,6 +146,7 @@ export async function buildServices(db: Db, logger: SimulationLogger): Promise<A
   const rooms = new RoomService({
     simulations: simulationRepository,
     memberships: roomMembershipRepository,
+    handles: handleRepository,
   });
 
   const roomMemberships = new RoomMembershipService({

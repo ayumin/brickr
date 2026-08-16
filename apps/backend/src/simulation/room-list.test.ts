@@ -54,6 +54,8 @@ describe("toRoomListEntryDto — public rooms", () => {
     const summary = makeSummary({ visibility: "public" });
     const entry = toRoomListEntryDto(summary, NON_MEMBER);
     expect(entry.restricted).toBe(false);
+    if (entry.restricted) throw new Error("expected non-restricted");
+    expect(entry.isMember).toBe(false);
   });
 
   it("includes postCount and creator for public rooms", () => {
@@ -126,6 +128,8 @@ describe("toRoomListEntryDto — closed rooms", () => {
     });
     const entry = toRoomListEntryDto(summary, MEMBER);
     expect(entry.restricted).toBe(false);
+    if (entry.restricted) throw new Error("expected non-restricted");
+    expect(entry.isMember).toBe(true);
   });
 
   it("returns a full entry for a closed room when the caller is the owner", () => {
@@ -221,4 +225,3 @@ describe("toRoomListEntryDto — pendingCount badge", () => {
     expect(entry).not.toHaveProperty("pendingCount");
   });
 });
-

@@ -101,7 +101,11 @@ export type RoomsResponse = {
  * closed/private rooms.
  */
 export type RoomListEntryDto =
-  | (RoomSummaryDto & { restricted: false })
+  | (RoomSummaryDto & {
+      restricted: false;
+      /** Whether the caller currently holds an active membership in this room. */
+      isMember: boolean;
+    })
   | {
       /** Restricted entry: only prescribed metadata for closed non-members. */
       restricted: true;
