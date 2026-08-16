@@ -27,6 +27,7 @@ import {
   UserNotFoundError,
   VisibilityImmutableError,
 } from "./room-service.js";
+import { CannotModifyOwnerError } from "./room-membership-errors.js";
 import type { Simulation, SimulationActor } from "./simulation.js";
 import type { RoomMembership } from "./room-membership-repository.js";
 import { GLOBAL_SIMULATION_ID } from "@brickr/shared";
@@ -637,6 +638,27 @@ describe("RoomService.removeMembership", () => {
       RoomForbiddenError,
     );
   });
+
+  it("refuses to remove the owner's membership", async () => {
+    const { service, memberships } = makeService();
+
+    await expect(service.removeMembership("room-1", OWNER.id, ADMIN)).rejects.toThrow(
+      CannotModifyOwnerError,
+    );
+    expect(memberships.updateStatusByMember).not.toHaveBeenCalled();
+  });
+
+  it("refuses to mutate the global room", async () => {
+    const { service } = makeService({
+      findById: vi.fn(() =>
+        Promise.resolve(makeRoom({ id: GLOBAL_SIMULATION_ID, scope: "global" })),
+      ),
+    });
+
+    await expect(
+      service.removeMembership(GLOBAL_SIMULATION_ID, OTHER.id, ADMIN),
+    ).rejects.toThrow(GlobalSimulationMutationError);
+  });
 });
 
 // ── banMember ─────────────────────────────────────────────────────────────────
@@ -674,5 +696,26 @@ describe("RoomService.banMember", () => {
     await expect(service.banMember("room-1", OTHER.id, OTHER)).rejects.toThrow(
       RoomForbiddenError,
     );
+  });
+
+  it("refuses to ban the owner's membership", async () => {
+    const { service, memberships } = makeService();
+
+    await expect(service.banMember("room-1", OWNER.id, ADMIN)).rejects.toThrow(
+      CannotModifyOwnerError,
+    );
+    expect(memberships.updateStatusByMember).not.toHaveBeenCalled();
+  });
+
+  it("refuses to mutate the global room", async () => {
+    const { service } = makeService({
+      findById: vi.fn(() =>
+        Promise.resolve(makeRoom({ id: GLOBAL_SIMULATION_ID, scope: "global" })),
+      ),
+    });
+
+    await expect(
+      service.banMember(GLOBAL_SIMULATION_ID, OTHER.id, ADMIN),
+    ).rejects.toThrow(GlobalSimulationMutationError);
   });
 });

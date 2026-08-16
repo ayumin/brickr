@@ -11,6 +11,7 @@ import { formatAbsoluteTime, formatRelativeTime } from "../timeline/QuotePost";
 import { roomPath } from "../../routes";
 import { api, isAbortError, toErrorMessage } from "../../services/api-client";
 import { RoomNameDialog } from "./RoomNameDialog";
+import { canJoinRoom } from "./room-list-actions";
 import { writeSelectedRoomId } from "./selected-room-storage";
 
 type Dialog = { mode: "create" } | { mode: "rename"; room: RoomSummaryDto };
@@ -152,6 +153,7 @@ export function RoomListScreen() {
   const [rooms, setRooms] = useState<RoomListEntryDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [joinError, setJoinError] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
   const [dialog, setDialog] = useState<Dialog | null>(null);
   // Track which rooms are currently being joined (by room id)
@@ -188,14 +190,14 @@ export function RoomListScreen() {
 
   const joinRoom = useCallback(
     async (roomId: string): Promise<void> => {
+      setJoinError(null);
       setJoiningIds((prev) => new Set(prev).add(roomId));
       try {
         await api.joinRoom(roomId);
         // Reload the list so the room's membership state is up to date
         load();
-      } catch {
-        // Errors are surfaced by reloading — the join button will still be
-        // visible if the join failed, and the user can try again.
+      } catch (cause: unknown) {
+        setJoinError(toErrorMessage(cause));
         load();
       } finally {
         setJoiningIds((prev) => {
@@ -230,6 +232,16 @@ export function RoomListScreen() {
         </button>
       </header>
 
+      {joinError ? (
+        <div className="p-4 pb-0">
+          <ErrorBanner
+            message="ルームに参加できませんでした"
+            detail={joinError}
+            onDismiss={() => setJoinError(null)}
+          />
+        </div>
+      ) : null}
+
       {error ? (
         <div className="p-4">
           <ErrorBanner message="ルーム一覧を取得できませんでした" detail={error} onRetry={load} />
@@ -250,14 +262,9 @@ export function RoomListScreen() {
             }
 
             // Full entry: determine whether to show a join button.
-            // The server only sends canManage=true to the owner/admin, and
-            // join is only relevant for public/open rooms where the caller
-            // is not yet a member (canManage implies membership, so we skip
-            // the join button for owners).
-            const canJoin =
-              !entry.canManage &&
-              entry.status === "active" &&
-              (entry.visibility === "public" || entry.visibility === "open");
+            // Membership and management are server-computed. The client only
+            // combines those flags with status/visibility for presentation.
+            const canJoin = canJoinRoom(entry);
 
             return (
               <FullRoomCard

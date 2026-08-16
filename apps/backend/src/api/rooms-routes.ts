@@ -130,6 +130,7 @@ const restrictedRoomEntrySchema = z.object({
 
 const fullRoomEntrySchema = roomSummarySchema.extend({
   restricted: z.literal(false),
+  isMember: z.boolean(),
   pendingCount: z.number().int().min(0).optional(),
 });
 

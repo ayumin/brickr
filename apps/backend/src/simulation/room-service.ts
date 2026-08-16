@@ -14,7 +14,11 @@
 import type { RoomMembershipDto, RoomVisibility } from "@brickr/shared";
 import { DomainError } from "../domain-error.js";
 import type { SimulationRepository } from "./simulation-repository.js";
-import type { RoomMembershipRepository } from "./room-membership-repository.js";
+import type {
+  RoomMembership,
+  RoomMembershipRepository,
+} from "./room-membership-repository.js";
+import { CannotModifyOwnerError } from "./room-membership-errors.js";
 import type { HandleRepository } from "../handles/handle-repository.js";
 import {
   assertNotGlobalSimulation,
@@ -347,7 +351,12 @@ export class RoomService {
     actor: SimulationActor,
   ): Promise<RoomMembershipDto> {
     const simulation = await this.requireRoom(roomId);
+    assertNotGlobalSimulation(simulation);
     this.assertOwnerOrAdmin(simulation, actor, roomId);
+
+    if (simulation.status === "archived") {
+      throw new RoomArchivedError(roomId);
+    }
 
     const updated = await this.deps.memberships.updateStatusByMember(
       roomId,
@@ -369,7 +378,13 @@ export class RoomService {
     actor: SimulationActor,
   ): Promise<void> {
     const simulation = await this.requireRoom(roomId);
+    assertNotGlobalSimulation(simulation);
     this.assertOwnerOrAdmin(simulation, actor, roomId);
+
+    if (simulation.status === "archived") {
+      throw new RoomArchivedError(roomId);
+    }
+    this.assertNotOwnerMembership(simulation, memberId);
 
     const updated = await this.deps.memberships.updateStatusByMember(
       roomId,
@@ -390,7 +405,13 @@ export class RoomService {
     actor: SimulationActor,
   ): Promise<void> {
     const simulation = await this.requireRoom(roomId);
+    assertNotGlobalSimulation(simulation);
     this.assertOwnerOrAdmin(simulation, actor, roomId);
+
+    if (simulation.status === "archived") {
+      throw new RoomArchivedError(roomId);
+    }
+    this.assertNotOwnerMembership(simulation, memberId);
 
     const updated = await this.deps.memberships.updateStatusByMember(
       roomId,
@@ -418,13 +439,20 @@ export class RoomService {
       throw new RoomForbiddenError(id);
     }
   }
+
+  private assertNotOwnerMembership(
+    simulation: { createdByUserId?: string },
+    memberId: string,
+  ): void {
+    if (memberId === simulation.createdByUserId) {
+      throw new CannotModifyOwnerError();
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-import type { RoomMembership } from "./room-membership-repository.js";
 
 function toMembershipDto(m: RoomMembership): RoomMembershipDto {
   return {

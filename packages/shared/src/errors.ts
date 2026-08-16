@@ -23,7 +23,6 @@ export const API_ERROR_CODES = [
   "membership_not_found",
   // Room authorization producers are introduced by follow-up issues #151/#152.
   "membership_required",
-  "membership_not_found",
   "not_found",
   "room_already_member",
   "room_archived",

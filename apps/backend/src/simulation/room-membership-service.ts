@@ -22,6 +22,7 @@ import { isUniqueConstraintError } from "../persistence/prisma.js";
 import type { SimulationRepository } from "./simulation-repository.js";
 import type { RoomMembershipRepository } from "./room-membership-repository.js";
 import type { RoomMembership } from "./room-membership-repository.js";
+import { CannotModifyOwnerError } from "./room-membership-errors.js";
 import {
   assertNotGlobalSimulation,
   isSimulationOwnerOrAdmin,
@@ -57,14 +58,6 @@ export class MemberBannedError extends DomainError {
   }
 }
 
-export class CannotModifyOwnerError extends DomainError {
-  readonly httpStatus = 409;
-  readonly errorCode = "cannot_modify_owner" as const;
-  constructor() {
-    super("the room owner's membership cannot be removed or banned");
-  }
-}
-
 export class InvalidStatusTransitionError extends DomainError {
   readonly httpStatus = 409;
   readonly errorCode = "invalid_status_transition" as const;
@@ -72,6 +65,8 @@ export class InvalidStatusTransitionError extends DomainError {
     super(`cannot transition membership from "${from}" to "${to}"`);
   }
 }
+
+export { CannotModifyOwnerError } from "./room-membership-errors.js";
 
 // ---------------------------------------------------------------------------
 // Input types

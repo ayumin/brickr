@@ -835,6 +835,7 @@ export function toRoomListEntryDto(
 
   return {
     restricted: false,
+    isMember: isActiveMember,
     ...toSimulationSummaryDto(simulation, actor),
   };
 }

@@ -1107,6 +1107,7 @@ describe("GET /api/rooms", () => {
       lastActivityAt: "2026-08-16T00:00:00.000Z",
       creator: null,
       canManage: false,
+      isMember: false,
     };
     const services = makeServices({ listRooms: () => Promise.resolve([publicRoom]) });
     const app = await buildApp(signedInUser, services);
@@ -1154,6 +1155,7 @@ describe("GET /api/rooms", () => {
       lastActivityAt: "2026-08-16T00:00:00.000Z",
       creator: { id: signedInUser.id, handle: "hanako", displayName: "花子" },
       canManage: true,
+      isMember: true,
       pendingCount: 3,
     };
     const services = makeServices({ listRooms: () => Promise.resolve([ownerRoom]) });
