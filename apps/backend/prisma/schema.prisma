@@ -12,6 +12,52 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+/// Polymorphic member kind: distinguishes a real user from an AI character.
+enum MemberKind {
+  user
+  character
+}
+
+/// Role within a room. Only users may be owners; characters are always members.
+/// This constraint is enforced at the service layer, not at the DB level.
+enum MemberRole {
+  owner
+  member
+}
+
+/// Lifecycle state of a room membership.
+/// Allowed transitions (enforced at the service layer):
+///   pending  → active | removed | banned
+///   active   → left   | removed | banned
+///   left     → active (re-join)
+///   removed  → active (re-invite) | banned
+///   banned   → removed (only)
+enum MemberStatus {
+  active
+  pending
+  left
+  removed
+  banned
+}
+
+/// Visibility of a room to non-members.
+///
+/// Schema management note: this project uses `prisma db push --accept-data-loss`
+/// (see docker-entrypoint.sh) rather than `prisma migrate dev`, so no migration
+/// file is generated. The `--accept-data-loss` flag instructs Prisma to issue the
+/// necessary `ALTER COLUMN ... TYPE "RoomVisibility" USING (visibility::text::"RoomVisibility")`
+/// DDL automatically when the schema is pushed to the database.
+enum RoomVisibility {
+  /// Visible and joinable by anyone.
+  public
+  /// Visible to anyone; joining requires approval.
+  open
+  /// Visible to members only; joining requires an invitation.
+  closed
+  /// Invisible and invite-only.
+  private
+}
+
 model ModelProfile {
   id         String   @id
   providerId String   @map("provider_id")
@@ -54,8 +100,8 @@ model Character {
   /// Private: visible only to this user or an admin (§66.5), never in the ordinary Character DTO.
   createdByUserId String? @map("created_by_user_id")
 
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
 
   modelProfile  ModelProfile @relation(fields: [modelProfileId], references: [id])
@@ -67,34 +113,34 @@ model Character {
 }
 
 model Room {
-  id    String  @id @default(uuid())
+  id     String  @id @default(uuid())
   /// Human-readable room name (optional, same role as the old Simulation.title).
-  title String?
+  title  String?
   /// "active" | "archived".
-  status String @default("active")
+  status String  @default("active")
   /// "global" | "room". Internal only, never a label on screen: the reserved
   /// global row backs the unified feed (Brickr-ux-refine §8.1, §8.2).
-  scope  String @default("room")
+  scope  String  @default("room")
 
   // Extended room metadata (Phase-1 redesign).
   // These fields are schema scaffolding for a future phase; none of them are
   // read or enforced by the current application code.
   /// Optional short description shown in the room list.
-  description    String? @map("description")
-  /// "public" | "private". Intended to control visibility, but not yet
-  /// enforced — findAllVisibleTo still filters only by status and owner.
+  description    String?        @map("description")
+  /// Intended to control visibility, but not yet enforced —
+  /// findAllVisibleTo still filters only by status and owner.
   /// Stored now so the column exists when the enforcement phase lands.
-  visibility     String  @default("public") @map("visibility")
+  visibility     RoomVisibility @default(public) @map("visibility")
   /// Free-form tags for filtering / discovery (unenforced scaffolding).
-  tags           String[] @default([]) @map("tags")
+  tags           String[]       @default([]) @map("tags")
   /// UI theme identifier (e.g. "default", "dark") (unenforced scaffolding).
-  theme          String?  @map("theme")
+  theme          String?        @map("theme")
   /// Whether Cast characters may join this room autonomously (unenforced scaffolding).
-  castAutonomous Boolean  @default(true) @map("cast_autonomous")
+  castAutonomous Boolean        @default(true) @map("cast_autonomous")
 
   /// Public to everyone, unlike Character ownership (§66.6). Null for rooms
   /// created before login existed, and for the reserved global row.
-  createdByUserId String? @map("created_by_user_id")
+  createdByUserId String?  @map("created_by_user_id")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
   /// Newest post or reply anywhere in this room. Denormalised so the room
@@ -102,7 +148,8 @@ model Room {
   lastActivityAt  DateTime @default(now()) @map("last_activity_at")
 
   posts         Post[]
-  createdByUser UserProfile? @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  memberships   RoomMembership[]
+  createdByUser UserProfile?     @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
 
   @@index([createdByUserId])
   @@index([scope, status, lastActivityAt])
@@ -120,7 +167,7 @@ model Post {
   authorId String @map("author_id")
 
   content  String
-  imageUrl String? @map("image_url") @db.Text
+  imageUrl String?  @map("image_url") @db.Text
   mentions String[] @default([])
 
   replyTo String? @map("reply_to")
@@ -171,10 +218,10 @@ model UserProfile {
   handle String?
 
   // Credentials. Private: never part of any DTO (§66.1).
-  email        String? @unique
-  passwordHash String? @map("password_hash")
+  email        String?   @unique
+  passwordHash String?   @map("password_hash")
   /// Self-declared at signup, gates the 18+ check, never returned (§66.1).
-  birthdate DateTime? @db.Date
+  birthdate    DateTime? @db.Date
 
   // Optional public profile fields (§66.1). Region stops at prefecture/state.
   country    String?
@@ -186,7 +233,7 @@ model UserProfile {
   /// Plain boolean instead of a role model, by design (§66.7, §60).
   isAdmin Boolean @default(false) @map("is_admin")
   /// "active" | "suspended" (§66.12).
-  status String @default("active")
+  status  String  @default("active")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -253,6 +300,46 @@ model ApplicationSetting {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("application_settings")
+}
+
+/// Persistent membership record that tracks every participant (user or character)
+/// in a room, along with their role and lifecycle status (Phase-1 redesign, #145).
+///
+/// Polymorphic design: Prisma does not support polymorphic relations natively,
+/// so `memberId` is a plain String. The service layer is responsible for
+/// resolving it to the correct UserProfile or Character row.
+///
+/// Constraints enforced at the service layer (not expressible as DB constraints):
+///   - Only users may hold the `owner` role.
+///   - Characters may only hold the `member` role.
+///   - `banned` → `removed` is the only allowed transition out of `banned`.
+model RoomMembership {
+  id         String       @id @default(uuid())
+  roomId     String       @map("room_id")
+  memberKind MemberKind   @map("member_kind")
+  memberId   String       @map("member_id")
+  role       MemberRole   @default(member) @map("role")
+  status     MemberStatus @default(pending) @map("status")
+
+  /// Who sent the invitation. Null when the member joined without an invitation
+  /// (e.g. self-join on a public room). Kept as a plain String for the same
+  /// polymorphic reason as `memberId`.
+  invitedById String?   @map("invited_by_id")
+  invitedAt   DateTime? @map("invited_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  /// Each (room, memberKind, memberId) triple must be unique so that a user or
+  /// character cannot hold two concurrent memberships in the same room.
+  @@unique([roomId, memberKind, memberId])
+  /// Efficient lookup of all active members in a room (e.g. for responder selection).
+  @@index([roomId, status])
+  /// Efficient lookup of all rooms a given member belongs to.
+  @@index([memberId, memberKind])
+  @@map("room_memberships")
 }
 
 /// Running per-user LLM token totals (CLAUDE.md §66.4). One row per user,
