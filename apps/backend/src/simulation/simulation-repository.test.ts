@@ -6,8 +6,14 @@ const ADMIN = { id: "admin-1", isAdmin: true };
 const USER = { id: "user-1", isAdmin: false };
 
 function makeDb(rows: unknown[]) {
-  const findMany = vi.fn(() => Promise.resolve(rows));
+  const findMany = vi.fn((_args: unknown) => Promise.resolve(rows));
   return { db: { room: { findMany } } as unknown as Db, findMany };
+}
+
+function firstFindManyArgs(findMany: ReturnType<typeof makeDb>["findMany"]): unknown {
+  const call = findMany.mock.calls.at(0);
+  if (!call) throw new Error("Expected room.findMany to have been called");
+  return call[0];
 }
 
 // Helper to build a minimal room row for findAllVisibleTo tests.
@@ -76,10 +82,13 @@ describe("SimulationRepository.findAllVisibleTo", () => {
     // an entry in the room list (§8.2). Activity order, not creation order, so an
     // active room cannot sink out of reach (§10.3).
     // The AND clause combines: (1) archived-room ownership and (2) visibility.
-    const call = findMany.mock.calls[0][0];
-    expect(call.where.scope).toBe("room");
-    expect(call.where.AND).toBeDefined();
-    expect(call.orderBy).toEqual([{ lastActivityAt: "desc" }, { id: "desc" }]);
+    const call = firstFindManyArgs(findMany);
+    expect(call).toHaveProperty("where.scope", "room");
+    expect(call).toHaveProperty("where.AND");
+    expect(call).toHaveProperty("orderBy", [
+      { lastActivityAt: "desc" },
+      { id: "desc" },
+    ]);
   });
 
   it("asks the database for only the stopped rooms an ordinary caller owns", async () => {
@@ -89,10 +98,11 @@ describe("SimulationRepository.findAllVisibleTo", () => {
 
     // Filtered in the query rather than afterwards: a room this caller may not
     // see is never read, so it cannot leak through a mapping mistake later.
-    const call = findMany.mock.calls[0][0];
-    const statusClause = call.where.AND[0];
-    expect(statusClause.OR).toContainEqual({ status: "active" });
-    expect(statusClause.OR).toContainEqual({ createdByUserId: USER.id });
+    const call = firstFindManyArgs(findMany);
+    expect(call).toHaveProperty(
+      "where.AND.0.OR",
+      expect.arrayContaining([{ status: "active" }, { createdByUserId: USER.id }]),
+    );
   });
 
   it("includes public/open/closed rooms for a regular user (visibility clause)", async () => {
@@ -100,12 +110,12 @@ describe("SimulationRepository.findAllVisibleTo", () => {
 
     await new SimulationRepository(db).findAllVisibleTo(USER);
 
-    const call = findMany.mock.calls[0][0];
-    const visibilityClause = call.where.AND[1];
+    const call = firstFindManyArgs(findMany);
     // public, open, closed are discoverable by all authenticated users
-    expect(visibilityClause.OR[0].visibility.in).toContain("public");
-    expect(visibilityClause.OR[0].visibility.in).toContain("open");
-    expect(visibilityClause.OR[0].visibility.in).toContain("closed");
+    expect(call).toHaveProperty(
+      "where.AND.1.OR.0.visibility.in",
+      expect.arrayContaining(["public", "open", "closed"]),
+    );
   });
 
   it("requires active membership for private rooms", async () => {
@@ -113,11 +123,9 @@ describe("SimulationRepository.findAllVisibleTo", () => {
 
     await new SimulationRepository(db).findAllVisibleTo(USER);
 
-    const call = findMany.mock.calls[0][0];
-    const visibilityClause = call.where.AND[1];
-    const privateClause = visibilityClause.OR[1];
-    expect(privateClause.visibility).toBe("private");
-    expect(privateClause.memberships.some).toMatchObject({
+    const call = firstFindManyArgs(findMany);
+    expect(call).toHaveProperty("where.AND.1.OR.1.visibility", "private");
+    expect(call).toHaveProperty("where.AND.1.OR.1.memberships.some", {
       memberId: USER.id,
       memberKind: "user",
       status: "active",
@@ -129,9 +137,9 @@ describe("SimulationRepository.findAllVisibleTo", () => {
 
     await new SimulationRepository(db).findAllVisibleTo(ADMIN);
 
-    const call = findMany.mock.calls[0][0];
+    const call = firstFindManyArgs(findMany);
     // Admin query has no AND clause — just scope: "room"
-    expect(call.where).toEqual({ scope: "room" });
+    expect(call).toHaveProperty("where", { scope: "room" });
   });
 
   it("includes pending membership count in the _count select", async () => {
@@ -139,8 +147,8 @@ describe("SimulationRepository.findAllVisibleTo", () => {
 
     await new SimulationRepository(db).findAllVisibleTo(USER);
 
-    const call = findMany.mock.calls[0][0];
-    expect(call.include._count.select.memberships).toMatchObject({
+    const call = firstFindManyArgs(findMany);
+    expect(call).toHaveProperty("include._count.select.memberships", {
       where: { status: "pending" },
     });
   });
@@ -150,9 +158,10 @@ describe("SimulationRepository.findAllVisibleTo", () => {
 
     await new SimulationRepository(db).findAllVisibleTo(USER);
 
-    const call = findMany.mock.calls[0][0];
-    expect(call.include.memberships).toMatchObject({
-      where: { memberId: USER.id, memberKind: "user" },
+    const call = firstFindManyArgs(findMany);
+    expect(call).toHaveProperty("include.memberships.where", {
+      memberId: USER.id,
+      memberKind: "user",
     });
   });
 
