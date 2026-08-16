@@ -22,7 +22,12 @@
  */
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { MEMBER_KINDS, ROOM_VISIBILITIES } from "@brickr/shared";
+import {
+  MEMBER_KINDS,
+  MEMBER_ROLES,
+  MEMBERSHIP_STATUSES,
+  ROOM_VISIBILITIES,
+} from "@brickr/shared";
 import type { AppServices } from "../services.js";
 import { buildOpenApiOperation, defineRoute } from "./define-route.js";
 
@@ -82,8 +87,8 @@ const membershipDtoSchema = z.object({
   roomId: z.string(),
   memberKind: z.enum(MEMBER_KINDS),
   memberId: z.string(),
-  role: z.enum(["owner", "member"]),
-  status: z.enum(["active", "pending", "left", "removed", "banned"]),
+  role: z.enum(MEMBER_ROLES),
+  status: z.enum(MEMBERSHIP_STATUSES),
   invitedById: z.string().optional(),
   invitedAt: z.string().optional(),
   createdAt: z.string(),

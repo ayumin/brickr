@@ -85,17 +85,22 @@ function makeSimulationRepo(
 function makeMembershipRepo(
   overrides: Partial<RoomMembershipRepository> = {},
 ): RoomMembershipRepository {
+  const findByRoom = overrides.findByRoom ?? vi.fn(() => Promise.resolve([]));
   return {
     create: vi.fn(() => Promise.resolve(makeMembership())),
-    findByRoom: vi.fn(() => Promise.resolve([])),
+    findByRoom,
     findByMember: vi.fn(() => Promise.resolve([])),
     findOne: vi.fn(() => Promise.resolve(null)),
+    findById: vi.fn(async (id) => (await findByRoom("room-1")).find((m) => m.id === id) ?? null),
     findActiveOwnerRooms: vi.fn(() => Promise.resolve([])),
     updateStatus: vi.fn((id, status) =>
       Promise.resolve(makeMembership({ id, status })),
     ),
     updateStatusByMember: vi.fn((_roomId, _kind, _memberId, status) =>
       Promise.resolve(makeMembership({ status })),
+    ),
+    reinviteByMember: vi.fn((_roomId, _kind, _memberId, invitedById) =>
+      Promise.resolve(makeMembership({ status: "active", invitedById, invitedAt: new Date() })),
     ),
     deleteById: vi.fn(() => Promise.resolve(true)),
     ...overrides,
@@ -163,11 +168,11 @@ describe("RoomMembershipService.invite", () => {
       OWNER,
     );
 
-    expect(memberships.updateStatusByMember).toHaveBeenCalledWith(
+    expect(memberships.reinviteByMember).toHaveBeenCalledWith(
       "room-1",
       "user",
       "user-target",
-      "active",
+      OWNER.id,
     );
     expect(memberships.create).not.toHaveBeenCalled();
   });
@@ -182,12 +187,39 @@ describe("RoomMembershipService.invite", () => {
       OWNER,
     );
 
-    expect(memberships.updateStatusByMember).toHaveBeenCalledWith(
+    expect(memberships.reinviteByMember).toHaveBeenCalledWith(
       "room-1",
       "user",
       "user-target",
-      "active",
+      OWNER.id,
     );
+  });
+
+  it("maps a concurrent invite unique constraint violation to MemberAlreadyExistsError", async () => {
+    const { service } = makeService(undefined, {
+      create: vi.fn().mockRejectedValue(Object.assign(new Error("unique"), { code: "P2002" })),
+    });
+
+    await expect(
+      service.invite(
+        { roomId: "room-1", targetId: "user-target", targetKind: "user", inviterId: OWNER.id },
+        OWNER,
+      ),
+    ).rejects.toThrow(MemberAlreadyExistsError);
+  });
+
+  it("rethrows non-unique database failures while creating a membership", async () => {
+    const databaseError = new Error("database unavailable");
+    const { service } = makeService(undefined, {
+      create: vi.fn().mockRejectedValue(databaseError),
+    });
+
+    await expect(
+      service.invite(
+        { roomId: "room-1", targetId: "user-target", targetKind: "user", inviterId: OWNER.id },
+        OWNER,
+      ),
+    ).rejects.toBe(databaseError);
   });
 
   it("throws MemberBannedError when the target is banned", async () => {

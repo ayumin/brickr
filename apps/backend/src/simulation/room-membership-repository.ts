@@ -118,6 +118,12 @@ export class RoomMembershipRepository {
     return row ? toMembership(row) : null;
   }
 
+  /** A membership identified by its primary key, or null. */
+  async findById(id: string): Promise<RoomMembership | null> {
+    const row = await this.db.roomMembership.findUnique({ where: { id } });
+    return row ? toMembership(row) : null;
+  }
+
   /**
    * Finds all rooms where the given user holds the `owner` role with `active` status.
    * Used to archive rooms when an owner's account is suspended.
@@ -172,6 +178,25 @@ export class RoomMembershipRepository {
       const row = await this.db.roomMembership.update({
         where: { roomId_memberKind_memberId: { roomId, memberKind, memberId } },
         data: { status },
+      });
+      return toMembership(row);
+    } catch (error) {
+      if (isRecordNotFoundError(error)) return null;
+      throw error;
+    }
+  }
+
+  /** Reactivates a previous membership and refreshes its invitation audit data. */
+  async reinviteByMember(
+    roomId: string,
+    memberKind: MemberKind,
+    memberId: string,
+    invitedById: string,
+  ): Promise<RoomMembership | null> {
+    try {
+      const row = await this.db.roomMembership.update({
+        where: { roomId_memberKind_memberId: { roomId, memberKind, memberId } },
+        data: { status: "active", invitedById, invitedAt: new Date() },
       });
       return toMembership(row);
     } catch (error) {

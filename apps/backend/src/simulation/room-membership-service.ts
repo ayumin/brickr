@@ -18,6 +18,7 @@
  */
 import type { MemberKind, RoomMembershipDto } from "@brickr/shared";
 import { DomainError } from "../domain-error.js";
+import { isUniqueConstraintError } from "../persistence/prisma.js";
 import type { SimulationRepository } from "./simulation-repository.js";
 import type { RoomMembershipRepository } from "./room-membership-repository.js";
 import type { RoomMembership } from "./room-membership-repository.js";
@@ -156,26 +157,31 @@ export class RoomMembershipService {
         throw new MemberAlreadyExistsError();
       }
       // left / removed: re-invite by updating to active.
-      const updated = await this.deps.memberships.updateStatusByMember(
+      const updated = await this.deps.memberships.reinviteByMember(
         input.roomId,
         input.targetKind,
         input.targetId,
-        "active",
+        actor.id,
       );
       if (!updated) throw new MembershipNotFoundError(existing.id);
       return toDto(updated);
     }
 
     // No existing row: create a fresh active membership.
-    const membership = await this.deps.memberships.create({
-      roomId: input.roomId,
-      memberKind: input.targetKind,
-      memberId: input.targetId,
-      role: "member",
-      status: "active",
-      invitedById: actor.id,
-    });
-    return toDto(membership);
+    try {
+      const membership = await this.deps.memberships.create({
+        roomId: input.roomId,
+        memberKind: input.targetKind,
+        memberId: input.targetId,
+        role: "member",
+        status: "active",
+        invitedById: actor.id,
+      });
+      return toDto(membership);
+    } catch (error) {
+      if (isUniqueConstraintError(error)) throw new MemberAlreadyExistsError();
+      throw error;
+    }
   }
 
   /**
@@ -356,11 +362,10 @@ export class RoomMembershipService {
     membershipId: string,
     roomId: string,
   ) {
-    // findByRoom returns all memberships; we need to find the specific one.
-    // We use findByRoom with no status filter and then find by id.
-    const all = await this.deps.memberships.findByRoom(roomId);
-    const membership = all.find((m) => m.id === membershipId);
-    if (!membership) throw new MembershipNotFoundError(membershipId);
+    const membership = await this.deps.memberships.findById(membershipId);
+    if (!membership || membership.roomId !== roomId) {
+      throw new MembershipNotFoundError(membershipId);
+    }
     return membership;
   }
 
