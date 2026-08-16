@@ -62,6 +62,13 @@ const expectedPaths = [
   "/api/rooms",
   "/api/rooms/{id}",
   "/api/rooms/{id}/archive",
+  "/api/rooms/{id}/members",
+  "/api/rooms/{id}/members/pending",
+  "/api/rooms/{id}/members/{mid}",
+  "/api/rooms/{id}/members/{mid}/ban",
+  "/api/rooms/{id}/members/{mid}/unban",
+  "/api/rooms/{id}/members/{mid}/approve",
+  "/api/rooms/{id}/members/{mid}/reject",
 ];
 
 const sessionProtectedOperationIds = [
@@ -116,6 +123,13 @@ const sessionProtectedOperationIds = [
   "updateRoom",
   "archiveRoom",
   "deleteRoom",
+  "inviteRoomMember",
+  "listPendingRoomMemberships",
+  "removeRoomMember",
+  "banRoomMember",
+  "unbanRoomMember",
+  "approveRoomMembership",
+  "rejectRoomMembership",
 ];
 
 describe("OpenAPI documentation", () => {

@@ -130,4 +130,58 @@ export class RoomMembershipRepository {
     });
     return rows.map((row: { roomId: string }) => row.roomId);
   }
+
+  /**
+   * Updates the status of a single membership record identified by its id.
+   * Returns the updated membership, or null if no row matched.
+   */
+  async updateStatus(
+    id: string,
+    status: MembershipStatus,
+  ): Promise<RoomMembership | null> {
+    try {
+      const row = await this.db.roomMembership.update({
+        where: { id },
+        data: { status },
+      });
+      return toMembership(row);
+    } catch {
+      // Prisma throws P2025 when the record is not found.
+      return null;
+    }
+  }
+
+  /**
+   * Updates the status of a membership identified by the (room, memberKind, memberId) triple.
+   * Returns the updated membership, or null if no row matched.
+   */
+  async updateStatusByMember(
+    roomId: string,
+    memberKind: MemberKind,
+    memberId: string,
+    status: MembershipStatus,
+  ): Promise<RoomMembership | null> {
+    try {
+      const row = await this.db.roomMembership.update({
+        where: { roomId_memberKind_memberId: { roomId, memberKind, memberId } },
+        data: { status },
+      });
+      return toMembership(row);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Deletes a membership record by its id.
+   * Returns true if a row was deleted, false if no row matched.
+   */
+  async deleteById(id: string): Promise<boolean> {
+    try {
+      await this.db.roomMembership.delete({ where: { id } });
+      return true;
+    } catch {
+      return false;
+    }
+  }
 }
