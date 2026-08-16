@@ -124,6 +124,22 @@ steps:
    backend before the frontend.
 4. Verify the affected frontend or backend endpoint.
 
+### Reset the staging database
+
+When an incompatible Prisma schema change cannot be applied to existing
+staging data, open a `main` pipeline and run the optional manual job
+`staging:database-reset`. GitLab shows a second confirmation before starting
+the destructive operation.
+
+The job temporarily starts the currently configured backend image with
+`prisma db push --force-reset`, recreates the application schema, runs the
+normal seed, and then redeploys the backend with its default entrypoint. It
+does not delete the Cloud SQL instance or the `postgres` database, but all
+application data in the `brickr` database is permanently removed. The job
+uses the same `staging` resource group as regular deployments, so it cannot
+run concurrently with them. Leaving the job unstarted does not block the
+pipeline.
+
 Merge-request pipelines never receive deployment credentials. The Workload
 Identity provider also rejects tokens unless their immutable GitLab
 namespace/project IDs match and `ref_path` is `refs/heads/main`.
