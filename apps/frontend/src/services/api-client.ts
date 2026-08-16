@@ -23,8 +23,8 @@ import type {
   CreateInviteCodeResponse,
   CreatePostRequest,
   CreatePostResponse,
-  CreateSimulationRequest,
-  CreateSimulationResponse,
+  CreateRoomRequest,
+  CreateRoomResponse,
   DeleteCharacterResponse,
   ExportCharactersCsvResponse,
   FeedFilter,
@@ -48,13 +48,13 @@ import type {
   SaveUserProfileRequest,
   SessionResponse,
   SignupRequest,
-  SimulationAnalysisDto,
-  SimulationAnalysisResponse,
-  SimulationDto,
-  SimulationResponse,
-  SimulationsResponse,
-  SimulationSummaryDto,
-  UpdateSimulationRequest,
+  RoomAnalysisDto,
+  RoomAnalysisResponse,
+  RoomDto,
+  RoomResponse,
+  RoomsResponse,
+  RoomSummaryDto,
+  UpdateRoomRequest,
   UserCharactersResponse,
   UserDetailResponse,
   UserManagementDto,
@@ -453,10 +453,10 @@ export const api = {
   },
 
   async createSimulation(
-    body: CreateSimulationRequest = {},
+    body: CreateRoomRequest = {},
     signal?: AbortSignal,
-  ): Promise<SimulationDto> {
-    const data = await request<CreateSimulationResponse>("/api/simulations", {
+  ): Promise<RoomDto> {
+    const data = await request<CreateRoomResponse>("/api/simulations", {
       method: "POST",
       body,
       ...(signal ? { signal } : {}),
@@ -477,8 +477,8 @@ export const api = {
    * Archives a room (owner/admin only). The room must be active.
    * Use `deleteRoom` to permanently remove an archived room.
    */
-  async archiveRoom(id: string): Promise<SimulationDto> {
-    const data = await request<{ simulation: SimulationDto }>(
+  async archiveRoom(id: string): Promise<RoomDto> {
+    const data = await request<{ simulation: RoomDto }>(
       `/api/rooms/${encodeURIComponent(id)}/archive`,
       { method: "POST" },
     );
@@ -590,8 +590,8 @@ export const api = {
     );
   },
 
-  async getSimulations(signal?: AbortSignal): Promise<SimulationSummaryDto[]> {
-    const data = await request<SimulationsResponse>(
+  async getSimulations(signal?: AbortSignal): Promise<RoomSummaryDto[]> {
+    const data = await request<RoomsResponse>(
       "/api/simulations",
       signal ? { signal } : {},
     );
@@ -600,9 +600,9 @@ export const api = {
 
   async updateSimulation(
     id: string,
-    body: UpdateSimulationRequest,
-  ): Promise<SimulationDto> {
-    const data = await request<{ simulation: SimulationDto }>(
+    body: UpdateRoomRequest,
+  ): Promise<RoomDto> {
+    const data = await request<{ simulation: RoomDto }>(
       `/api/simulations/${encodeURIComponent(id)}`,
       { method: "PUT", body },
     );
@@ -612,8 +612,8 @@ export const api = {
   async getSimulationAnalysis(
     id: string,
     signal?: AbortSignal,
-  ): Promise<SimulationAnalysisDto> {
-    const data = await request<SimulationAnalysisResponse>(
+  ): Promise<RoomAnalysisDto> {
+    const data = await request<RoomAnalysisResponse>(
       `/api/simulations/${encodeURIComponent(id)}/analysis`,
       signal ? { signal } : {},
     );
@@ -623,8 +623,8 @@ export const api = {
   getSimulation(
     id: string,
     signal?: AbortSignal,
-  ): Promise<SimulationResponse> {
-    return request<SimulationResponse>(
+  ): Promise<RoomResponse> {
+    return request<RoomResponse>(
       `/api/simulations/${encodeURIComponent(id)}`,
       signal ? { signal } : {},
     );
@@ -633,8 +633,8 @@ export const api = {
   async stopSimulation(
     id: string,
     signal?: AbortSignal,
-  ): Promise<SimulationDto> {
-    const data = await request<{ simulation: SimulationDto }>(
+  ): Promise<RoomDto> {
+    const data = await request<{ simulation: RoomDto }>(
       `/api/simulations/${encodeURIComponent(id)}/stop`,
       { method: "POST", ...(signal ? { signal } : {}) },
     );
@@ -644,8 +644,8 @@ export const api = {
   async resumeSimulation(
     id: string,
     signal?: AbortSignal,
-  ): Promise<SimulationDto> {
-    const data = await request<{ simulation: SimulationDto }>(
+  ): Promise<RoomDto> {
+    const data = await request<{ simulation: RoomDto }>(
       `/api/simulations/${encodeURIComponent(id)}/resume`,
       { method: "POST", ...(signal ? { signal } : {}) },
     );
