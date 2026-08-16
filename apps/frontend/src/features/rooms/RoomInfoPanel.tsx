@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { SimulationSummaryDto } from "@brickr/shared";
+import type { RoomSummaryDto } from "@brickr/shared";
 
 import { Dialog } from "../../components/Dialog";
 import { ErrorBanner } from "../../components/ErrorBanner";
@@ -8,7 +8,7 @@ import { Spinner } from "../../components/Spinner";
 import { toErrorMessage } from "../../services/api-client";
 
 export type RoomInfoContentProps = {
-  simulation: SimulationSummaryDto;
+  simulation: RoomSummaryDto;
   onOpenAnalysis: () => void;
   onRename: () => void;
   onStop: () => Promise<void>;

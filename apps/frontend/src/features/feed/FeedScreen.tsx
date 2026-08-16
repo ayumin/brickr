@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { GLOBAL_SIMULATION_ID, type FeedFilter, type PostDto } from "@brickr/shared";
+import { GLOBAL_ROOM_ID, type FeedFilter, type PostDto } from "@brickr/shared";
 
 import { Avatar } from "../../components/Avatar";
 import { ErrorBanner } from "../../components/ErrorBanner";
@@ -36,7 +36,7 @@ export function FeedScreen() {
 
   const openComposer = useCallback(() => {
     composeController.request({
-      context: { mode: "new", simulationId: GLOBAL_SIMULATION_ID, roomLabel: "フィード" },
+      context: { mode: "new", simulationId: GLOBAL_ROOM_ID, roomLabel: "フィード" },
       onPosted: (_post, thread) => {
         feed.upsertThread(thread);
       },
