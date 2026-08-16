@@ -14,7 +14,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "db:reset": "dotenv -e ../../.env -- prisma migrate reset --force && dotenv -e ../../.env -- tsx prisma/seed.ts",
-"db:push": "dotenv -e ../../.env -- prisma db push --force-reset && dotenv -e ../../.env -- tsx prisma/seed.ts",
+    "db:push": "dotenv -e ../../.env -- prisma db push --force-reset && dotenv -e ../../.env -- tsx prisma/seed.ts",
 "db:push:schema": "dotenv -e ../../.env -- prisma db push --skip-generate --accept-data-loss",
     "db:generate": "prisma generate",
     "seed": "dotenv -e ../../.env -- tsx prisma/seed.ts"
