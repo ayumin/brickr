@@ -156,7 +156,7 @@ export async function buildServices(db: Db, logger: SimulationLogger): Promise<A
     auth: new AuthService(userAccountRepository, sessionRepository, {
       sessionTtlMs: env.auth.sessionTtlMs,
     }),
-    userAdmin: new UserAdminService(userAccountRepository, sessionRepository, rooms),
+    userAdmin: new UserAdminService(userAccountRepository, sessionRepository, rooms, logger),
     inviteCodes: new InviteCodeService(inviteCodeRepository),
     characters: new CharacterService(
       characterRepository,

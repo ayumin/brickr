@@ -148,16 +148,11 @@ export class SimulationRepository {
     await this.db.room.delete({ where: { id } });
   }
 
-  /**
-   * Archives all active rooms owned by the given user. Called when an owner's
-   * account is suspended so their rooms do not remain active without an owner
-   * (issue #151).
-   */
-  async archiveOwnedBy(userId: string): Promise<void> {
-    // Find rooms where this user is the creator and the room is still active.
+  /** Archives active room-scoped rows selected from owner memberships (#151). */
+  async archiveByIds(roomIds: string[]): Promise<void> {
     await this.db.room.updateMany({
       where: {
-        createdByUserId: userId,
+        id: { in: roomIds },
         status: "active",
         scope: "room",
       },

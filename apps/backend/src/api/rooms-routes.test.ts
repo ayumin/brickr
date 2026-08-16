@@ -32,6 +32,7 @@ import {
   RoomForbiddenError,
   RoomArchivedError,
   RoomNotArchivedError,
+  VisibilityImmutableError,
 } from "../simulation/room-service.js";
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -319,6 +320,28 @@ describe("PUT /api/rooms/:id", () => {
     expect(response.json()).toMatchObject({ error: { code: "invalid_body" } });
   });
 
+  it("forwards visibility so the service rejects an attempted change", async () => {
+    let receivedInput: Parameters<RoomService["update"]>[1] | undefined;
+    const services = makeServices({}, {
+      update: (_id, input) => {
+        receivedInput = input;
+        return Promise.reject(new VisibilityImmutableError());
+      },
+    });
+    const app = await buildApp(signedInUser, services);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "PUT",
+      url: "/api/rooms/room-1",
+      payload: { visibility: "closed" },
+    });
+
+    expect(receivedInput).toEqual({ visibility: "closed" });
+    expect(response.statusCode).toBe(422);
+    expect(response.json()).toMatchObject({ error: { code: "visibility_immutable" } });
+  });
+
   it("maps RoomForbiddenError to 403", async () => {
     const services = makeServices(
       {},
@@ -505,6 +528,7 @@ describe("DELETE /api/rooms/:id", () => {
     const response = await app.inject({ method: "DELETE", url: "/api/rooms/room-1" });
 
     expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({ error: { code: "room_not_archived" } });
   });
 });
 

@@ -59,7 +59,7 @@ function makeSimulationRepo(
       Promise.resolve(makeRoom({ status })),
     ),
     delete: vi.fn(() => Promise.resolve()),
-    archiveOwnedBy: vi.fn(() => Promise.resolve()),
+    archiveByIds: vi.fn(() => Promise.resolve()),
     ...overrides,
   } as unknown as SimulationRepository;
 }
@@ -308,11 +308,22 @@ describe("RoomService.delete", () => {
 // ── archiveOwnedBy ────────────────────────────────────────────────────────────
 
 describe("RoomService.archiveOwnedBy", () => {
-  it("delegates to the simulation repository", async () => {
-    const { service, simulations } = makeService();
+  it("archives rooms from active owner memberships rather than original creator ids", async () => {
+    const { service, simulations, memberships } = makeService(undefined, {
+      findActiveOwnerRooms: vi.fn(() => Promise.resolve(["room-transferred", "room-created"])),
+    });
 
     await service.archiveOwnedBy("user-owner");
 
-    expect(simulations.archiveOwnedBy).toHaveBeenCalledWith("user-owner");
+    expect(memberships.findActiveOwnerRooms).toHaveBeenCalledWith("user-owner");
+    expect(simulations.archiveByIds).toHaveBeenCalledWith(["room-transferred", "room-created"]);
+  });
+
+  it("does not issue an empty archive update", async () => {
+    const { service, simulations } = makeService();
+
+    await service.archiveOwnedBy("user-without-rooms");
+
+    expect(simulations.archiveByIds).not.toHaveBeenCalled();
   });
 });

@@ -136,3 +136,21 @@ describe("SimulationRepository.findAllVisibleTo", () => {
     expect(summary?.creator?.handle).toBe("0191d3f0000040008000000000000abc");
   });
 });
+
+describe("SimulationRepository.archiveByIds", () => {
+  it("archives only active room-scoped rows in the membership-derived id set", async () => {
+    const updateMany = vi.fn(() => Promise.resolve({ count: 2 }));
+    const db = { room: { updateMany } } as unknown as Db;
+
+    await new SimulationRepository(db).archiveByIds(["room-transferred", "room-created"]);
+
+    expect(updateMany).toHaveBeenCalledWith({
+      where: {
+        id: { in: ["room-transferred", "room-created"] },
+        status: "active",
+        scope: "room",
+      },
+      data: { status: "archived" },
+    });
+  });
+});

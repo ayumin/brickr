@@ -13,6 +13,10 @@ export type UserManagementPage = {
   totalCount: number;
 };
 
+export type UserAdminLogger = {
+  error: (obj: Record<string, unknown>, msg: string) => void;
+};
+
 /**
  * Admin-only account lifecycle actions (CLAUDE.md §66.7, §66.12, §66.15).
  *
@@ -25,6 +29,7 @@ export class UserAdminService {
     private readonly sessions: SessionRepository,
     /** Optional: when provided, suspending a user also archives their owned rooms (issue #151). */
     private readonly rooms?: Pick<RoomService, "archiveOwnedBy">,
+    private readonly logger?: UserAdminLogger,
   ) {}
 
   async findById(userId: string): Promise<UserAccount | null> {
@@ -62,7 +67,14 @@ export class UserAdminService {
     // Archive owned rooms so they do not remain active without an owner (§151).
     // This is best-effort: a failure here does not roll back the suspension.
     if (this.rooms) {
-      await this.rooms.archiveOwnedBy(userId);
+      try {
+        await this.rooms.archiveOwnedBy(userId);
+      } catch (error) {
+        this.logger?.error(
+          { userId, err: error instanceof Error ? error.message : String(error) },
+          "failed to archive rooms after user suspension",
+        );
+      }
     }
 
     return { ...account, status: "suspended" };

@@ -69,9 +69,14 @@ const createRoomBodySchema = z.object({
   visibility: z.enum(ROOM_VISIBILITIES).optional(),
 });
 
-const updateRoomBodySchema = z.object({
-  title: z.string().trim().min(1).max(120),
-});
+const updateRoomBodySchema = z
+  .object({
+    title: z.string().trim().min(1).max(120).optional(),
+    visibility: z.enum(ROOM_VISIBILITIES).optional(),
+  })
+  .refine((body) => body.title !== undefined || body.visibility !== undefined, {
+    message: "title or visibility is required",
+  });
 
 // ---------------------------------------------------------------------------
 // OpenAPI metadata (named exports so tests can assert registration)
@@ -247,7 +252,7 @@ export function registerRoomsRoutes(app: FastifyInstance, services: AppServices)
     body: updateRoomBodySchema,
     response: roomDtoResponseSchema,
     handler: async ({ user, params, body }) => {
-      const simulation = await services.rooms.update(params.id, { title: body.title }, user);
+      const simulation = await services.rooms.update(params.id, body, user);
       return { simulation };
     },
   }).register(app);

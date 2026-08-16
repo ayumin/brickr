@@ -50,7 +50,7 @@ export class RoomArchivedError extends DomainError {
 
 export class RoomNotArchivedError extends DomainError {
   readonly httpStatus = 409;
-  readonly errorCode = "room_archived" as const;
+  readonly errorCode = "room_not_archived" as const;
   constructor(id: string) {
     super(`room "${id}" must be archived before it can be deleted`);
   }
@@ -58,7 +58,7 @@ export class RoomNotArchivedError extends DomainError {
 
 export class VisibilityImmutableError extends DomainError {
   readonly httpStatus = 422;
-  readonly errorCode = "forbidden" as const;
+  readonly errorCode = "visibility_immutable" as const;
   constructor() {
     super("room visibility cannot be changed after creation");
   }
@@ -170,7 +170,9 @@ export class RoomService {
    * (issue #151 — owner deactivation archive rule).
    */
   async archiveOwnedBy(userId: string): Promise<void> {
-    await this.deps.simulations.archiveOwnedBy(userId);
+    const roomIds = await this.deps.memberships.findActiveOwnerRooms(userId);
+    if (roomIds.length === 0) return;
+    await this.deps.simulations.archiveByIds(roomIds);
   }
 
   /**
