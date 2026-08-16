@@ -82,7 +82,7 @@ function makeCharacter(overrides: Partial<Character> & { id: string }): Characte
 
 function makePost(overrides: Partial<Post> & { id: string }): Post {
   return {
-    simulationId: "sim-1",
+    roomId: "sim-1",
     authorId: "user-1",
     content: "RAGって本当に必要？",
     mentions: [],

@@ -1,7 +1,7 @@
 /** Post domain model. User posts, character posts, replies and quotes are all Posts. */
 export type Post = {
   id: string;
-  simulationId: string;
+  roomId: string;
   /** Character id, or the id of the user account that wrote the post (§66.3). */
   authorId: string;
   content: string;
@@ -35,7 +35,7 @@ export type Post = {
  */
 export type NewPost = {
   id: string;
-  simulationId: string;
+  roomId: string;
   authorId: string;
   content: string;
   imageUrl?: string;

@@ -25,7 +25,7 @@ export type PostRow = {
 export function toPost(row: PostRow): Post {
   return {
     id: row.id,
-    simulationId: row.roomId,
+    roomId: row.roomId,
     authorId: row.authorId,
     content: row.content,
     ...optionalField("imageUrl", row.imageUrl),
@@ -83,7 +83,7 @@ export class PostRepository {
       const row = await tx.post.create({
         data: {
           id: input.id,
-          roomId: input.simulationId,
+          roomId: input.roomId,
           authorId: input.authorId,
           content: input.content,
           imageUrl: input.imageUrl ?? null,
@@ -127,14 +127,14 @@ export class PostRepository {
     return rows.map(toPost);
   }
 
-  /** All posts in a simulation (room), oldest first. */
-  async findBySimulation(simulationId: string): Promise<Post[]> {
-    return this.queryPosts({ roomId: simulationId }, "asc");
+  /** All posts in a room, oldest first. */
+  async findByRoom(roomId: string): Promise<Post[]> {
+    return this.queryPosts({ roomId }, "asc");
   }
 
-  /** Most recent posts in a simulation (room), returned oldest first. */
-  async findRecentBySimulation(simulationId: string, limit: number): Promise<Post[]> {
-    return this.queryPosts({ roomId: simulationId }, "desc", limit);
+  /** Most recent posts in a room, returned oldest first. */
+  async findRecentByRoom(roomId: string, limit: number): Promise<Post[]> {
+    return this.queryPosts({ roomId }, "desc", limit);
   }
 
   /** Direct replies to a post, oldest first. */
@@ -147,8 +147,8 @@ export class PostRepository {
     return this.queryPosts({ quoteOf: postId }, "asc");
   }
 
-  async countBySimulation(simulationId: string): Promise<number> {
-    return this.db.post.count({ where: { roomId: simulationId } });
+  async countByRoom(roomId: string): Promise<number> {
+    return this.db.post.count({ where: { roomId } });
   }
 
   /**

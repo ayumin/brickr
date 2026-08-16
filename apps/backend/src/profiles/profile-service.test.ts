@@ -46,7 +46,7 @@ const PERSON = {
 function post(id: string, createdAt: Date): Post {
   return {
     id,
-    simulationId: "room-1",
+    roomId: "room-1",
     authorId: CAST.id,
     content: id,
     mentions: [],
