@@ -1,5 +1,5 @@
 /**
- * Room lifecycle routes (issues #150, #151, #155).
+ * Room lifecycle routes (issues #150, #151, #154, #155).
  *
  * Issue #150 introduced the `defineRoute` pattern with `GET /api/rooms/:id`.
  * Issue #151 adds the full lifecycle:
@@ -8,6 +8,14 @@
  *   PUT    /api/rooms/:id      — update title (visibility is immutable)
  *   POST   /api/rooms/:id/archive  — archive a room (owner/admin only)
  *   DELETE /api/rooms/:id      — delete an archived room (owner/admin only)
+ * Issue #154 adds membership management:
+ *   POST   /api/rooms/:id/members          — invite a user or character
+ *   GET    /api/rooms/:id/members/pending  — list pending memberships (owner/admin)
+ *   DELETE /api/rooms/:id/members/:mid     — remove a member
+ *   POST   /api/rooms/:id/members/:mid/ban    — ban a member
+ *   POST   /api/rooms/:id/members/:mid/unban  — unban a member
+ *   POST   /api/rooms/:id/members/:mid/approve — approve a pending membership
+ *   POST   /api/rooms/:id/members/:mid/reject  — reject a pending membership
  * Issue #155 adds the visibility-aware room list:
  *   GET    /api/rooms          — list rooms visible to the caller
  *
@@ -16,12 +24,22 @@
  */
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { ROOM_VISIBILITIES } from "@brickr/shared";
+import {
+  MEMBER_KINDS,
+  MEMBER_ROLES,
+  MEMBERSHIP_STATUSES,
+  ROOM_VISIBILITIES,
+} from "@brickr/shared";
 import type { AppServices } from "../services.js";
 import { buildOpenApiOperation, defineRoute } from "./define-route.js";
 
 export const roomIdParams = z.object({
   id: z.string().trim().min(1).max(64).describe("Room ID"),
+});
+
+export const membershipIdParams = z.object({
+  id: z.string().trim().min(1).max(64).describe("Room ID"),
+  mid: z.string().trim().min(1).max(64).describe("Membership ID"),
 });
 
 // ---------------------------------------------------------------------------
@@ -86,6 +104,28 @@ export const roomListResponseSchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
+// Membership response schema
+// ---------------------------------------------------------------------------
+
+const membershipDtoSchema = z.object({
+  id: z.string(),
+  roomId: z.string(),
+  memberKind: z.enum(MEMBER_KINDS),
+  memberId: z.string(),
+  role: z.enum(MEMBER_ROLES),
+  status: z.enum(MEMBERSHIP_STATUSES),
+  invitedById: z.string().optional(),
+  invitedAt: z.string().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+const membershipResponseSchema = z.object({ membership: membershipDtoSchema });
+const pendingMembershipsResponseSchema = z.object({
+  memberships: z.array(membershipDtoSchema),
+});
+
+// ---------------------------------------------------------------------------
 // Request body schemas
 // ---------------------------------------------------------------------------
 
@@ -102,6 +142,11 @@ const updateRoomBodySchema = z
   .refine((body) => body.title !== undefined || body.visibility !== undefined, {
     message: "title or visibility is required",
   });
+
+const inviteMemberBodySchema = z.object({
+  targetId: z.string().trim().min(1).max(64).describe("User or Character ID to invite"),
+  targetKind: z.enum(MEMBER_KINDS).describe("Whether the target is a user or character"),
+});
 
 // ---------------------------------------------------------------------------
 // OpenAPI metadata (named exports so tests can assert registration)
@@ -186,6 +231,110 @@ export const listRoomsOpenApiMeta = {
 };
 
 // ---------------------------------------------------------------------------
+// Membership route OpenAPI metadata
+// ---------------------------------------------------------------------------
+
+export const inviteMemberOpenApiMeta = {
+  operationId: "inviteRoomMember",
+  tags: ["Simulations"] as string[],
+  summary: "Invite a user or character to a room",
+  description:
+    "Owner/admin only. Creates an active membership for the target. " +
+    "Banned members must be unbanned first. Archived rooms reject invitations.",
+  successDescription: "The created or updated membership",
+  extraResponses: {
+    "403": { $ref: "#/components/responses/Forbidden" },
+    "404": { $ref: "#/components/responses/NotFound" },
+    "409": { $ref: "#/components/responses/Conflict" },
+  },
+};
+
+export const listPendingMembershipsOpenApiMeta = {
+  operationId: "listPendingRoomMemberships",
+  tags: ["Simulations"] as string[],
+  summary: "List pending membership requests",
+  description: "Owner/admin only. Returns all pending membership requests for the room.",
+  successDescription: "List of pending memberships",
+  extraResponses: {
+    "403": { $ref: "#/components/responses/Forbidden" },
+    "404": { $ref: "#/components/responses/NotFound" },
+  },
+};
+
+export const removeRoomMemberOpenApiMeta = {
+  operationId: "removeRoomMember",
+  tags: ["Simulations"] as string[],
+  summary: "Remove a member from a room",
+  description:
+    "Owner/admin only. Transitions the membership to `removed`. " +
+    "The owner's own membership cannot be removed.",
+  successDescription: "The updated membership",
+  extraResponses: {
+    "403": { $ref: "#/components/responses/Forbidden" },
+    "404": { $ref: "#/components/responses/NotFound" },
+    "409": { $ref: "#/components/responses/Conflict" },
+  },
+};
+
+export const banRoomMemberOpenApiMeta = {
+  operationId: "banRoomMember",
+  tags: ["Simulations"] as string[],
+  summary: "Ban a member from a room",
+  description:
+    "Owner/admin only. Transitions the membership to `banned`. " +
+    "The owner's own membership cannot be banned.",
+  successDescription: "The updated membership",
+  extraResponses: {
+    "403": { $ref: "#/components/responses/Forbidden" },
+    "404": { $ref: "#/components/responses/NotFound" },
+    "409": { $ref: "#/components/responses/Conflict" },
+  },
+};
+
+export const unbanRoomMemberOpenApiMeta = {
+  operationId: "unbanRoomMember",
+  tags: ["Simulations"] as string[],
+  summary: "Unban a member from a room",
+  description:
+    "Owner/admin only. Transitions the membership from `banned` to `removed`. " +
+    "After unbanning, the member may be re-invited.",
+  successDescription: "The updated membership",
+  extraResponses: {
+    "403": { $ref: "#/components/responses/Forbidden" },
+    "404": { $ref: "#/components/responses/NotFound" },
+    "409": { $ref: "#/components/responses/Conflict" },
+  },
+};
+
+export const approveRoomMemberOpenApiMeta = {
+  operationId: "approveRoomMembership",
+  tags: ["Simulations"] as string[],
+  summary: "Approve a pending membership request",
+  description:
+    "Owner/admin only. Transitions the membership from `pending` to `active`.",
+  successDescription: "The updated membership",
+  extraResponses: {
+    "403": { $ref: "#/components/responses/Forbidden" },
+    "404": { $ref: "#/components/responses/NotFound" },
+    "409": { $ref: "#/components/responses/Conflict" },
+  },
+};
+
+export const rejectRoomMemberOpenApiMeta = {
+  operationId: "rejectRoomMembership",
+  tags: ["Simulations"] as string[],
+  summary: "Reject a pending membership request",
+  description:
+    "Owner/admin only. Deletes the pending membership row — no history is kept.",
+  successDescription: "Membership rejected",
+  extraResponses: {
+    "403": { $ref: "#/components/responses/Forbidden" },
+    "404": { $ref: "#/components/responses/NotFound" },
+    "409": { $ref: "#/components/responses/Conflict" },
+  },
+};
+
+// ---------------------------------------------------------------------------
 // Register OpenAPI operations at module load time
 // ---------------------------------------------------------------------------
 
@@ -253,6 +402,84 @@ buildOpenApiOperation(
     response: z.object({}),
   },
   deleteRoomOpenApiMeta,
+);
+
+buildOpenApiOperation(
+  {
+    method: "POST",
+    path: "/api/rooms/:id/members",
+    auth: "required",
+    params: roomIdParams,
+    body: inviteMemberBodySchema,
+    response: membershipResponseSchema,
+  },
+  inviteMemberOpenApiMeta,
+);
+
+buildOpenApiOperation(
+  {
+    method: "GET",
+    path: "/api/rooms/:id/members/pending",
+    auth: "required",
+    params: roomIdParams,
+    response: pendingMembershipsResponseSchema,
+  },
+  listPendingMembershipsOpenApiMeta,
+);
+
+buildOpenApiOperation(
+  {
+    method: "DELETE",
+    path: "/api/rooms/:id/members/:mid",
+    auth: "required",
+    params: membershipIdParams,
+    response: membershipResponseSchema,
+  },
+  removeRoomMemberOpenApiMeta,
+);
+
+buildOpenApiOperation(
+  {
+    method: "POST",
+    path: "/api/rooms/:id/members/:mid/ban",
+    auth: "required",
+    params: membershipIdParams,
+    response: membershipResponseSchema,
+  },
+  banRoomMemberOpenApiMeta,
+);
+
+buildOpenApiOperation(
+  {
+    method: "POST",
+    path: "/api/rooms/:id/members/:mid/unban",
+    auth: "required",
+    params: membershipIdParams,
+    response: membershipResponseSchema,
+  },
+  unbanRoomMemberOpenApiMeta,
+);
+
+buildOpenApiOperation(
+  {
+    method: "POST",
+    path: "/api/rooms/:id/members/:mid/approve",
+    auth: "required",
+    params: membershipIdParams,
+    response: membershipResponseSchema,
+  },
+  approveRoomMemberOpenApiMeta,
+);
+
+buildOpenApiOperation(
+  {
+    method: "POST",
+    path: "/api/rooms/:id/members/:mid/reject",
+    auth: "required",
+    params: membershipIdParams,
+    response: z.object({}),
+  },
+  rejectRoomMemberOpenApiMeta,
 );
 
 // ---------------------------------------------------------------------------
@@ -340,6 +567,108 @@ export function registerRoomsRoutes(app: FastifyInstance, services: AppServices)
     response: z.object({}),
     handler: async ({ user, params, reply }) => {
       await services.rooms.delete(params.id, user);
+      return reply.status(204).send();
+    },
+  }).register(app);
+
+  // ── Membership management (issue #154) ────────────────────────────────────
+
+  // POST /api/rooms/:id/members — invite a user or character
+  defineRoute({
+    method: "POST",
+    path: "/api/rooms/:id/members",
+    auth: "required",
+    params: roomIdParams,
+    body: inviteMemberBodySchema,
+    response: membershipResponseSchema,
+    handler: async ({ user, params, body }) => {
+      const membership = await services.roomMemberships.invite(
+        {
+          roomId: params.id,
+          targetId: body.targetId,
+          targetKind: body.targetKind,
+          inviterId: user.id,
+        },
+        user,
+      );
+      return { membership };
+    },
+  }).register(app);
+
+  // GET /api/rooms/:id/members/pending — list pending memberships (owner/admin)
+  defineRoute({
+    method: "GET",
+    path: "/api/rooms/:id/members/pending",
+    auth: "required",
+    params: roomIdParams,
+    response: pendingMembershipsResponseSchema,
+    handler: async ({ user, params }) => {
+      const memberships = await services.roomMemberships.listPending(params.id, user);
+      return { memberships };
+    },
+  }).register(app);
+
+  // DELETE /api/rooms/:id/members/:mid — remove a member
+  defineRoute({
+    method: "DELETE",
+    path: "/api/rooms/:id/members/:mid",
+    auth: "required",
+    params: membershipIdParams,
+    response: membershipResponseSchema,
+    handler: async ({ user, params }) => {
+      const membership = await services.roomMemberships.remove(params.id, params.mid, user);
+      return { membership };
+    },
+  }).register(app);
+
+  // POST /api/rooms/:id/members/:mid/ban — ban a member
+  defineRoute({
+    method: "POST",
+    path: "/api/rooms/:id/members/:mid/ban",
+    auth: "required",
+    params: membershipIdParams,
+    response: membershipResponseSchema,
+    handler: async ({ user, params }) => {
+      const membership = await services.roomMemberships.ban(params.id, params.mid, user);
+      return { membership };
+    },
+  }).register(app);
+
+  // POST /api/rooms/:id/members/:mid/unban — unban a member
+  defineRoute({
+    method: "POST",
+    path: "/api/rooms/:id/members/:mid/unban",
+    auth: "required",
+    params: membershipIdParams,
+    response: membershipResponseSchema,
+    handler: async ({ user, params }) => {
+      const membership = await services.roomMemberships.unban(params.id, params.mid, user);
+      return { membership };
+    },
+  }).register(app);
+
+  // POST /api/rooms/:id/members/:mid/approve — approve a pending membership
+  defineRoute({
+    method: "POST",
+    path: "/api/rooms/:id/members/:mid/approve",
+    auth: "required",
+    params: membershipIdParams,
+    response: membershipResponseSchema,
+    handler: async ({ user, params }) => {
+      const membership = await services.roomMemberships.approve(params.id, params.mid, user);
+      return { membership };
+    },
+  }).register(app);
+
+  // POST /api/rooms/:id/members/:mid/reject — reject a pending membership
+  defineRoute({
+    method: "POST",
+    path: "/api/rooms/:id/members/:mid/reject",
+    auth: "required",
+    params: membershipIdParams,
+    response: z.object({}),
+    handler: async ({ user, params, reply }) => {
+      await services.roomMemberships.reject(params.id, params.mid, user);
       return reply.status(204).send();
     },
   }).register(app);

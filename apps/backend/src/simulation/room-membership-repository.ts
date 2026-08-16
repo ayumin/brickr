@@ -118,6 +118,12 @@ export class RoomMembershipRepository {
     return row ? toMembership(row) : null;
   }
 
+  /** A membership identified by its primary key, or null. */
+  async findById(id: string): Promise<RoomMembership | null> {
+    const row = await this.db.roomMembership.findUnique({ where: { id } });
+    return row ? toMembership(row) : null;
+  }
+
   /**
    * Finds all rooms where the given user holds the `owner` role with `active` status.
    * Used to archive rooms when an owner's account is suspended.
@@ -136,12 +142,33 @@ export class RoomMembershipRepository {
   }
 
   /**
-   * Updates the status of an existing membership record.
+   * Updates the status of a single membership record identified by its id.
+   * Returns the updated membership, or null if no row matched.
+   */
+  async updateStatus(
+    id: string,
+    status: MembershipStatus,
+  ): Promise<RoomMembership | null> {
+    try {
+      const row = await this.db.roomMembership.update({
+        where: { id },
+        data: { status },
+      });
+      return toMembership(row);
+    } catch (error) {
+      if (isRecordNotFoundError(error)) return null;
+      throw error;
+    }
+  }
+
+  /**
+   * Updates the status of a membership identified by the (room, memberKind, memberId) triple.
+   * Returns the updated membership, or null if no row matched.
    *
    * Used by the Cast join flow to transition a membership from `pending` to
    * `active` (approval) or to `removed`/`banned` (rejection).
    */
-  async updateStatus(
+  async updateStatusByMember(
     roomId: string,
     memberKind: MemberKind,
     memberId: string,
@@ -155,6 +182,39 @@ export class RoomMembershipRepository {
       return toMembership(row);
     } catch (error) {
       if (isRecordNotFoundError(error)) return null;
+      throw error;
+    }
+  }
+
+  /** Reactivates a previous membership and refreshes its invitation audit data. */
+  async reinviteByMember(
+    roomId: string,
+    memberKind: MemberKind,
+    memberId: string,
+    invitedById: string,
+  ): Promise<RoomMembership | null> {
+    try {
+      const row = await this.db.roomMembership.update({
+        where: { roomId_memberKind_memberId: { roomId, memberKind, memberId } },
+        data: { status: "active", invitedById, invitedAt: new Date() },
+      });
+      return toMembership(row);
+    } catch (error) {
+      if (isRecordNotFoundError(error)) return null;
+      throw error;
+    }
+  }
+
+  /**
+   * Deletes a membership record by its id.
+   * Returns true if a row was deleted, false if no row matched.
+   */
+  async deleteById(id: string): Promise<boolean> {
+    try {
+      await this.db.roomMembership.delete({ where: { id } });
+      return true;
+    } catch (error) {
+      if (isRecordNotFoundError(error)) return false;
       throw error;
     }
   }

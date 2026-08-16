@@ -30,6 +30,7 @@ import { ProfileService } from "./profiles/profile-service.js";
 import { ThreadService } from "./posts/thread-service.js";
 import { EventHub } from "./simulation/event-hub.js";
 import { RoomMembershipRepository } from "./simulation/room-membership-repository.js";
+import { RoomMembershipService } from "./simulation/room-membership-service.js";
 import { RoomService } from "./simulation/room-service.js";
 import { SimulationRepository } from "./simulation/simulation-repository.js";
 import { SimulationAnalysisService } from "./simulation/simulation-analysis-service.js";
@@ -54,6 +55,7 @@ export type AppServices = {
   simulations: SimulationService;
   simulationAnalysis: SimulationAnalysisService;
   rooms: RoomService;
+  roomMemberships: RoomMembershipService;
   events: EventHub;
   providerRegistry: LLMProviderRegistry;
   applicationSettings: ApplicationSettingsService;
@@ -142,6 +144,11 @@ export async function buildServices(db: Db, logger: SimulationLogger): Promise<A
     memberships: roomMembershipRepository,
   });
 
+  const roomMemberships = new RoomMembershipService({
+    simulations: simulationRepository,
+    memberships: roomMembershipRepository,
+  });
+
   const modelProfiles = new ModelProfileService(
     modelProfileRepository,
     providerRegistry,
@@ -187,6 +194,7 @@ export async function buildServices(db: Db, logger: SimulationLogger): Promise<A
     simulations,
     simulationAnalysis,
     rooms,
+    roomMemberships,
     events,
     providerRegistry,
     applicationSettings,

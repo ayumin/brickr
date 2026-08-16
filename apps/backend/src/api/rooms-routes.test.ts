@@ -1,9 +1,10 @@
 /**
- * Tests for room lifecycle routes (issues #150, #151, #155).
+ * Tests for room lifecycle routes (issues #150, #151, #154, #155).
  *
  * Issue #150: GET /api/rooms/:id (defineRoute demo)
  * Issue #151: POST /api/rooms, PUT /api/rooms/:id, POST /api/rooms/:id/archive,
  *             DELETE /api/rooms/:id
+ * Issue #154: membership management endpoints
  * Issue #155: GET /api/rooms (visibility-aware room list)
  *
  * Verifies for each route:
@@ -26,6 +27,13 @@ import {
   archiveRoomOpenApiMeta,
   deleteRoomOpenApiMeta,
   listRoomsOpenApiMeta,
+  inviteMemberOpenApiMeta,
+  listPendingMembershipsOpenApiMeta,
+  removeRoomMemberOpenApiMeta,
+  banRoomMemberOpenApiMeta,
+  unbanRoomMemberOpenApiMeta,
+  approveRoomMemberOpenApiMeta,
+  rejectRoomMemberOpenApiMeta,
   registerRoomsRoutes,
 } from "./rooms-routes.js";
 import type { RoomService } from "../simulation/room-service.js";
@@ -36,6 +44,14 @@ import {
   RoomNotArchivedError,
   VisibilityImmutableError,
 } from "../simulation/room-service.js";
+import type { RoomMembershipService } from "../simulation/room-membership-service.js";
+import {
+  MembershipNotFoundError,
+  MemberAlreadyExistsError,
+  MemberBannedError,
+  CannotModifyOwnerError,
+  InvalidStatusTransitionError,
+} from "../simulation/room-membership-service.js";
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -76,6 +92,17 @@ const roomDto = {
   createdByUserId: "user-1",
 };
 
+const membershipDto = {
+  id: "mem-1",
+  roomId: "room-1",
+  memberKind: "user" as const,
+  memberId: "user-target",
+  role: "member" as const,
+  status: "active" as const,
+  createdAt: "2026-08-16T00:00:00.000Z",
+  updatedAt: "2026-08-16T00:00:00.000Z",
+};
+
 function makeRoomService(overrides: Partial<RoomService> = {}): RoomService {
   return {
     create: vi.fn(() => Promise.resolve(roomDto)),
@@ -88,9 +115,25 @@ function makeRoomService(overrides: Partial<RoomService> = {}): RoomService {
   } as unknown as RoomService;
 }
 
+function makeRoomMembershipService(
+  overrides: Partial<RoomMembershipService> = {},
+): RoomMembershipService {
+  return {
+    invite: vi.fn(() => Promise.resolve(membershipDto)),
+    remove: vi.fn(() => Promise.resolve({ ...membershipDto, status: "removed" as const })),
+    ban: vi.fn(() => Promise.resolve({ ...membershipDto, status: "banned" as const })),
+    unban: vi.fn(() => Promise.resolve({ ...membershipDto, status: "removed" as const })),
+    listPending: vi.fn(() => Promise.resolve([{ ...membershipDto, status: "pending" as const }])),
+    approve: vi.fn(() => Promise.resolve({ ...membershipDto, status: "active" as const })),
+    reject: vi.fn(() => Promise.resolve()),
+    ...overrides,
+  } as unknown as RoomMembershipService;
+}
+
 function makeServices(
   simulationsOverrides: Partial<AppServices["simulations"]> = {},
   roomsOverrides: Partial<RoomService> = {},
+  roomMembershipsOverrides: Partial<RoomMembershipService> = {},
 ): AppServices {
   return {
     simulations: {
@@ -99,6 +142,7 @@ function makeServices(
       ...simulationsOverrides,
     },
     rooms: makeRoomService(roomsOverrides),
+    roomMemberships: makeRoomMembershipService(roomMembershipsOverrides),
   } as unknown as AppServices;
 }
 
@@ -535,6 +579,473 @@ describe("DELETE /api/rooms/:id", () => {
   });
 });
 
+// ── POST /api/rooms/:id/members ───────────────────────────────────────────────
+
+describe("POST /api/rooms/:id/members", () => {
+  const apps: FastifyInstance[] = [];
+
+  afterEach(async () => {
+    await Promise.all(apps.splice(0).map((app) => app.close()));
+  });
+
+  it("answers 401 when signed out", async () => {
+    const app = await buildApp(null);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/rooms/room-1/members",
+      payload: { targetId: "user-target", targetKind: "user" },
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it("invites a member and returns the membership DTO", async () => {
+    const app = await buildApp(signedInUser);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/rooms/room-1/members",
+      payload: { targetId: "user-target", targetKind: "user" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ membership: { id: "mem-1", status: "active" } });
+  });
+
+  it("answers 400 for missing targetId", async () => {
+    const app = await buildApp(signedInUser);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/rooms/room-1/members",
+      payload: { targetKind: "user" },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ error: { code: "invalid_body" } });
+  });
+
+  it("answers 400 for invalid targetKind", async () => {
+    const app = await buildApp(signedInUser);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/rooms/room-1/members",
+      payload: { targetId: "user-target", targetKind: "invalid" },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ error: { code: "invalid_body" } });
+  });
+
+  it("maps RoomForbiddenError to 403", async () => {
+    const services = makeServices({}, {}, {
+      invite: () => Promise.reject(new RoomForbiddenError("room-1")),
+    });
+    const app = await buildApp(signedInUser, services);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/rooms/room-1/members",
+      payload: { targetId: "user-target", targetKind: "user" },
+    });
+
+    expect(response.statusCode).toBe(403);
+  });
+
+  it("maps RoomArchivedError to 409", async () => {
+    const services = makeServices({}, {}, {
+      invite: () => Promise.reject(new RoomArchivedError("room-1")),
+    });
+    const app = await buildApp(signedInUser, services);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/rooms/room-1/members",
+      payload: { targetId: "user-target", targetKind: "user" },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({ error: { code: "room_archived" } });
+  });
+
+  it("maps MemberBannedError to 409", async () => {
+    const services = makeServices({}, {}, {
+      invite: () => Promise.reject(new MemberBannedError()),
+    });
+    const app = await buildApp(signedInUser, services);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/rooms/room-1/members",
+      payload: { targetId: "user-target", targetKind: "user" },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({ error: { code: "member_banned" } });
+  });
+
+  it("maps MemberAlreadyExistsError to 409", async () => {
+    const services = makeServices({}, {}, {
+      invite: () => Promise.reject(new MemberAlreadyExistsError()),
+    });
+    const app = await buildApp(signedInUser, services);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/rooms/room-1/members",
+      payload: { targetId: "user-target", targetKind: "user" },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({ error: { code: "member_already_exists" } });
+  });
+});
+
+// ── GET /api/rooms/:id/members/pending ────────────────────────────────────────
+
+describe("GET /api/rooms/:id/members/pending", () => {
+  const apps: FastifyInstance[] = [];
+
+  afterEach(async () => {
+    await Promise.all(apps.splice(0).map((app) => app.close()));
+  });
+
+  it("answers 401 when signed out", async () => {
+    const app = await buildApp(null);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/rooms/room-1/members/pending",
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it("returns pending memberships", async () => {
+    const app = await buildApp(signedInUser);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/rooms/room-1/members/pending",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      memberships: [{ id: "mem-1", status: "pending" }],
+    });
+  });
+
+  it("maps RoomForbiddenError to 403", async () => {
+    const services = makeServices({}, {}, {
+      listPending: () => Promise.reject(new RoomForbiddenError("room-1")),
+    });
+    const app = await buildApp(signedInUser, services);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/rooms/room-1/members/pending",
+    });
+
+    expect(response.statusCode).toBe(403);
+  });
+});
+
+// ── DELETE /api/rooms/:id/members/:mid ────────────────────────────────────────
+
+describe("DELETE /api/rooms/:id/members/:mid", () => {
+  const apps: FastifyInstance[] = [];
+
+  afterEach(async () => {
+    await Promise.all(apps.splice(0).map((app) => app.close()));
+  });
+
+  it("answers 401 when signed out", async () => {
+    const app = await buildApp(null);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/api/rooms/room-1/members/mem-1",
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it("removes a member and returns the updated membership", async () => {
+    const app = await buildApp(signedInUser);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/api/rooms/room-1/members/mem-1",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ membership: { status: "removed" } });
+  });
+
+  it("maps CannotModifyOwnerError to 409", async () => {
+    const services = makeServices({}, {}, {
+      remove: () => Promise.reject(new CannotModifyOwnerError()),
+    });
+    const app = await buildApp(signedInUser, services);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/api/rooms/room-1/members/mem-1",
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({ error: { code: "cannot_modify_owner" } });
+  });
+
+  it("maps MembershipNotFoundError to 404", async () => {
+    const services = makeServices({}, {}, {
+      remove: () => Promise.reject(new MembershipNotFoundError("mem-1")),
+    });
+    const app = await buildApp(signedInUser, services);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/api/rooms/room-1/members/mem-1",
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({ error: { code: "membership_not_found" } });
+  });
+
+  it("maps InvalidStatusTransitionError to 409", async () => {
+    const services = makeServices({}, {}, {
+      remove: () => Promise.reject(new InvalidStatusTransitionError("banned", "removed")),
+    });
+    const app = await buildApp(signedInUser, services);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/api/rooms/room-1/members/mem-1",
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({ error: { code: "invalid_status_transition" } });
+  });
+});
+
+// ── POST /api/rooms/:id/members/:mid/ban ──────────────────────────────────────
+
+describe("POST /api/rooms/:id/members/:mid/ban", () => {
+  const apps: FastifyInstance[] = [];
+
+  afterEach(async () => {
+    await Promise.all(apps.splice(0).map((app) => app.close()));
+  });
+
+  it("answers 401 when signed out", async () => {
+    const app = await buildApp(null);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/rooms/room-1/members/mem-1/ban",
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it("bans a member and returns the updated membership", async () => {
+    const app = await buildApp(signedInUser);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/rooms/room-1/members/mem-1/ban",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ membership: { status: "banned" } });
+  });
+
+  it("maps CannotModifyOwnerError to 409", async () => {
+    const services = makeServices({}, {}, {
+      ban: () => Promise.reject(new CannotModifyOwnerError()),
+    });
+    const app = await buildApp(signedInUser, services);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/rooms/room-1/members/mem-1/ban",
+    });
+
+    expect(response.statusCode).toBe(409);
+  });
+});
+
+// ── POST /api/rooms/:id/members/:mid/unban ────────────────────────────────────
+
+describe("POST /api/rooms/:id/members/:mid/unban", () => {
+  const apps: FastifyInstance[] = [];
+
+  afterEach(async () => {
+    await Promise.all(apps.splice(0).map((app) => app.close()));
+  });
+
+  it("answers 401 when signed out", async () => {
+    const app = await buildApp(null);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/rooms/room-1/members/mem-1/unban",
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it("unbans a member and returns the updated membership", async () => {
+    const app = await buildApp(signedInUser);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/rooms/room-1/members/mem-1/unban",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ membership: { status: "removed" } });
+  });
+
+  it("maps InvalidStatusTransitionError to 409", async () => {
+    const services = makeServices({}, {}, {
+      unban: () => Promise.reject(new InvalidStatusTransitionError("active", "removed (unban)")),
+    });
+    const app = await buildApp(signedInUser, services);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/rooms/room-1/members/mem-1/unban",
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({ error: { code: "invalid_status_transition" } });
+  });
+});
+
+// ── POST /api/rooms/:id/members/:mid/approve ──────────────────────────────────
+
+describe("POST /api/rooms/:id/members/:mid/approve", () => {
+  const apps: FastifyInstance[] = [];
+
+  afterEach(async () => {
+    await Promise.all(apps.splice(0).map((app) => app.close()));
+  });
+
+  it("answers 401 when signed out", async () => {
+    const app = await buildApp(null);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/rooms/room-1/members/mem-1/approve",
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it("approves a pending membership and returns the updated membership", async () => {
+    const app = await buildApp(signedInUser);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/rooms/room-1/members/mem-1/approve",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ membership: { status: "active" } });
+  });
+
+  it("maps InvalidStatusTransitionError to 409", async () => {
+    const services = makeServices({}, {}, {
+      approve: () => Promise.reject(new InvalidStatusTransitionError("active", "active (approve)")),
+    });
+    const app = await buildApp(signedInUser, services);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/rooms/room-1/members/mem-1/approve",
+    });
+
+    expect(response.statusCode).toBe(409);
+  });
+});
+
+// ── POST /api/rooms/:id/members/:mid/reject ───────────────────────────────────
+
+describe("POST /api/rooms/:id/members/:mid/reject", () => {
+  const apps: FastifyInstance[] = [];
+
+  afterEach(async () => {
+    await Promise.all(apps.splice(0).map((app) => app.close()));
+  });
+
+  it("answers 401 when signed out", async () => {
+    const app = await buildApp(null);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/rooms/room-1/members/mem-1/reject",
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it("rejects a pending membership and returns 204", async () => {
+    const app = await buildApp(signedInUser);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/rooms/room-1/members/mem-1/reject",
+    });
+
+    expect(response.statusCode).toBe(204);
+  });
+
+  it("maps MembershipNotFoundError to 404", async () => {
+    const services = makeServices({}, {}, {
+      reject: () => Promise.reject(new MembershipNotFoundError("mem-1")),
+    });
+    const app = await buildApp(signedInUser, services);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/rooms/room-1/members/mem-1/reject",
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+});
+
 // ── GET /api/rooms ────────────────────────────────────────────────────────────
 
 describe("GET /api/rooms", () => {
@@ -577,9 +1088,7 @@ describe("GET /api/rooms", () => {
       creator: null,
       canManage: false,
     };
-    const services = makeServices({
-      listRooms: () => Promise.resolve([publicRoom]),
-    });
+    const services = makeServices({ listRooms: () => Promise.resolve([publicRoom]) });
     const app = await buildApp(signedInUser, services);
     apps.push(app);
 
@@ -597,9 +1106,7 @@ describe("GET /api/rooms", () => {
       visibility: "closed" as const,
       createdAt: "2026-08-16T00:00:00.000Z",
     };
-    const services = makeServices({
-      listRooms: () => Promise.resolve([closedRestricted]),
-    });
+    const services = makeServices({ listRooms: () => Promise.resolve([closedRestricted]) });
     const app = await buildApp(signedInUser, services);
     apps.push(app);
 
@@ -609,7 +1116,6 @@ describe("GET /api/rooms", () => {
     const body = response.json();
     expect(body.rooms).toHaveLength(1);
     expect(body.rooms[0]).toEqual(closedRestricted);
-    // Restricted entries must not expose full metadata
     expect(body.rooms[0]).not.toHaveProperty("postCount");
     expect(body.rooms[0]).not.toHaveProperty("creator");
     expect(body.rooms[0]).not.toHaveProperty("canManage");
@@ -630,9 +1136,7 @@ describe("GET /api/rooms", () => {
       canManage: true,
       pendingCount: 3,
     };
-    const services = makeServices({
-      listRooms: () => Promise.resolve([ownerRoom]),
-    });
+    const services = makeServices({ listRooms: () => Promise.resolve([ownerRoom]) });
     const app = await buildApp(signedInUser, services);
     apps.push(app);
 
@@ -740,5 +1244,68 @@ describe("rooms route OpenAPI registration", () => {
     );
     expect(found?.operation.security).toEqual([{ cookieAuth: [] }]);
     expect(found?.operation.responses?.["401"]).toBeDefined();
+  });
+
+  it("registers the inviteRoomMember operation", () => {
+    const found = registeredRoutes.find(
+      (r) => r.operation.operationId === inviteMemberOpenApiMeta.operationId,
+    );
+    expect(found).toBeDefined();
+    expect(found?.method).toBe("POST");
+    expect(found?.openApiPath).toBe("/api/rooms/{id}/members");
+  });
+
+  it("registers the listPendingRoomMemberships operation", () => {
+    const found = registeredRoutes.find(
+      (r) => r.operation.operationId === listPendingMembershipsOpenApiMeta.operationId,
+    );
+    expect(found).toBeDefined();
+    expect(found?.method).toBe("GET");
+    expect(found?.openApiPath).toBe("/api/rooms/{id}/members/pending");
+  });
+
+  it("registers the removeRoomMember operation", () => {
+    const found = registeredRoutes.find(
+      (r) => r.operation.operationId === removeRoomMemberOpenApiMeta.operationId,
+    );
+    expect(found).toBeDefined();
+    expect(found?.method).toBe("DELETE");
+    expect(found?.openApiPath).toBe("/api/rooms/{id}/members/{mid}");
+  });
+
+  it("registers the banRoomMember operation", () => {
+    const found = registeredRoutes.find(
+      (r) => r.operation.operationId === banRoomMemberOpenApiMeta.operationId,
+    );
+    expect(found).toBeDefined();
+    expect(found?.method).toBe("POST");
+    expect(found?.openApiPath).toBe("/api/rooms/{id}/members/{mid}/ban");
+  });
+
+  it("registers the unbanRoomMember operation", () => {
+    const found = registeredRoutes.find(
+      (r) => r.operation.operationId === unbanRoomMemberOpenApiMeta.operationId,
+    );
+    expect(found).toBeDefined();
+    expect(found?.method).toBe("POST");
+    expect(found?.openApiPath).toBe("/api/rooms/{id}/members/{mid}/unban");
+  });
+
+  it("registers the approveRoomMembership operation", () => {
+    const found = registeredRoutes.find(
+      (r) => r.operation.operationId === approveRoomMemberOpenApiMeta.operationId,
+    );
+    expect(found).toBeDefined();
+    expect(found?.method).toBe("POST");
+    expect(found?.openApiPath).toBe("/api/rooms/{id}/members/{mid}/approve");
+  });
+
+  it("registers the rejectRoomMembership operation", () => {
+    const found = registeredRoutes.find(
+      (r) => r.operation.operationId === rejectRoomMemberOpenApiMeta.operationId,
+    );
+    expect(found).toBeDefined();
+    expect(found?.method).toBe("POST");
+    expect(found?.openApiPath).toBe("/api/rooms/{id}/members/{mid}/reject");
   });
 });

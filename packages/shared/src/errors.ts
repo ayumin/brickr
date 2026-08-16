@@ -1,11 +1,13 @@
 /** Every machine-readable error code the API answers with. */
 export const API_ERROR_CODES = [
   "account_suspended",
+  "cannot_modify_owner",
   "character_generation_failed",
   "email_conflict",
   "forbidden",
   "handle_conflict",
   "internal_error",
+  "invalid_status_transition",
   "invalid_birthdate",
   "invalid_body",
   "invalid_credentials",
@@ -16,6 +18,9 @@ export const API_ERROR_CODES = [
   "invalid_query",
   "invalid_setting",
   "invalid_budget",
+  "member_already_exists",
+  "member_banned",
+  "membership_not_found",
   // Room authorization producers are introduced by follow-up issues #151/#152.
   "membership_required",
   "not_found",
