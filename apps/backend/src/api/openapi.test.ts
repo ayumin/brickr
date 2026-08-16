@@ -59,7 +59,9 @@ const expectedPaths = [
   "/api/posts/{threadRootId}/replies",
   "/api/feed/events",
   "/api/simulations/{id}/events",
+  "/api/rooms",
   "/api/rooms/{id}",
+  "/api/rooms/{id}/archive",
 ];
 
 const sessionProtectedOperationIds = [
@@ -110,6 +112,10 @@ const sessionProtectedOperationIds = [
   "listThreadReplies",
   "streamSimulationEvents",
   "getRoomSummary",
+  "createRoom",
+  "updateRoom",
+  "archiveRoom",
+  "deleteRoom",
 ];
 
 describe("OpenAPI documentation", () => {
