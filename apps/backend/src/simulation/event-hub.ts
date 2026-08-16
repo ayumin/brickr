@@ -7,12 +7,14 @@ export type EventListener = (event: PublishedInternalSseEvent) => void;
  * A registered room-scoped connection: the event listener paired with a callback
  * that the EventHub calls to terminate the stream from the server side.
  *
- * `onClose` is invoked by `closeRoom` (room archived) and `closeConnection`
+ * `onClose` is invoked by `closeRoom` (room archived) and `closeSubscriber`
  * (membership revoked). The route handler uses it to end the HTTP response.
  */
 type RoomConnection = {
   listener: EventListener;
   onClose: () => void;
+  /** Authenticated user that owns the stream. Omitted only in low-level tests. */
+  subscriberId?: string;
 };
 
 /**
@@ -33,8 +35,8 @@ type RoomConnection = {
  *   - `closeRoom(roomId)` terminates every open stream for a room when it is
  *     archived. Clients reconnect and receive a 404, which is the correct
  *     response for a stopped room they cannot read (§10.4).
- *   - `closeConnection(roomId, connectionId)` terminates one specific stream,
- *     used when a member's access is revoked while their connection is open.
+ *   - `closeSubscriber(roomId, subscriberId)` terminates every stream owned by
+ *     one member, including multiple tabs, when their access is revoked.
  */
 export class EventHub {
   private readonly bySimulation = new Map<string, Map<string, RoomConnection>>();
@@ -43,16 +45,16 @@ export class EventHub {
   /**
    * One room's stream.
    *
-   * Returns an unsubscribe function and a `connectionId` that can be passed to
-   * `closeConnection` to terminate this specific stream from the server side.
+   * Returns an unsubscribe function and a unique `connectionId` for diagnostics.
    *
-   * `onClose` is called by `closeRoom` or `closeConnection` to signal that the
+   * `onClose` is called by `closeRoom` or `closeSubscriber` to signal that the
    * route handler should end the HTTP response.
    */
   subscribe(
     simulationId: string,
     listener: EventListener,
     onClose: () => void,
+    subscriberId?: string,
   ): { unsubscribe: () => void; connectionId: string } {
     let connections = this.bySimulation.get(simulationId);
     if (!connections) {
@@ -61,7 +63,11 @@ export class EventHub {
     }
 
     const connectionId = randomUUID();
-    connections.set(connectionId, { listener, onClose });
+    connections.set(connectionId, {
+      listener,
+      onClose,
+      ...(subscriberId === undefined ? {} : { subscriberId }),
+    });
 
     const unsubscribe = (): void => {
       const current = this.bySimulation.get(simulationId);
@@ -120,26 +126,30 @@ export class EventHub {
   }
 
   /**
-   * Terminates one specific room-scoped stream.
+   * Terminates every room-scoped stream owned by one authenticated subscriber.
    *
    * Called when a member's access is revoked while their connection is open
    * (§11.1 visibility re-evaluation). The connection's `onClose` callback is
    * invoked so the route handler can end the HTTP response.
    */
-  closeConnection(simulationId: string, connectionId: string): void {
+  closeSubscriber(simulationId: string, subscriberId: string): void {
     const connections = this.bySimulation.get(simulationId);
     if (!connections) return;
 
-    const connection = connections.get(connectionId);
-    if (!connection) return;
-
-    connections.delete(connectionId);
+    const targeted = [...connections].filter(
+      ([, connection]) => connection.subscriberId === subscriberId,
+    );
+    for (const [connectionId] of targeted) {
+      connections.delete(connectionId);
+    }
     if (connections.size === 0) this.bySimulation.delete(simulationId);
 
-    try {
-      connection.onClose();
-    } catch {
-      // Ignore errors from the close callback.
+    for (const [, connection] of targeted) {
+      try {
+        connection.onClose();
+      } catch {
+        // A broken close callback must not prevent the member's other streams closing.
+      }
     }
   }
 

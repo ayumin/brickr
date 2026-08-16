@@ -76,10 +76,19 @@ function streamEvents(
     resolve = res;
   });
 
+  let heartbeat: ReturnType<typeof setInterval> | undefined;
+
+  const stopHeartbeat = (): void => {
+    if (heartbeat === undefined) return;
+    clearInterval(heartbeat);
+    heartbeat = undefined;
+  };
+
   const terminate = (): void => {
     if (!reply.raw.writableEnded) {
       reply.raw.end();
     }
+    stopHeartbeat();
     resolve();
   };
 
@@ -93,10 +102,10 @@ function streamEvents(
     );
   }, terminate);
 
-  const heartbeat = setInterval(() => write(": ping\n\n"), HEARTBEAT_MS);
+  heartbeat = setInterval(() => write(": ping\n\n"), HEARTBEAT_MS);
 
   const cleanup = (): void => {
-    clearInterval(heartbeat);
+    stopHeartbeat();
     unsubscribe();
     resolve();
   };
@@ -164,7 +173,12 @@ export function registerEventsRoute(app: FastifyInstance, services: AppServices)
     }
 
     return streamEvents(request, reply, (listener, onClose) => {
-      const { unsubscribe } = services.events.subscribe(simulationId, listener, onClose);
+      const { unsubscribe } = services.events.subscribe(
+        simulationId,
+        listener,
+        onClose,
+        user.id,
+      );
       return unsubscribe;
     });
   });

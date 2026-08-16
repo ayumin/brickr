@@ -18,8 +18,9 @@ function sub(
   roomId: string,
   listener: EventListener = vi.fn(),
   onClose: () => void = vi.fn(),
+  subscriberId?: string,
 ) {
-  return hub.subscribe(roomId, listener, onClose);
+  return hub.subscribe(roomId, listener, onClose, subscriberId);
 }
 
 describe("EventHub (§11.4)", () => {
@@ -221,54 +222,75 @@ describe("EventHub (§11.4)", () => {
     });
   });
 
-  describe("closeConnection (§11.1 membership revocation)", () => {
+  describe("closeSubscriber (§11.1 membership revocation)", () => {
     /**
-     * When a member's access is revoked, only their connection is terminated —
-     * other subscribers in the same room keep receiving events.
+     * When a member's access is revoked, all of their connections are terminated
+     * while other subscribers in the same room keep receiving events.
      */
-    it("calls onClose for the specific connection", () => {
+    it("calls onClose for the subscriber", () => {
       const hub = new EventHub();
       const onClose = vi.fn();
-      const { connectionId } = sub(hub, "room-1", vi.fn(), onClose);
+      sub(hub, "room-1", vi.fn(), onClose, "user-1");
 
-      hub.closeConnection("room-1", connectionId);
+      hub.closeSubscriber("room-1", "user-1");
 
       expect(onClose).toHaveBeenCalledTimes(1);
     });
 
-    it("removes only the targeted connection", () => {
+    it("removes every connection for the subscriber, including multiple tabs", () => {
       const hub = new EventHub();
-      const { connectionId } = sub(hub, "room-1", vi.fn());
-      sub(hub, "room-1", vi.fn());
+      const onClose1 = vi.fn();
+      const onClose2 = vi.fn();
+      sub(hub, "room-1", vi.fn(), onClose1, "user-1");
+      sub(hub, "room-1", vi.fn(), onClose2, "user-1");
+      sub(hub, "room-1", vi.fn(), vi.fn(), "user-2");
 
-      hub.closeConnection("room-1", connectionId);
+      hub.closeSubscriber("room-1", "user-1");
 
       expect(hub.subscriberCount("room-1")).toBe(1);
+      expect(onClose1).toHaveBeenCalledTimes(1);
+      expect(onClose2).toHaveBeenCalledTimes(1);
     });
 
-    it("does not call onClose for other connections in the same room", () => {
+    it("does not call onClose for other subscribers in the same room", () => {
       const hub = new EventHub();
       const onCloseOther = vi.fn();
-      const { connectionId } = sub(hub, "room-1", vi.fn());
-      sub(hub, "room-1", vi.fn(), onCloseOther);
+      sub(hub, "room-1", vi.fn(), vi.fn(), "user-1");
+      sub(hub, "room-1", vi.fn(), onCloseOther, "user-2");
 
-      hub.closeConnection("room-1", connectionId);
+      hub.closeSubscriber("room-1", "user-1");
 
       expect(onCloseOther).not.toHaveBeenCalled();
     });
 
-    it("is a no-op for an unknown connectionId", () => {
+    it("is a no-op for an unknown subscriber", () => {
       const hub = new EventHub();
-      sub(hub, "room-1", vi.fn());
+      sub(hub, "room-1", vi.fn(), vi.fn(), "user-1");
 
-      expect(() => hub.closeConnection("room-1", "unknown-id")).not.toThrow();
+      expect(() => hub.closeSubscriber("room-1", "unknown-user")).not.toThrow();
       expect(hub.subscriberCount("room-1")).toBe(1);
     });
 
     it("is a no-op for an unknown room", () => {
       const hub = new EventHub();
 
-      expect(() => hub.closeConnection("nonexistent", "any-id")).not.toThrow();
+      expect(() => hub.closeSubscriber("nonexistent", "user-1")).not.toThrow();
+    });
+
+    it("continues closing the subscriber's other connections when one onClose throws", () => {
+      const hub = new EventHub();
+      const broken = vi.fn(() => {
+        throw new Error("close failed");
+      });
+      const healthy = vi.fn();
+      sub(hub, "room-1", vi.fn(), broken, "user-1");
+      sub(hub, "room-1", vi.fn(), healthy, "user-1");
+
+      hub.closeSubscriber("room-1", "user-1");
+
+      expect(broken).toHaveBeenCalledTimes(1);
+      expect(healthy).toHaveBeenCalledTimes(1);
+      expect(hub.subscriberCount("room-1")).toBe(0);
     });
   });
 });

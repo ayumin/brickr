@@ -175,7 +175,7 @@ describe("GET /api/simulations/:id/events (§11.1, §10.4)", () => {
  * terminate the open stream so the client reconnects and receives a 404.
  *
  * The route registers an `onClose` callback with the EventHub. When
- * `closeRoom` or `closeConnection` is called, the EventHub invokes `onClose`,
+ * `closeRoom` or `closeSubscriber` is called, the EventHub invokes `onClose`,
  * which ends the HTTP response. These tests verify the contract at the
  * route layer: that the connection is registered and that `closeRoom` removes
  * it (the EventHub-level behaviour is tested in event-hub.test.ts).
@@ -241,6 +241,46 @@ describe("SSE contract: visibility re-evaluation (§11.1)", () => {
     response.stream().destroy();
   });
 
+  it("removes every connection for the revoked subscriber", async () => {
+    const { services, events } = makeServices();
+    const app = await buildApp(services, user);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/simulations/room-1/events",
+      payloadAsStream: true,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(events.subscriberCount("room-1")).toBe(1);
+
+    events.closeSubscriber("room-1", user.id);
+
+    expect(events.subscriberCount("room-1")).toBe(0);
+    response.stream().destroy();
+  });
+
+  it("stops the heartbeat when the server terminates the stream", async () => {
+    const { services, events } = makeServices();
+    const clearIntervalSpy = vi.spyOn(globalThis, "clearInterval");
+    const app = await buildApp(services, user);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/simulations/room-1/events",
+      payloadAsStream: true,
+    });
+
+    clearIntervalSpy.mockClear();
+    events.closeSubscriber("room-1", user.id);
+
+    expect(clearIntervalSpy).toHaveBeenCalledTimes(1);
+    clearIntervalSpy.mockRestore();
+    response.stream().destroy();
+  });
+
   /**
    * The route registers an `onClose` callback that ends the HTTP response when
    * the EventHub calls it. This test verifies that the `onClose` callback is
@@ -270,6 +310,7 @@ describe("SSE contract: visibility re-evaluation (§11.1)", () => {
       "room-1",
       expect.any(Function),
       expect.any(Function), // onClose
+      "user-1",
     );
 
     response.stream().destroy();
