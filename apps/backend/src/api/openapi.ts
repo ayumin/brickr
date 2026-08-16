@@ -1153,6 +1153,28 @@ export const openApiDocument: OpenAPIV3.Document = {
         },
       },
     },
+    // ── defineRoute sample (issue #150) ────────────────────────────────────
+    // This path is documented here to keep the OpenAPI document as the single
+    // source of truth for the API surface. The operation object is derived from
+    // the same Zod schemas that drive the handler in rooms-routes.ts.
+    "/api/rooms/{id}": {
+      get: {
+        operationId: "getRoomSummary",
+        security: sessionSecurity,
+        tags: ["Simulations"],
+        summary: "Get one room's summary (defineRoute demo)",
+        description:
+          "Demonstrates the `defineRoute` pattern (issue #150): auth, Zod validation, " +
+          "DomainError mapping, and OpenAPI output all derived from the same definition. " +
+          "Mirrors `GET /api/simulations/:id` but implemented via `defineRoute`.",
+        parameters: [idParameter("Room ID")],
+        responses: {
+          "200": jsonResponse("The room's summary", ref("SimulationSummary")),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          ...errorResponses,
+        },
+      },
+    },
   },
   components: {
     securitySchemes: {
