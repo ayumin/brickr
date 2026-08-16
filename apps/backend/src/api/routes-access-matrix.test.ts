@@ -70,6 +70,7 @@ function room(id: string, overrides: Partial<Simulation> = {}): Simulation {
     status: "active",
     scope: "room",
     visibility: "public",
+    tags: [],
     createdAt: NOW,
     lastActivityAt: NOW,
     createdByUserId: ROOM_OWNER.id,
@@ -88,16 +89,17 @@ const FEED_ROOM: Simulation = {
   status: "active",
   scope: "global",
   visibility: "public",
+  tags: [],
   createdAt: NOW,
   lastActivityAt: NOW,
 };
 
 const ROOMS = [ACTIVE_ROOM, STOPPED_ROOM, OTHER_ROOM, FEED_ROOM];
 
-function post(id: string, simulationId: string, authorId: string): Post {
+function post(id: string, roomId: string, authorId: string): Post {
   return {
     id,
-    simulationId,
+    roomId,
     authorId,
     content: `post ${id}`,
     mentions: [],
@@ -167,11 +169,11 @@ function makeServices(): { services: AppServices; listedFor: string[] } {
 
   const postService = {
     findById: (id: string) => Promise.resolve(POSTS.find((p) => p.id === id) ?? null),
-    listBySimulation: (simulationId: string) =>
+    listByRoom: (roomId: string) =>
       Promise.resolve(
-        POSTS.filter((p) => p.simulationId === simulationId).map((p) => ({ id: p.id })),
+        POSTS.filter((p) => p.roomId === roomId).map((p) => ({ id: p.id })),
       ),
-    toDto: (p: Post) => Promise.resolve({ id: p.id, roomId: p.simulationId }),
+    toDto: (p: Post) => Promise.resolve({ id: p.id, roomId: p.roomId }),
     toDtos: (list: Post[]) => Promise.resolve(list.map((p) => ({ id: p.id }))),
   } as unknown as PostService;
 
@@ -224,7 +226,7 @@ function makeServices(): { services: AppServices; listedFor: string[] } {
       Promise.resolve(
         POSTS.filter((p) => {
           if (p.authorId !== input.authorId) return false;
-          const owning = ROOMS.find((r) => r.id === p.simulationId);
+          const owning = ROOMS.find((r) => r.id === p.roomId);
           if (!owning || owning.status === "active") return true;
           return input.viewer.isAdmin || owning.createdByUserId === input.viewer.id;
         }),

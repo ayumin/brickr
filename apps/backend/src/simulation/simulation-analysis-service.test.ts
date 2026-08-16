@@ -110,6 +110,7 @@ describe("SimulationAnalysisService.analyze ownership (§66.6)", () => {
     status: "active",
     scope: "room",
     visibility: "public",
+    tags: [],
     createdAt: new Date("2026-08-10T00:00:00Z"),
     lastActivityAt: new Date("2026-08-10T00:00:00Z"),
     createdByUserId: "user-1",
@@ -120,7 +121,7 @@ describe("SimulationAnalysisService.analyze ownership (§66.6)", () => {
       findById: (id: string) => Promise.resolve(id === found?.id ? found : null),
     } as unknown as SimulationRepository;
     const posts = {
-      listBySimulation: () => Promise.resolve([]),
+      listByRoom: () => Promise.resolve([]),
     } as unknown as PostService;
     return new SimulationAnalysisService(
       simulations,
@@ -175,6 +176,7 @@ describe("SimulationAnalysisService.analyze global feed protection (§8.2)", () 
       status: "active",
       scope: "global",
       visibility: "public",
+      tags: [],
       createdAt: new Date("2026-08-10T00:00:00Z"),
       lastActivityAt: new Date("2026-08-10T00:00:00Z"),
     };
@@ -182,7 +184,7 @@ describe("SimulationAnalysisService.analyze global feed protection (§8.2)", () 
       findById: (id: string) => Promise.resolve(id === globalSimulation.id ? globalSimulation : null),
     } as unknown as SimulationRepository;
     const posts = {
-      listBySimulation: () => Promise.resolve([]),
+      listByRoom: () => Promise.resolve([]),
     } as unknown as PostService;
     const service = new SimulationAnalysisService(
       simulations,

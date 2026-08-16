@@ -45,7 +45,7 @@ export class SimulationAnalysisService {
     assertNotGlobalSimulation(simulation);
     assertSimulationOwnerOrAdmin(simulation, actor);
 
-    const posts = await this.posts.listBySimulation(id);
+    const posts = await this.posts.listByRoom(id);
     const replyCount = posts.filter((post) => post.replyTo !== null).length;
     const repostCount = posts.filter((post) => post.quoteOf !== null).length;
 

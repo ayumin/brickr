@@ -17,6 +17,7 @@ export const API_ERROR_CODES = [
   "invalid_params",
   "invalid_query",
   "invalid_setting",
+  "invalid_budget",
   "member_already_exists",
   "member_banned",
   "membership_not_found",

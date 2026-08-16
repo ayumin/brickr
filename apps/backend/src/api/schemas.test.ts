@@ -8,8 +8,10 @@ import {
   createSimulationSchema,
   handleParams,
   loginSchema,
+  llmBudgetProviderParams,
   saveCharacterSchema,
   saveUserProfileSchema,
+  setBudgetLimitSchema,
   signupSchema,
   updateApplicationSettingsSchema,
   updateSimulationSchema,
@@ -52,6 +54,19 @@ describe("simulation title validation", () => {
   it("rejects an empty or overlong name when renaming", () => {
     expect(updateSimulationSchema.safeParse({ title: "   " }).success).toBe(false);
     expect(updateSimulationSchema.safeParse({ title: "a".repeat(121) }).success).toBe(false);
+  });
+});
+
+describe("LLM budget validation", () => {
+  it("accepts only registered provider ids", () => {
+    expect(llmBudgetProviderParams.safeParse({ provider: "openai" }).success).toBe(true);
+    expect(llmBudgetProviderParams.safeParse({ provider: "unknown" }).success).toBe(false);
+  });
+
+  it("requires a non-negative integer token limit", () => {
+    expect(setBudgetLimitSchema.safeParse({ tokenLimit: 0 }).success).toBe(true);
+    expect(setBudgetLimitSchema.safeParse({ tokenLimit: -1 }).success).toBe(false);
+    expect(setBudgetLimitSchema.safeParse({ tokenLimit: 1.5 }).success).toBe(false);
   });
 });
 

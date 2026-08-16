@@ -1,5 +1,9 @@
 import type { MemberKind, MemberRole, MembershipStatus } from "@brickr/shared";
-import type { Db, DbTransaction } from "../persistence/prisma.js";
+import {
+  isRecordNotFoundError,
+  type Db,
+  type DbTransaction,
+} from "../persistence/prisma.js";
 import { optionalField } from "../persistence/repository-mapping.js";
 
 export type RoomMembership = {
@@ -145,15 +149,18 @@ export class RoomMembershipRepository {
         data: { status },
       });
       return toMembership(row);
-    } catch {
-      // Prisma throws P2025 when the record is not found.
-      return null;
+    } catch (error) {
+      if (isRecordNotFoundError(error)) return null;
+      throw error;
     }
   }
 
   /**
    * Updates the status of a membership identified by the (room, memberKind, memberId) triple.
    * Returns the updated membership, or null if no row matched.
+   *
+   * Used by the Cast join flow to transition a membership from `pending` to
+   * `active` (approval) or to `removed`/`banned` (rejection).
    */
   async updateStatusByMember(
     roomId: string,
@@ -167,8 +174,9 @@ export class RoomMembershipRepository {
         data: { status },
       });
       return toMembership(row);
-    } catch {
-      return null;
+    } catch (error) {
+      if (isRecordNotFoundError(error)) return null;
+      throw error;
     }
   }
 
@@ -180,8 +188,70 @@ export class RoomMembershipRepository {
     try {
       await this.db.roomMembership.delete({ where: { id } });
       return true;
-    } catch {
-      return false;
+    } catch (error) {
+      if (isRecordNotFoundError(error)) return false;
+      throw error;
     }
+  }
+
+  /**
+   * Counts the number of pending Cast memberships in a room.
+   *
+   * Used to enforce the per-room pending Cast limit (issue #164: "同時に pending
+   * 状態の Cast 数を制限").
+   */
+  async countPendingCasts(roomId: string): Promise<number> {
+    return this.db.roomMembership.count({
+      where: { roomId, memberKind: "character", status: "pending" },
+    });
+  }
+
+  /**
+   * Returns the IDs of all characters that are active members of a room.
+   *
+   * Used by the Cast recommendation scorer to exclude characters that are
+   * already in the room from the candidate pool.
+   */
+  async findActiveCastIds(roomId: string): Promise<string[]> {
+    const rows = await this.db.roomMembership.findMany({
+      where: { roomId, memberKind: "character", status: "active" },
+      select: { memberId: true },
+    });
+    return rows.map((row: { memberId: string }) => row.memberId);
+  }
+
+  /** Returns pending Cast IDs so repeated join-request events do not re-evaluate them. */
+  async findPendingCastIds(roomId: string): Promise<string[]> {
+    const rows = await this.db.roomMembership.findMany({
+      where: { roomId, memberKind: "character", status: "pending" },
+      select: { memberId: true },
+    });
+    return rows.map((row: { memberId: string }) => row.memberId);
+  }
+
+  /**
+   * Returns the IDs of all characters that are banned from a room.
+   *
+   * Used by the Cast recommendation scorer to exclude banned characters from
+   * the candidate pool.
+   */
+  async findBannedCastIds(roomId: string): Promise<string[]> {
+    const rows = await this.db.roomMembership.findMany({
+      where: { roomId, memberKind: "character", status: "banned" },
+      select: { memberId: true },
+    });
+    return rows.map((row: { memberId: string }) => row.memberId);
+  }
+
+  /**
+   * Returns the number of active rooms a character currently belongs to.
+   *
+   * Used by the Cast recommendation scorer to penalise characters that are
+   * already spread across many rooms (overload prevention).
+   */
+  async countActiveRoomsForCast(characterId: string): Promise<number> {
+    return this.db.roomMembership.count({
+      where: { memberId: characterId, memberKind: "character", status: "active" },
+    });
   }
 }

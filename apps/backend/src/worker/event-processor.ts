@@ -16,20 +16,30 @@
 
 import type { AgentService } from "../agents/agent-service.js";
 import type { CharacterRepository } from "../characters/character-repository.js";
+import type { LLMClient } from "../llm/llm-client.js";
+import type { LLMProviderRegistry } from "../llm/provider-registry.js";
 import type { PostService } from "../posts/post-service.js";
 import type { ThreadService } from "../posts/thread-service.js";
 import type { ScheduledEvent } from "../scheduled-events/scheduled-event.js";
 import type { SimulationRepository } from "../simulation/simulation-repository.js";
+import type { RoomMembershipRepository } from "../simulation/room-membership-repository.js";
 import { resolveActionTargets, selectAction } from "../simulation/action-selector.js";
 import { selectResponders } from "../simulation/responder-selector.js";
+import {
+  processCastJoinRequests,
+  publishWelcomePost,
+} from "../simulation/cast-join-service.js";
 import type { WorkerLogger } from "./logger.js";
 
 export type EventProcessorDeps = {
   simulations: SimulationRepository;
   characters: CharacterRepository;
+  memberships: RoomMembershipRepository;
   posts: PostService;
   threads: ThreadService;
   agents: AgentService;
+  llm: LLMClient;
+  providers: LLMProviderRegistry;
   logger: WorkerLogger;
 };
 
@@ -53,7 +63,13 @@ export async function processEvent(
       break;
 
     case "character.join.request":
+      await handleCharacterJoinRequest(event, deps);
+      break;
+
     case "character.join.welcome":
+      await handleCharacterJoinWelcome(event, deps);
+      break;
+
     case "thread.revive":
     case "room.review":
     case "room.analysis.refresh":
@@ -188,7 +204,7 @@ async function handleCharacterRespond(
       const { replyTo, quoteOf } = resolveActionTargets(action, thread.target);
 
       await deps.posts.publish({
-        simulationId: roomId,
+        roomId,
         authorId: character.id,
         content: generated.content,
         replyTo,
@@ -221,5 +237,98 @@ async function handleCharacterRespond(
 
   if (successCount === 0) {
     throw new Error(`all ${String(responders.length)} responders failed for event ${event.id}`);
+  }
+}
+
+/**
+ * Handles a `character.join.request` event.
+ *
+ * Selects Cast candidates for the room, runs LLM judgment, and creates
+ * membership records according to the room's visibility rules.
+ *
+ * This is a best-effort operation: individual candidate failures are logged but
+ * do not cause the event to fail (which would trigger a retry).
+ */
+async function handleCharacterJoinRequest(
+  event: ScheduledEvent,
+  deps: EventProcessorDeps,
+): Promise<void> {
+  const { roomId } = event;
+
+  if (!roomId) {
+    throw new Error(`character.join.request event ${event.id} is missing roomId`);
+  }
+
+  const results = await processCastJoinRequests(roomId, {
+    simulations: deps.simulations,
+    characters: deps.characters,
+    memberships: deps.memberships,
+    posts: deps.posts,
+    llm: deps.llm,
+    providers: deps.providers,
+  });
+
+  for (const result of results) {
+    if (result.outcome === "joined" || result.outcome === "pending") {
+      deps.logger.info(
+        { eventId: event.id, roomId, characterId: result.characterId, outcome: result.outcome },
+        "cast join processed",
+      );
+    } else if (result.outcome === "error") {
+      deps.logger.warn(
+        { eventId: event.id, roomId, reason: result.reason },
+        "cast join errored",
+      );
+    } else {
+      deps.logger.info(
+        { eventId: event.id, roomId, reason: result.reason },
+        "cast join skipped",
+      );
+    }
+  }
+}
+
+/**
+ * Handles a `character.join.welcome` event.
+ *
+ * Publishes a welcome post from the Cast character that has just become an
+ * active member of the room. Failure is non-fatal: the membership is already
+ * committed, so a failed welcome post does not need to be retried.
+ */
+async function handleCharacterJoinWelcome(
+  event: ScheduledEvent,
+  deps: EventProcessorDeps,
+): Promise<void> {
+  const { roomId, characterId } = event;
+
+  if (!roomId || !characterId) {
+    throw new Error(
+      `character.join.welcome event ${event.id} is missing roomId or characterId`,
+    );
+  }
+
+  const result = await publishWelcomePost(roomId, characterId, {
+    simulations: deps.simulations,
+    characters: deps.characters,
+    posts: deps.posts,
+    llm: deps.llm,
+    providers: deps.providers,
+  });
+
+  if (result.outcome === "published") {
+    deps.logger.info(
+      { eventId: event.id, roomId, characterId },
+      "cast welcome post published",
+    );
+  } else if (result.outcome === "error") {
+    deps.logger.warn(
+      { eventId: event.id, roomId, characterId, reason: result.reason },
+      "cast welcome post errored",
+    );
+  } else {
+    deps.logger.info(
+      { eventId: event.id, roomId, characterId, reason: result.reason },
+      "cast welcome post skipped",
+    );
   }
 }

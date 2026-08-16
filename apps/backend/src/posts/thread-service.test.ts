@@ -9,7 +9,7 @@ function at(second: number): Date {
 
 function makePost(overrides: Partial<Post> & { id: string }): Post {
   return {
-    simulationId: "sim-1",
+    roomId: "sim-1",
     authorId: "user-1",
     content: `content of ${overrides.id}`,
     mentions: [],
@@ -31,7 +31,7 @@ type RecordedCalls = {
   findManyByIds: string[][];
   findReplies: string[];
   findQuotes: string[];
-  findRecentBySimulation: Array<{ simulationId: string; limit: number }>;
+  findRecentByRoom: Array<{ roomId: string; limit: number }>;
 };
 
 /**
@@ -47,7 +47,7 @@ function makeFakeRepository(posts: readonly Post[]): {
     findManyByIds: [],
     findReplies: [],
     findQuotes: [],
-    findRecentBySimulation: [],
+    findRecentByRoom: [],
   };
 
   const oldestFirst = (a: Post, b: Post): number =>
@@ -70,12 +70,12 @@ function makeFakeRepository(posts: readonly Post[]): {
       calls.findQuotes.push(postId);
       return Promise.resolve(posts.filter((post) => post.quoteOf === postId).sort(oldestFirst));
     },
-    findRecentBySimulation(simulationId: string, limit: number): Promise<Post[]> {
-      calls.findRecentBySimulation.push({ simulationId, limit });
-      const inSimulation = posts
-        .filter((post) => post.simulationId === simulationId)
+    findRecentByRoom(roomId: string, limit: number): Promise<Post[]> {
+      calls.findRecentByRoom.push({ roomId, limit });
+      const inRoom = posts
+        .filter((post) => post.roomId === roomId)
         .sort(oldestFirst);
-      return Promise.resolve(limit <= 0 ? [] : inSimulation.slice(-limit));
+      return Promise.resolve(limit <= 0 ? [] : inRoom.slice(-limit));
     },
   };
 
@@ -428,10 +428,10 @@ describe("ThreadService.getCurrentThread", () => {
     1000,
   );
 
-  it("asks the repository only for the target's own simulation", async () => {
+  it("asks the repository only for the target's own room", async () => {
     const posts = [
       makePost({ id: "a", createdAt: at(1) }),
-      makePost({ id: "other", simulationId: "sim-2", createdAt: at(2) }),
+      makePost({ id: "other", roomId: "sim-2", createdAt: at(2) }),
     ];
     const { repository, calls } = makeFakeRepository(posts);
     const service = new ThreadService(repository, 10);
@@ -439,7 +439,7 @@ describe("ThreadService.getCurrentThread", () => {
     const thread = await service.getCurrentThread("a");
 
     expect(idsOf(thread?.posts ?? [])).toEqual(["a"]);
-    expect(calls.findRecentBySimulation).toEqual([{ simulationId: "sim-1", limit: 10 }]);
+    expect(calls.findRecentByRoom).toEqual([{ roomId: "sim-1", limit: 10 }]);
   });
 
   describe("regression: a deep reply must not lose its own thread to ambient chatter", () => {
@@ -469,8 +469,8 @@ describe("ThreadService.getCurrentThread", () => {
 
       // Precondition: the ambient window on its own would have filled the budget
       // and contained none of the thread.
-      expect(calls.findRecentBySimulation).toEqual([{ simulationId: "sim-1", limit: 5 }]);
-      expect(await repository.findRecentBySimulation("sim-1", 5)).toHaveLength(5);
+      expect(calls.findRecentByRoom).toEqual([{ roomId: "sim-1", limit: 5 }]);
+      expect(await repository.findRecentByRoom("sim-1", 5)).toHaveLength(5);
 
       expect(ids).toContain("root");
       expect(ids).toContain("mid");

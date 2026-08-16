@@ -148,7 +148,7 @@ export class FeedService {
     const post = await this.posts.findById(id);
     if (!post) return null;
 
-    const simulation = await this.simulations.findById(post.simulationId);
+    const simulation = await this.simulations.findById(post.roomId);
     if (!simulation) return null;
     if (simulation.status === "archived" && !isSimulationOwnerOrAdmin(simulation, reader)) {
       return null;
@@ -170,8 +170,8 @@ export class FeedService {
       post.threadRootId === post.id ? post : await this.posts.findById(post.threadRootId);
     if (!root) throw new ThreadRootNotFoundError(post.threadRootId);
 
-    const simulation = await this.simulations.findById(root.simulationId);
-    if (!simulation) throw new SimulationNotFoundError(root.simulationId);
+    const simulation = await this.simulations.findById(root.roomId);
+    if (!simulation) throw new SimulationNotFoundError(root.roomId);
 
     const room: FeedRoom = {
       id: simulation.id,
@@ -197,7 +197,7 @@ export class FeedService {
 
     return {
       type: "thread.activity",
-      simulationId: root.simulationId,
+      simulationId: root.roomId,
       postId: post.id,
       room,
       thread,
@@ -233,7 +233,7 @@ export class FeedService {
     const root = await this.posts.findById(threadRootId);
     if (!root || root.replyTo !== null) throw new ThreadRootNotFoundError(threadRootId);
 
-    const simulation = await this.simulations.findById(root.simulationId);
+    const simulation = await this.simulations.findById(root.roomId);
     if (!simulation) throw new ThreadRootNotFoundError(threadRootId);
     // Same rule as the thread detail: an archived room stays readable in full for
     // its creator and an administrator, and is a 404 for everyone else (§10.8).

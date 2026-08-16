@@ -43,7 +43,7 @@ function at(minute: number): Date {
 function post(overrides: Partial<Post> & { id: string }): Post {
   const createdAt = overrides.createdAt ?? at(0);
   return {
-    simulationId: ROOM.id,
+    roomId: ROOM.id,
     authorId: "author-1",
     content: overrides.id,
     mentions: [],
@@ -76,15 +76,15 @@ function makeHarness(input: { posts: Post[]; rooms?: FeedRoom[] }) {
         const { mine, cursor } = query;
 
         let page = roots.filter(
-          (root) => !query.simulationId || root.simulationId === query.simulationId,
+          (root) => !query.simulationId || root.roomId === query.simulationId,
         );
         if (mine) page = page.filter((root) => concernsUser(root, mine, input.posts));
         page = [...page].sort(newestFirst);
         if (cursor) page = page.filter((root) => isAfterCursor(root, cursor));
 
         const rows: FeedThreadRow[] = page.slice(0, query.limit).map((root) => {
-          const room = rooms.get(root.simulationId);
-          if (!room) throw new Error(`room "${root.simulationId}" missing from fixture`);
+          const room = rooms.get(root.roomId);
+          if (!room) throw new Error(`room "${root.roomId}" missing from fixture`);
           return { root, room };
         });
         return Promise.resolve(rows);
@@ -158,7 +158,7 @@ function makeHarness(input: { posts: Post[]; rooms?: FeedRoom[] }) {
 function toDto(entry: Post): PostDto {
   return {
     id: entry.id,
-    roomId: entry.simulationId,
+    roomId: entry.roomId,
     author: { id: entry.authorId, handle: entry.authorId, displayName: entry.authorId },
     content: entry.content,
     mentions: entry.mentions,
@@ -176,6 +176,7 @@ function toSimulation(room: FeedRoom): Simulation {
     status: room.status,
     scope: room.scope,
     visibility: "public",
+    tags: [],
     createdAt: at(0),
     lastActivityAt: at(0),
     ...(room.createdByUserId ? { createdByUserId: room.createdByUserId } : {}),
@@ -347,7 +348,7 @@ describe("FeedService reply previews (§12.2)", () => {
 
 describe("FeedService rooms and capabilities (§10.1, §16.3)", () => {
   it("labels the reserved global row as the feed", async () => {
-    const globalPost = post({ id: "root-1", simulationId: GLOBAL_SIMULATION_ID });
+    const globalPost = post({ id: "root-1", roomId: GLOBAL_SIMULATION_ID });
     const { service } = makeHarness({ posts: [globalPost], rooms: [FEED_ROOM] });
 
     const page = await service.getUnifiedFeed({ reader: READER, filter: "all" });
@@ -359,7 +360,7 @@ describe("FeedService rooms and capabilities (§10.1, §16.3)", () => {
   });
 
   it("keeps stopped rooms in the unified feed but refuses to write to them", async () => {
-    const stopped = post({ id: "root-1", simulationId: STOPPED_ROOM.id });
+    const stopped = post({ id: "root-1", roomId: STOPPED_ROOM.id });
     const { service } = makeHarness({ posts: [stopped], rooms: [STOPPED_ROOM] });
 
     const page = await service.getUnifiedFeed({
@@ -394,7 +395,7 @@ describe("FeedService rooms and capabilities (§10.1, §16.3)", () => {
   });
 
   it("does not mistake a stranger for the room owner", async () => {
-    const stopped = post({ id: "root-1", simulationId: STOPPED_ROOM.id });
+    const stopped = post({ id: "root-1", roomId: STOPPED_ROOM.id });
     const { service } = makeHarness({ posts: [stopped], rooms: [STOPPED_ROOM] });
 
     const page = await service.getUnifiedFeed({ reader: READER, filter: "all" });
@@ -562,8 +563,8 @@ describe("FeedService mine filter (§12.3)", () => {
 
 describe("FeedService room feed (§10.2, §10.4)", () => {
   it("returns only that room's threads", async () => {
-    const here = post({ id: "root-1", simulationId: ROOM.id, createdAt: at(1) });
-    const elsewhere = post({ id: "root-2", simulationId: STOPPED_ROOM.id, createdAt: at(2) });
+    const here = post({ id: "root-1", roomId: ROOM.id, createdAt: at(1) });
+    const elsewhere = post({ id: "root-2", roomId: STOPPED_ROOM.id, createdAt: at(2) });
     const { service } = makeHarness({ posts: [here, elsewhere], rooms: [ROOM, STOPPED_ROOM] });
 
     const page = await service.getRoomFeed(ROOM.id, { reader: READER, filter: "all" });
@@ -574,7 +575,7 @@ describe("FeedService room feed (§10.2, §10.4)", () => {
   /** The global row is the feed; serving it here would give it a second surface. */
   it("refuses the reserved global simulation", async () => {
     const { service } = makeHarness({
-      posts: [post({ id: "root-1", simulationId: GLOBAL_SIMULATION_ID })],
+      posts: [post({ id: "root-1", roomId: GLOBAL_SIMULATION_ID })],
       rooms: [FEED_ROOM],
     });
 
@@ -585,7 +586,7 @@ describe("FeedService room feed (§10.2, §10.4)", () => {
 
   it("answers as if a stopped room did not exist for anyone else", async () => {
     const { service } = makeHarness({
-      posts: [post({ id: "root-1", simulationId: STOPPED_ROOM.id })],
+      posts: [post({ id: "root-1", roomId: STOPPED_ROOM.id })],
       rooms: [STOPPED_ROOM],
     });
 
@@ -596,7 +597,7 @@ describe("FeedService room feed (§10.2, §10.4)", () => {
 
   it("opens a stopped room for its creator and for an administrator", async () => {
     const { service } = makeHarness({
-      posts: [post({ id: "root-1", simulationId: STOPPED_ROOM.id })],
+      posts: [post({ id: "root-1", roomId: STOPPED_ROOM.id })],
       rooms: [STOPPED_ROOM],
     });
 
@@ -669,12 +670,12 @@ describe("FeedService thread replies (§12.2, §10.8)", () => {
   });
 
   it("hides a stopped room's replies from everyone but its creator or an administrator", async () => {
-    const stoppedRoot = post({ id: "root-9", simulationId: STOPPED_ROOM.id, createdAt: at(0) });
+    const stoppedRoot = post({ id: "root-9", roomId: STOPPED_ROOM.id, createdAt: at(0) });
     const stoppedReply = reply({
       id: "reply-9",
       replyTo: "root-9",
       threadRootId: "root-9",
-      simulationId: STOPPED_ROOM.id,
+      roomId: STOPPED_ROOM.id,
       createdAt: at(1),
     });
     const { service } = makeHarness({
@@ -756,7 +757,7 @@ describe("FeedService.buildThreadActivity (§11.3)", () => {
   });
 
   it("labels a post in the reserved global row as the feed", async () => {
-    const globalPost = post({ id: "root-2", simulationId: GLOBAL_SIMULATION_ID });
+    const globalPost = post({ id: "root-2", roomId: GLOBAL_SIMULATION_ID });
     const { service } = makeHarness({ posts: [globalPost], rooms: [FEED_ROOM] });
 
     const activity = await service.buildThreadActivity(globalPost);
@@ -780,7 +781,7 @@ describe("FeedService.buildThreadActivity (§11.3)", () => {
   });
 
   it("refuses to describe a thread whose room is gone", async () => {
-    const homeless = post({ id: "root-3", simulationId: "room-missing" });
+    const homeless = post({ id: "root-3", roomId: "room-missing" });
     const { service } = makeHarness({ posts: [homeless], rooms: [ROOM] });
 
     await expect(service.buildThreadActivity(homeless)).rejects.toThrow(

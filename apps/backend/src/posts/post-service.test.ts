@@ -10,7 +10,7 @@ const USER_HANDLE = "hanako";
 
 function makePost(overrides: Partial<Post> & { id: string }): Post {
   return {
-    simulationId: "sim-1",
+    roomId: "sim-1",
     authorId: AUTHOR_ID,
     content: "content",
     mentions: [],
@@ -49,7 +49,12 @@ function harness(existing: Post[] = []) {
       created.push(input);
       const parent = input.replyTo ? byId.get(input.replyTo) : undefined;
       return Promise.resolve({
-        ...input,
+        id: input.id,
+        roomId: input.roomId,
+        authorId: input.authorId,
+        content: input.content,
+        ...(input.imageUrl ? { imageUrl: input.imageUrl } : {}),
+        mentions: input.mentions,
         replyTo: input.replyTo ?? null,
         quoteOf: input.quoteOf ?? null,
         threadRootId: parent?.threadRootId ?? input.id,
@@ -101,7 +106,7 @@ describe("PostService.publish mentions", () => {
     const { service, created } = harness();
 
     await service.publish({
-      simulationId: "sim-1",
+      roomId: "sim-1",
       authorId: AUTHOR_ID,
       content: `@${USER_HANDLE} と @architect に共有`,
     });
@@ -120,7 +125,7 @@ describe("PostService.publish thread information (§8.3)", () => {
     const { service, created } = harness();
 
     const post = await service.publish({
-      simulationId: "sim-1",
+      roomId: "sim-1",
       authorId: AUTHOR_ID,
       content: "新しい話題",
     });
@@ -135,7 +140,7 @@ describe("PostService.publish thread information (§8.3)", () => {
     const { service, created } = harness([root]);
 
     const reply = await service.publish({
-      simulationId: "sim-1",
+      roomId: "sim-1",
       authorId: AUTHOR_ID,
       content: "返信",
       replyTo: root.id,
@@ -151,7 +156,7 @@ describe("PostService.publish thread information (§8.3)", () => {
     const { service, created } = harness([quoted]);
 
     const post = await service.publish({
-      simulationId: "sim-1",
+      roomId: "sim-1",
       authorId: AUTHOR_ID,
       content: "引用して意見",
       quoteOf: quoted.id,

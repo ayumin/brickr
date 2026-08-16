@@ -69,6 +69,9 @@ const expectedPaths = [
   "/api/rooms/{id}/members/{mid}/unban",
   "/api/rooms/{id}/members/{mid}/approve",
   "/api/rooms/{id}/members/{mid}/reject",
+  "/api/llm-budget",
+  "/api/llm-budget/{provider}",
+  "/api/llm-budget/{provider}/reset",
 ];
 
 const sessionProtectedOperationIds = [
@@ -130,6 +133,9 @@ const sessionProtectedOperationIds = [
   "unbanRoomMember",
   "approveRoomMembership",
   "rejectRoomMembership",
+  "getLLMBudget",
+  "setLLMBudgetLimit",
+  "resetLLMBudget",
 ];
 
 describe("OpenAPI documentation", () => {

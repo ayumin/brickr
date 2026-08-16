@@ -117,7 +117,7 @@ describe("repairThreads after a hard delete (§8.5)", () => {
     await repairThreads(tx, {
       newRootIds: ["orphan"],
       detachedRootIds: [],
-      simulationIds: ["sim-1"],
+      roomIds: ["sim-1"],
     });
 
     expect(posts.map((entry) => entry.threadRootId)).toEqual(["orphan", "orphan", "orphan"]);
@@ -132,7 +132,7 @@ describe("repairThreads after a hard delete (§8.5)", () => {
     await repairThreads(tx, {
       newRootIds: ["orphan"],
       detachedRootIds: [],
-      simulationIds: ["sim-1"],
+      roomIds: ["sim-1"],
     });
 
     expect(posts[0]?.threadActivityAt).toEqual(at(6));
@@ -153,7 +153,7 @@ describe("repairThreads after a hard delete (§8.5)", () => {
     await repairThreads(tx, {
       newRootIds: ["orphan-a", "orphan-b"],
       detachedRootIds: [],
-      simulationIds: ["sim-1"],
+      roomIds: ["sim-1"],
     });
 
     expect(posts.map((entry) => `${entry.id}->${entry.threadRootId}`)).toEqual([
@@ -170,7 +170,7 @@ describe("repairThreads after a hard delete (§8.5)", () => {
     await repairThreads(tx, {
       newRootIds: [],
       detachedRootIds: [],
-      simulationIds: ["sim-1"],
+      roomIds: ["sim-1"],
     });
 
     expect(spies.room.update).toHaveBeenCalledWith({
@@ -195,7 +195,7 @@ describe("repairThreads after a hard delete (§8.5)", () => {
     await repairThreads(tx, {
       newRootIds: ["orphan"],
       detachedRootIds: ["root"],
-      simulationIds: ["sim-1"],
+      roomIds: ["sim-1"],
     });
 
     expect(posts[0]?.threadActivityAt).toEqual(at(2));
@@ -223,7 +223,7 @@ describe("repairThreads after a hard delete (§8.5)", () => {
     await repairThreads(tx, {
       newRootIds: ["orphan"],
       detachedRootIds: ["root"],
-      simulationIds: ["sim-1"],
+      roomIds: ["sim-1"],
     });
 
     expect(posts[0]?.threadActivityAt).toEqual(at(4));
@@ -238,7 +238,7 @@ describe("repairThreads after a hard delete (§8.5)", () => {
     await repairThreads(tx, {
       newRootIds: ["orphan"],
       detachedRootIds: ["deleted-root"],
-      simulationIds: ["sim-1"],
+      roomIds: ["sim-1"],
     });
 
     // Nothing survives under it to aggregate, so it is never updated into a

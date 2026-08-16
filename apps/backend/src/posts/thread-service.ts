@@ -111,11 +111,11 @@ export class ThreadService {
     ]);
     for (const post of [...replies, ...quotes]) thread.set(post.id, post);
 
-    // Ambient context: what else has been said in this simulation lately.
+    // Ambient context: what else has been said in this room lately.
     const contextLimit =
       typeof this.contextLimit === "function" ? this.contextLimit() : this.contextLimit;
-    const recent = await this.posts.findRecentBySimulation(
-      target.simulationId,
+    const recent = await this.posts.findRecentByRoom(
+      target.roomId,
       contextLimit,
     );
 

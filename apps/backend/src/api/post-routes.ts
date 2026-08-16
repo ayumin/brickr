@@ -25,7 +25,7 @@ export function registerPostRoutes(app: FastifyInstance, services: AppServices):
 
     return withSimulation(request, reply, async (id) => {
       await services.simulations.requireReadableSimulation(id, user);
-      return { posts: await services.posts.listBySimulation(id) };
+      return { posts: await services.posts.listByRoom(id) };
     });
   });
 
@@ -41,7 +41,7 @@ export function registerPostRoutes(app: FastifyInstance, services: AppServices):
 
     return withDomainErrors(reply, async () => {
       const post = await services.simulations.submitUserPost({
-        simulationId: params.id,
+        roomId: params.id,
         authorId: user.id,
         content: body.content,
         imageUrl: body.imageUrl,

@@ -10,6 +10,8 @@ import type { CharacterRepository } from "../characters/character-repository.js"
 import type { Character } from "../characters/character.js";
 import { DomainError } from "../domain-error.js";
 import type { TokenUsageService } from "../llm/token-usage-service.js";
+import type { LLMBudgetService } from "../llm/llm-budget-service.js";
+import type { ProviderId } from "../llm/provider.js";
 import { optionalField } from "../persistence/repository-mapping.js";
 import type { Post } from "../posts/post.js";
 import type { PostService } from "../posts/post-service.js";
@@ -33,7 +35,7 @@ import {
 const MAX_POSTS_PER_SUBMISSION = 24;
 
 export type SubmitUserPostInput = {
-  simulationId: string;
+  roomId: string;
   /** Account id of the signed-in author. Required: posting needs a session (#34). */
   authorId: string;
   content: string;
@@ -78,6 +80,8 @@ export type SimulationServiceDeps = {
   logger: SimulationLogger;
   tokenUsage: TokenUsageService;
   threadActivity: ThreadActivitySource;
+  /** Optional: when present, token usage is recorded against the provider budget (issue #162). */
+  llmBudget?: LLMBudgetService;
 };
 
 export class SimulationNotFoundError extends DomainError {
@@ -307,16 +311,16 @@ export class SimulationService {
    * generation in the background. The caller does not wait for the characters.
    */
   async submitUserPost(input: SubmitUserPostInput): Promise<Post> {
-    const simulation = await this.requireSimulation(input.simulationId);
+    const simulation = await this.requireSimulation(input.roomId);
     if (simulation.status === "archived") {
-      throw new SimulationStoppedError(input.simulationId);
+      throw new SimulationStoppedError(input.roomId);
     }
 
-    await this.assertPostBelongsToSimulation(input.replyTo, input.simulationId);
-    await this.assertPostBelongsToSimulation(input.quoteOf, input.simulationId);
+    await this.assertPostBelongsToRoom(input.replyTo, input.roomId);
+    await this.assertPostBelongsToRoom(input.quoteOf, input.roomId);
 
     const post = await this.deps.posts.publish({
-      simulationId: input.simulationId,
+      roomId: input.roomId,
       authorId: input.authorId,
       content: input.content,
       ...(input.imageUrl ? { imageUrl: input.imageUrl } : {}),
@@ -366,23 +370,23 @@ export class SimulationService {
         billingUserId: triggerPost.authorId,
       });
 
-      this.deps.events.publish(triggerPost.simulationId, {
+      this.deps.events.publish(triggerPost.roomId, {
         type: "generation.completed",
-        simulationId: triggerPost.simulationId,
+        simulationId: triggerPost.roomId,
         triggerPostId: triggerPost.id,
         generatedPostIds: generatedIds,
       });
     } catch (error) {
       this.deps.logger.error(
-        { simulationId: triggerPost.simulationId, err: describe(error) },
+        { simulationId: triggerPost.roomId, err: describe(error) },
         "simulation run failed",
       );
       // Internal only: the reason names the provider or model that failed, which
       // would say out loud that the author is an AI (§11.2). Subscribers learn
       // about failures through `response.finished` outcomes instead.
-      this.deps.events.publish(triggerPost.simulationId, {
+      this.deps.events.publish(triggerPost.roomId, {
         type: "generation.failed",
-        simulationId: triggerPost.simulationId,
+        simulationId: triggerPost.roomId,
         reason: describe(error),
       });
     }
@@ -466,7 +470,7 @@ export class SimulationService {
     allCharacters: Character[],
     billingUserId: string,
   ): Promise<Post | null> {
-    const simulationId = target.simulationId;
+    const simulationId = target.roomId;
     if (this.stopped.has(simulationId)) return null;
 
     // The activity, not the character: subscribers learn that *a* response is
@@ -507,7 +511,7 @@ export class SimulationService {
     allCharacters: Character[],
     billingUserId: string,
   ): Promise<Post | null> {
-    const simulationId = target.simulationId;
+    const simulationId = target.roomId;
 
     const context = await this.loadGenerationContext(target, allCharacters);
     if (!context) return null;
@@ -533,13 +537,14 @@ export class SimulationService {
       await this.recordUsage(billingUserId, generated.usage, {
         simulationId,
         characterId: character.id,
+        providerId: generated.providerId,
       });
     }
 
     const { replyTo, quoteOf } = resolveActionTargets(action, thread.target);
 
     const post = await this.deps.posts.publish({
-      simulationId,
+      roomId: simulationId,
       authorId: character.id,
       content: generated.content,
       replyTo,
@@ -591,7 +596,7 @@ export class SimulationService {
   private async recordUsage(
     billingUserId: string,
     usage: NonNullable<GeneratedPost["usage"]>,
-    context: { simulationId: string; characterId: string },
+    context: { simulationId: string; characterId: string; providerId: ProviderId },
   ): Promise<void> {
     try {
       await this.deps.tokenUsage.record(billingUserId, usage);
@@ -600,6 +605,24 @@ export class SimulationService {
         { ...context, billingUserId, err: describe(error) },
         "failed to record token usage",
       );
+    }
+
+    // Record against the provider budget (issue #162). Failures are logged but
+    // never surfaced — a tracking hiccup must not turn a successful generation
+    // into a failed outcome.
+    if (this.deps.llmBudget) {
+      try {
+        await this.deps.llmBudget.recordUsage(
+          context.providerId,
+          usage.totalTokens,
+          context.simulationId,
+        );
+      } catch (error) {
+        this.deps.logger.warn(
+          { ...context, err: describe(error) },
+          "failed to record LLM budget usage",
+        );
+      }
     }
   }
 
@@ -612,17 +635,17 @@ export class SimulationService {
   private beginResponse(target: Post): { finish: (outcome: ResponseOutcome) => void } {
     const activityId = randomUUID();
     const shared = {
-      simulationId: target.simulationId,
+      simulationId: target.roomId,
       activityId,
       targetPostId: target.id,
       threadRootId: target.threadRootId,
     };
 
-    this.deps.events.publish(target.simulationId, { type: "response.started", ...shared });
+    this.deps.events.publish(target.roomId, { type: "response.started", ...shared });
 
     return {
       finish: (outcome) => {
-        this.deps.events.publish(target.simulationId, {
+        this.deps.events.publish(target.roomId, {
           type: "response.finished",
           ...shared,
           outcome,
@@ -645,10 +668,10 @@ export class SimulationService {
     // This does not reopen the race that subscribing before hydrating closes: a
     // stream that opens after this check hydrates over REST afterwards, and the
     // post is committed by then, so it cannot be missed.
-    if (!this.deps.events.hasSubscribers(post.simulationId)) return;
+    if (!this.deps.events.hasSubscribers(post.roomId)) return;
 
     this.deps.events.publish(
-      post.simulationId,
+      post.roomId,
       await this.deps.threadActivity.buildThreadActivity(post),
     );
   }
@@ -661,13 +684,13 @@ export class SimulationService {
     return simulation;
   }
 
-  private async assertPostBelongsToSimulation(
+  private async assertPostBelongsToRoom(
     postId: string | null | undefined,
-    simulationId: string,
+    roomId: string,
   ): Promise<void> {
     if (!postId) return;
     const post = await this.deps.posts.findById(postId);
-    if (!post || post.simulationId !== simulationId) {
+    if (!post || post.roomId !== roomId) {
       throw new PostNotFoundError(postId);
     }
   }
