@@ -30,7 +30,7 @@ describe("ProfileRepository.findPostsByAuthor", () => {
     expect(findMany).toHaveBeenCalledWith({
       where: {
         authorId: "author-1",
-        simulation: { OR: [{ status: "active" }, { createdByUserId: VIEWER.id }] },
+        room: { OR: [{ status: "active" }, { createdByUserId: VIEWER.id }] },
       },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: 21,
@@ -84,7 +84,7 @@ describe("ProfileRepository.countPostsByAuthor", () => {
     expect(count).toHaveBeenCalledWith({
       where: {
         authorId: "author-1",
-        simulation: { OR: [{ status: "active" }, { createdByUserId: VIEWER.id }] },
+        room: { OR: [{ status: "active" }, { createdByUserId: VIEWER.id }] },
       },
     });
   });

@@ -7,7 +7,7 @@ const USER = { id: "user-1", isAdmin: false };
 
 function makeDb(rows: unknown[]) {
   const findMany = vi.fn(() => Promise.resolve(rows));
-  return { db: { simulation: { findMany } } as unknown as Db, findMany };
+  return { db: { room: { findMany } } as unknown as Db, findMany };
 }
 
 describe("SimulationRepository.findAllVisibleTo", () => {

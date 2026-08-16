@@ -26,7 +26,7 @@ export function withReaderCapabilities(
     capabilities: toFeedCapabilities({
       isSignedIn: reader !== null,
       isFeedRoom: isGlobalSimulation(room),
-      isStoppedRoom: room.status === "stopped",
+      isStoppedRoom: room.status === "archived",
       isRoomOwnerOrAdmin: reader !== null && isSimulationOwnerOrAdmin(room, reader),
       replyCount: thread.replyCount,
       previewedReplyCount: thread.latestReplies.length,

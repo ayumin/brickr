@@ -151,7 +151,7 @@ export class FeedService {
 
     const simulation = await this.simulations.findById(post.simulationId);
     if (!simulation) return null;
-    if (simulation.status === "stopped" && !isSimulationOwnerOrAdmin(simulation, reader)) {
+    if (simulation.status === "archived" && !isSimulationOwnerOrAdmin(simulation, reader)) {
       return null;
     }
 
@@ -230,9 +230,9 @@ export class FeedService {
 
     const simulation = await this.simulations.findById(root.simulationId);
     if (!simulation) throw new ThreadRootNotFoundError(threadRootId);
-    // Same rule as the thread detail: a stopped room stays readable in full for
+    // Same rule as the thread detail: an archived room stays readable in full for
     // its creator and an administrator, and is a 404 for everyone else (§10.8).
-    if (simulation.status === "stopped" && !isSimulationOwnerOrAdmin(simulation, reader)) {
+    if (simulation.status === "archived" && !isSimulationOwnerOrAdmin(simulation, reader)) {
       throw new ThreadRootNotFoundError(threadRootId);
     }
 
@@ -325,7 +325,7 @@ export class FeedService {
       capabilities: toFeedCapabilities({
         isSignedIn: reader !== null,
         isFeedRoom: isGlobalSimulation(row.room),
-        isStoppedRoom: row.room.status === "stopped",
+        isStoppedRoom: row.room.status === "archived",
         isRoomOwnerOrAdmin: reader !== null && isSimulationOwnerOrAdmin(row.room, reader),
         replyCount: input.replyCount,
         previewedReplyCount: latestReplies.length,

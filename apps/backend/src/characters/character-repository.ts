@@ -234,7 +234,7 @@ export class CharacterRepository {
         // only record of which thread it was pushing forward.
         const doomed = await tx.post.findMany({
           where: { authorId: { in: ids } },
-          select: { id: true, simulationId: true, threadRootId: true },
+          select: { id: true, roomId: true, threadRootId: true },
         });
         const doomedIds = new Set(doomed.map((post) => post.id));
 
@@ -263,7 +263,7 @@ export class CharacterRepository {
           detachedRootIds: [...new Set(doomed.map((post) => post.threadRootId))].filter(
             (rootId) => !doomedIds.has(rootId),
           ),
-          simulationIds: [...new Set(doomed.map((post) => post.simulationId))],
+          simulationIds: [...new Set(doomed.map((post) => post.roomId))],
         });
       },
       { timeout: BULK_TRANSACTION_TIMEOUT_MS },

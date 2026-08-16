@@ -10,7 +10,7 @@ import type { NewPost, Post } from "./post.js";
  */
 export type PostRow = {
   id: string;
-  simulationId: string;
+  roomId: string;
   authorId: string;
   content: string;
   imageUrl: string | null;
@@ -25,7 +25,7 @@ export type PostRow = {
 export function toPost(row: PostRow): Post {
   return {
     id: row.id,
-    simulationId: row.simulationId,
+    simulationId: row.roomId,
     authorId: row.authorId,
     content: row.content,
     ...optionalField("imageUrl", row.imageUrl),
@@ -83,7 +83,7 @@ export class PostRepository {
       const row = await tx.post.create({
         data: {
           id: input.id,
-          simulationId: input.simulationId,
+          roomId: input.simulationId,
           authorId: input.authorId,
           content: input.content,
           imageUrl: input.imageUrl ?? null,
@@ -107,8 +107,8 @@ export class PostRepository {
         });
       }
 
-      await tx.simulation.update({
-        where: { id: row.simulationId },
+      await tx.room.update({
+        where: { id: row.roomId },
         data: { lastActivityAt: createdAt },
       });
 
@@ -127,14 +127,14 @@ export class PostRepository {
     return rows.map(toPost);
   }
 
-  /** All posts in a simulation, oldest first. */
+  /** All posts in a simulation (room), oldest first. */
   async findBySimulation(simulationId: string): Promise<Post[]> {
-    return this.queryPosts({ simulationId }, "asc");
+    return this.queryPosts({ roomId: simulationId }, "asc");
   }
 
-  /** Most recent posts in a simulation, returned oldest first. */
+  /** Most recent posts in a simulation (room), returned oldest first. */
   async findRecentBySimulation(simulationId: string, limit: number): Promise<Post[]> {
-    return this.queryPosts({ simulationId }, "desc", limit);
+    return this.queryPosts({ roomId: simulationId }, "desc", limit);
   }
 
   /** Direct replies to a post, oldest first. */
@@ -148,7 +148,7 @@ export class PostRepository {
   }
 
   async countBySimulation(simulationId: string): Promise<number> {
-    return this.db.post.count({ where: { simulationId } });
+    return this.db.post.count({ where: { roomId: simulationId } });
   }
 
   /**

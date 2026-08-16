@@ -18,7 +18,7 @@ import { env } from "../src/config/env.js";
 async function main(): Promise<void> {
   // The room behind the unified feed. `update` deliberately restores the title
   // and scope, so a stray rename cannot leave the feed looking like a room.
-  await prisma.simulation.upsert({
+  await prisma.room.upsert({
     where: { id: GLOBAL_SIMULATION_ID },
     create: {
       id: GLOBAL_SIMULATION_ID,
@@ -34,7 +34,7 @@ async function main(): Promise<void> {
       createdByUserId: null,
     },
   });
-  console.log("seeded the global simulation");
+  console.log("seeded the global room");
 
   for (const profile of MODEL_PROFILE_SEEDS) {
     await prisma.modelProfile.upsert({

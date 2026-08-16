@@ -13,6 +13,7 @@ export type ThreadRepairInput = {
    * root can outlive a reply below it, and then part of its thread leaves.
    */
   detachedRootIds: string[];
+  /** Room ids whose `lastActivityAt` must be recalculated after the delete. */
   simulationIds: string[];
 };
 
@@ -118,26 +119,26 @@ async function recalculateSimulationActivity(
   simulationId: string,
 ): Promise<void> {
   const newest = await tx.post.aggregate({
-    where: { simulationId, replyTo: null },
+    where: { roomId: simulationId, replyTo: null },
     _max: { threadActivityAt: true },
   });
 
   if (newest._max.threadActivityAt) {
-    await tx.simulation.update({
+    await tx.room.update({
       where: { id: simulationId },
       data: { lastActivityAt: newest._max.threadActivityAt },
     });
     return;
   }
 
-  const simulation = await tx.simulation.findUnique({
+  const room = await tx.room.findUnique({
     where: { id: simulationId },
     select: { createdAt: true },
   });
-  if (!simulation) return;
+  if (!room) return;
 
-  await tx.simulation.update({
+  await tx.room.update({
     where: { id: simulationId },
-    data: { lastActivityAt: simulation.createdAt },
+    data: { lastActivityAt: room.createdAt },
   });
 }

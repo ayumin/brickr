@@ -32,7 +32,7 @@ const FEED_ROOM: FeedRoom = {
   scope: "global",
 };
 
-const STOPPED_ROOM: FeedRoom = { ...ROOM, id: "room-2", title: "止まった部屋", status: "stopped" };
+const STOPPED_ROOM: FeedRoom = { ...ROOM, id: "room-2", title: "止まった部屋", status: "archived" };
 
 const READER = { id: "reader-1", isAdmin: false, handle: "hanako" };
 

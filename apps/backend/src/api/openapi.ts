@@ -1583,7 +1583,7 @@ export const openApiDocument: OpenAPIV3.Document = {
         properties: {
           id: { type: "string" },
           title: { type: "string", nullable: true },
-          status: { type: "string", enum: ["active", "stopped"] },
+          status: { type: "string", enum: ["active", "archived"] },
           createdAt: { type: "string", format: "date-time" },
           createdByUserId: {
             type: "string",

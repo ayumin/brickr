@@ -81,10 +81,10 @@ export class FeedRepository {
       where: {
         // A thread is identified by its root, so the feed reads roots only.
         replyTo: null,
-        ...(query.simulationId ? { simulationId: query.simulationId } : {}),
+        ...(query.simulationId ? { roomId: query.simulationId } : {}),
         ...(conditions.length > 0 ? { AND: conditions } : {}),
       },
-      include: { simulation: { select: ROOM_SELECT } },
+      include: { room: { select: ROOM_SELECT } },
       orderBy: [{ threadActivityAt: "desc" }, { id: "desc" }],
       take: query.limit,
     });
@@ -92,11 +92,11 @@ export class FeedRepository {
     return rows.map((row) => ({
       root: toPost(row),
       room: {
-        id: row.simulation.id,
-        title: row.simulation.title,
-        status: toSimulationStatus(row.simulation.status),
-        scope: toSimulationScope(row.simulation.scope),
-        ...optionalField("createdByUserId", row.simulation.createdByUserId),
+        id: row.room.id,
+        title: row.room.title,
+        status: toSimulationStatus(row.room.status),
+        scope: toSimulationScope(row.room.scope),
+        ...optionalField("createdByUserId", row.room.createdByUserId),
       },
     }));
   }
@@ -129,7 +129,7 @@ export class FeedRepository {
 
     const rows = await this.db.$queryRaw<PostRow[]>(Prisma.sql`
       SELECT ranked.id,
-             ranked.simulation_id AS "simulationId",
+             ranked.room_id AS "roomId",
              ranked.author_id AS "authorId",
              ranked.content,
              ranked.image_url AS "imageUrl",
@@ -175,7 +175,7 @@ export class FeedRepository {
 
     const rows = await this.db.$queryRaw<PostRow[]>(Prisma.sql`
       SELECT ranked.id,
-             ranked.simulation_id AS "simulationId",
+             ranked.room_id AS "roomId",
              ranked.author_id AS "authorId",
              ranked.content,
              ranked.image_url AS "imageUrl",
@@ -241,7 +241,7 @@ export class FeedRepository {
     mine: FeedMineScope,
     simulationId?: string,
   ): Promise<Prisma.PostWhereInput> {
-    const room = simulationId === undefined ? {} : { simulationId };
+    const room = simulationId === undefined ? {} : { roomId: simulationId };
 
     const [answered, mentioned, quoted] = await Promise.all([
       // A reply whose parent I wrote. Having merely posted in the thread does

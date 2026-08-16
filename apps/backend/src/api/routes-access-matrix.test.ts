@@ -77,7 +77,7 @@ function room(id: string, overrides: Partial<Simulation> = {}): Simulation {
 }
 
 const ACTIVE_ROOM = room("room-active");
-const STOPPED_ROOM = room("room-stopped", { status: "stopped" });
+const STOPPED_ROOM = room("room-stopped", { status: "archived" });
 const OTHER_ROOM = room("room-other", { createdByUserId: OTHER_ROOM_OWNER.id });
 
 /** The reserved global row: the feed itself, and the one simulation with no owner. */

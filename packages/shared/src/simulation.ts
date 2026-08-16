@@ -1,6 +1,6 @@
 import type { PostDto } from "./post.js";
 
-export const SIMULATION_STATUSES = ["active", "stopped"] as const;
+export const SIMULATION_STATUSES = ["active", "archived"] as const;
 
 export type SimulationStatus = (typeof SIMULATION_STATUSES)[number];
 

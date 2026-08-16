@@ -17,7 +17,7 @@ function makeDb(parents: Record<string, string> = {}) {
       ),
       update: vi.fn(() => Promise.resolve({})),
     },
-    simulation: { update: vi.fn(() => Promise.resolve({})) },
+    room: { update: vi.fn(() => Promise.resolve({})) },
   };
 
   const db = {
@@ -50,7 +50,7 @@ describe("PostRepository.createWithThreadActivity (§8.4)", () => {
     );
 
     expect(db.$transaction).toHaveBeenCalledTimes(1);
-    expect(tx.simulation.update).toHaveBeenCalledWith({
+    expect(tx.room.update).toHaveBeenCalledWith({
       where: { id: "sim-1" },
       data: { lastActivityAt: post.createdAt },
     });
@@ -93,7 +93,7 @@ describe("PostRepository.createWithThreadActivity (§8.4)", () => {
     );
 
     expect(tx.post.update).not.toHaveBeenCalled();
-    expect(tx.simulation.update).toHaveBeenCalledTimes(1);
+    expect(tx.room.update).toHaveBeenCalledTimes(1);
   });
 });
 

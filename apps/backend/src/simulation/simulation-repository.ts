@@ -41,6 +41,12 @@ type SimulationSummaryRow = SimulationRow & {
   createdByUser: { id: string; handle: string | null; displayName: string } | null;
 };
 
+// ---------------------------------------------------------------------------
+// Internal note: the Prisma model is now `Room` (@@map("rooms")), but the
+// domain layer still uses the name "Simulation" for the concept. All
+// `this.db.simulation.*` calls below are replaced with `this.db.room.*`.
+// ---------------------------------------------------------------------------
+
 function toSimulationSummary(row: SimulationSummaryRow): SimulationSummary {
   return {
     ...toSimulation(row),
@@ -66,7 +72,7 @@ export class SimulationRepository {
    */
   async create(title: string | null, createdByUserId: string): Promise<Simulation> {
     const createdAt = new Date();
-    const row = await this.db.simulation.create({
+    const row = await this.db.room.create({
       data: {
         title,
         status: "active",
@@ -95,7 +101,7 @@ export class SimulationRepository {
    *   (§8.1), which makes it sort by creation time without a special case.
    */
   async findAllVisibleTo(actor: SimulationActor): Promise<SimulationSummary[]> {
-    const rows = await this.db.simulation.findMany({
+    const rows = await this.db.room.findMany({
       where: {
         scope: "room",
         ...(actor.isAdmin
@@ -112,7 +118,7 @@ export class SimulationRepository {
   }
 
   async findById(id: string): Promise<Simulation | null> {
-    const row = await this.db.simulation.findUnique({ where: { id } });
+    const row = await this.db.room.findUnique({ where: { id } });
     return row ? toSimulation(row) : null;
   }
 
@@ -122,7 +128,7 @@ export class SimulationRepository {
    * computes for the list.
    */
   async findSummaryById(id: string): Promise<SimulationSummary | null> {
-    const row = await this.db.simulation.findUnique({
+    const row = await this.db.room.findUnique({
       where: { id },
       include: {
         _count: { select: { posts: true } },
@@ -133,12 +139,12 @@ export class SimulationRepository {
   }
 
   async updateTitle(id: string, title: string): Promise<Simulation> {
-    const row = await this.db.simulation.update({ where: { id }, data: { title } });
+    const row = await this.db.room.update({ where: { id }, data: { title } });
     return toSimulation(row);
   }
 
   async updateStatus(id: string, status: SimulationStatus): Promise<Simulation> {
-    const row = await this.db.simulation.update({
+    const row = await this.db.room.update({
       where: { id },
       data: { status },
     });

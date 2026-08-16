@@ -157,7 +157,7 @@ export function assertRoomReadable(
   actor: SimulationActor,
 ): void {
   if (isGlobalSimulation(simulation)) throw new SimulationNotFoundError(simulation.id);
-  if (simulation.status === "stopped" && !isSimulationOwnerOrAdmin(simulation, actor)) {
+  if (simulation.status === "archived" && !isSimulationOwnerOrAdmin(simulation, actor)) {
     throw new SimulationNotFoundError(simulation.id);
   }
 }
@@ -232,7 +232,7 @@ export class SimulationService {
    */
   async requireReadableSimulation(id: string, actor: SimulationActor): Promise<Simulation> {
     const simulation = await this.requireSimulation(id);
-    if (simulation.status === "stopped" && !isSimulationOwnerOrAdmin(simulation, actor)) {
+    if (simulation.status === "archived" && !isSimulationOwnerOrAdmin(simulation, actor)) {
       throw new SimulationNotFoundError(simulation.id);
     }
     return simulation;
@@ -258,7 +258,7 @@ export class SimulationService {
     assertNotGlobalSimulation(simulation);
     assertSimulationOwnerOrAdmin(simulation, actor);
     this.stopped.add(id);
-    const stoppedSimulation = await this.deps.simulations.updateStatus(id, "stopped");
+    const stoppedSimulation = await this.deps.simulations.updateStatus(id, "archived");
     return toSimulationDto(stoppedSimulation);
   }
 
@@ -277,7 +277,7 @@ export class SimulationService {
    */
   async submitUserPost(input: SubmitUserPostInput): Promise<Post> {
     const simulation = await this.requireSimulation(input.simulationId);
-    if (simulation.status === "stopped") {
+    if (simulation.status === "archived") {
       throw new SimulationStoppedError(input.simulationId);
     }
 
