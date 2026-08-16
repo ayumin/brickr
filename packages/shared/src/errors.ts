@@ -19,9 +19,11 @@ export const API_ERROR_CODES = [
   "membership_required",
   "not_found",
   "room_archived",
+  "room_not_archived",
   "room_not_found",
   "unauthenticated",
   "underage",
+  "visibility_immutable",
 ] as const;
 
 export type ApiErrorCode = (typeof API_ERROR_CODES)[number];

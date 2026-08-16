@@ -1,11 +1,12 @@
 import { USER_MANAGEMENT_PAGE_SIZE } from "@brickr/shared";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { UserNotFoundError } from "./auth-errors.js";
 import { verifyPassword } from "./password.js";
 import type { SessionRepository } from "./session-repository.js";
 import type { UserAccountRepository } from "./user-account-repository.js";
 import type { UserAccountWithSecret } from "./user-account.js";
 import { UserAdminService } from "./user-admin-service.js";
+import type { RoomService } from "../simulation/room-service.js";
 
 const hanako: UserAccountWithSecret = {
   id: "user-1",
@@ -31,7 +32,13 @@ const taro: UserAccountWithSecret = {
   interests: [],
 };
 
-function makeService(seed: UserAccountWithSecret[]) {
+function makeService(
+  seed: UserAccountWithSecret[],
+  options: {
+    rooms?: Pick<RoomService, "archiveOwnedBy">;
+    logger?: { error: (obj: Record<string, unknown>, msg: string) => void };
+  } = {},
+) {
   const accounts = new Map(seed.map((account) => [account.id, account]));
   const sessionsDeletedFor: string[] = [];
   const passwordHashes = new Map<string, string>();
@@ -76,7 +83,7 @@ function makeService(seed: UserAccountWithSecret[]) {
   } as unknown as SessionRepository;
 
   return {
-    service: new UserAdminService(users, sessions),
+    service: new UserAdminService(users, sessions, options.rooms, options.logger),
     accounts,
     sessionsDeletedFor,
     passwordHashes,
@@ -107,6 +114,21 @@ describe("UserAdminService.suspend", () => {
 
     await expect(service.suspend("nobody")).rejects.toThrow(UserNotFoundError);
     expect(sessionsDeletedFor).toEqual([]);
+  });
+
+  it("reports success and logs when best-effort room archival fails", async () => {
+    const archiveError = new Error("database unavailable");
+    const rooms = { archiveOwnedBy: vi.fn(() => Promise.reject(archiveError)) };
+    const logger = { error: vi.fn() };
+    const { service, accounts, sessionsDeletedFor } = makeService([hanako], { rooms, logger });
+
+    await expect(service.suspend("user-1")).resolves.toMatchObject({ status: "suspended" });
+    expect(accounts.get("user-1")?.status).toBe("suspended");
+    expect(sessionsDeletedFor).toEqual(["user-1"]);
+    expect(logger.error).toHaveBeenCalledWith(
+      { userId: "user-1", err: "database unavailable" },
+      "failed to archive rooms after user suspension",
+    );
   });
 });
 

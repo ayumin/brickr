@@ -1,5 +1,5 @@
 import type { RoomVisibility, SimulationScope, SimulationStatus } from "@brickr/shared";
-import type { Db } from "../persistence/prisma.js";
+import type { Db, DbTransaction } from "../persistence/prisma.js";
 import { optionalField } from "../persistence/repository-mapping.js";
 import { toFallbackHandle } from "../user-profile/user-profile-repository.js";
 import type { Simulation, SimulationActor, SimulationSummary } from "./simulation.js";
@@ -91,6 +91,73 @@ export class SimulationRepository {
       },
     });
     return toSimulation(row);
+  }
+
+  /**
+   * Creates a room and immediately grants the creator an active `owner` membership
+   * in a single transaction (issue #151).
+   *
+   * Visibility is set at creation time and cannot be changed afterwards — the
+   * service layer enforces this, but the repository records the chosen value here
+   * so the column is populated from the start.
+   */
+  async createWithOwner(
+    title: string | null,
+    visibility: RoomVisibility,
+    createdByUserId: string,
+  ): Promise<Simulation> {
+    const createdAt = new Date();
+
+    const simulation = await this.db.$transaction(async (tx: DbTransaction) => {
+      const row = await tx.room.create({
+        data: {
+          title,
+          status: "active",
+          scope: "room",
+          visibility,
+          createdByUserId,
+          createdAt,
+          lastActivityAt: createdAt,
+        },
+      });
+
+      // Auto-create the owner's active membership in the same transaction so
+      // the room never exists without an owner (§151).
+      await tx.roomMembership.create({
+        data: {
+          roomId: row.id,
+          memberKind: "user",
+          memberId: createdByUserId,
+          role: "owner",
+          status: "active",
+        },
+      });
+
+      return row;
+    });
+
+    return toSimulation(simulation);
+  }
+
+  /**
+   * Hard-deletes a room and all its posts (via cascade). Only callable on
+   * archived rooms; the service layer enforces the status check and ownership
+   * before calling this (issue #151).
+   */
+  async delete(id: string): Promise<void> {
+    await this.db.room.delete({ where: { id } });
+  }
+
+  /** Archives active room-scoped rows selected from owner memberships (#151). */
+  async archiveByIds(roomIds: string[]): Promise<void> {
+    await this.db.room.updateMany({
+      where: {
+        id: { in: roomIds },
+        status: "active",
+        scope: "room",
+      },
+      data: { status: "archived" },
+    });
   }
 
   /**

@@ -27,6 +27,8 @@ import { ProfileRepository } from "./profiles/profile-repository.js";
 import { ProfileService } from "./profiles/profile-service.js";
 import { ThreadService } from "./posts/thread-service.js";
 import { EventHub } from "./simulation/event-hub.js";
+import { RoomMembershipRepository } from "./simulation/room-membership-repository.js";
+import { RoomService } from "./simulation/room-service.js";
 import { SimulationRepository } from "./simulation/simulation-repository.js";
 import { SimulationAnalysisService } from "./simulation/simulation-analysis-service.js";
 import type { SimulationLogger } from "./simulation/simulation-service.js";
@@ -49,6 +51,7 @@ export type AppServices = {
   feed: FeedService;
   simulations: SimulationService;
   simulationAnalysis: SimulationAnalysisService;
+  rooms: RoomService;
   events: EventHub;
   providerRegistry: LLMProviderRegistry;
   applicationSettings: ApplicationSettingsService;
@@ -63,6 +66,7 @@ export async function buildServices(db: Db, logger: SimulationLogger): Promise<A
   const characterRepository = new CharacterRepository(db);
   const modelProfileRepository = new ModelProfileRepository(db);
   const postRepository = new PostRepository(db);
+  const roomMembershipRepository = new RoomMembershipRepository(db);
   const simulationRepository = new SimulationRepository(db);
   const userProfileRepository = new UserProfileRepository(db);
   const applicationSettingRepository = new ApplicationSettingRepository(db);
@@ -126,6 +130,11 @@ export async function buildServices(db: Db, logger: SimulationLogger): Promise<A
     providerRegistry,
   );
 
+  const rooms = new RoomService({
+    simulations: simulationRepository,
+    memberships: roomMembershipRepository,
+  });
+
   const modelProfiles = new ModelProfileService(
     modelProfileRepository,
     providerRegistry,
@@ -147,7 +156,7 @@ export async function buildServices(db: Db, logger: SimulationLogger): Promise<A
     auth: new AuthService(userAccountRepository, sessionRepository, {
       sessionTtlMs: env.auth.sessionTtlMs,
     }),
-    userAdmin: new UserAdminService(userAccountRepository, sessionRepository),
+    userAdmin: new UserAdminService(userAccountRepository, sessionRepository, rooms, logger),
     inviteCodes: new InviteCodeService(inviteCodeRepository),
     characters: new CharacterService(
       characterRepository,
@@ -170,6 +179,7 @@ export async function buildServices(db: Db, logger: SimulationLogger): Promise<A
     feed,
     simulations,
     simulationAnalysis,
+    rooms,
     events,
     providerRegistry,
     applicationSettings,

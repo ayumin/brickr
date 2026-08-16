@@ -4,12 +4,17 @@ import { generateTemporaryPassword, hashPassword } from "./password.js";
 import type { SessionRepository } from "./session-repository.js";
 import type { UserAccountRepository } from "./user-account-repository.js";
 import { toPublicAccount, type UserAccount } from "./user-account.js";
+import type { RoomService } from "../simulation/room-service.js";
 
 export type UserManagementPage = {
   accounts: UserAccount[];
   page: number;
   pageSize: number;
   totalCount: number;
+};
+
+export type UserAdminLogger = {
+  error: (obj: Record<string, unknown>, msg: string) => void;
 };
 
 /**
@@ -22,6 +27,9 @@ export class UserAdminService {
   constructor(
     private readonly users: UserAccountRepository,
     private readonly sessions: SessionRepository,
+    /** Optional: when provided, suspending a user also archives their owned rooms (issue #151). */
+    private readonly rooms?: Pick<RoomService, "archiveOwnedBy">,
+    private readonly logger?: UserAdminLogger,
   ) {}
 
   async findById(userId: string): Promise<UserAccount | null> {
@@ -47,14 +55,27 @@ export class UserAdminService {
   }
 
   /**
-   * Suspends an account: blocks future logins, and revokes every existing
-   * session so the effect is immediate rather than waiting for expiry (§66.12).
+   * Suspends an account: blocks future logins, revokes every existing session,
+   * and archives all rooms the user owns (issue #151 — owner deactivation rule).
    */
   async suspend(userId: string): Promise<UserAccount> {
     const account = await this.requireAccount(userId);
 
     await this.users.updateStatus(userId, "suspended");
     await this.sessions.deleteAllForUser(userId);
+
+    // Archive owned rooms so they do not remain active without an owner (§151).
+    // This is best-effort: a failure here does not roll back the suspension.
+    if (this.rooms) {
+      try {
+        await this.rooms.archiveOwnedBy(userId);
+      } catch (error) {
+        this.logger?.error(
+          { userId, err: error instanceof Error ? error.message : String(error) },
+          "failed to archive rooms after user suspension",
+        );
+      }
+    }
 
     return { ...account, status: "suspended" };
   }

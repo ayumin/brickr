@@ -46,7 +46,13 @@ describe("Room SSE shared contracts", () => {
 describe("Room API error contract", () => {
   it("exposes Room and membership errors without Simulation-specific codes", () => {
     expect(API_ERROR_CODES).toEqual(
-      expect.arrayContaining(["room_archived", "room_not_found", "membership_required"]),
+      expect.arrayContaining([
+        "membership_required",
+        "room_archived",
+        "room_not_archived",
+        "room_not_found",
+        "visibility_immutable",
+      ]),
     );
     expect(API_ERROR_CODES.some((code) => code.includes("simulation"))).toBe(false);
     expectTypeOf<(typeof API_ERROR_CODES)[number]>().toEqualTypeOf<ApiErrorCode>();
