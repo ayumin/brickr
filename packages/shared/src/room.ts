@@ -48,6 +48,7 @@ export type RoomDto = {
   id: string;
   title: string | null;
   status: RoomStatus;
+  visibility: RoomVisibility;
   createdAt: string;
   /** Public to everyone, unlike Character ownership (§66.6). Absent for pre-login rooms. */
   createdByUserId?: string;
