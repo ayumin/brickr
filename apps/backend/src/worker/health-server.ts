@@ -5,6 +5,7 @@
  * is alive. The endpoint returns:
  *
  *   GET /health → 200 { status: "ok", workerId, lastPollAt, lastSuccessAt, queueDepth }
+ *              → 503 { status: "error", ..., queueDepth: null, error }
  *
  * `queueDepth` is the number of pending events in the queue, which lets an
  * operator see at a glance whether the worker is keeping up.
@@ -45,8 +46,8 @@ export function startHealthServer(
       return;
     }
 
-    // Fetch queue depth asynchronously; respond with a snapshot even if the
-    // DB call fails so the health check itself never crashes the worker.
+    // Fetch queue depth asynchronously. A DB failure is an unhealthy worker,
+    // but is converted to a 503 response rather than crashing this process.
     eventRepo
       .countByStatus()
       .then((counts) => {
@@ -66,14 +67,14 @@ export function startHealthServer(
       })
       .catch((err: unknown) => {
         const body = JSON.stringify({
-          status: "ok",
+          status: "error",
           workerId: state.workerId,
           lastPollAt: state.lastPollAt,
           lastSuccessAt: state.lastSuccessAt,
           queueDepth: null,
           error: err instanceof Error ? err.message : String(err),
         });
-        res.writeHead(200, { "Content-Type": "application/json" });
+        res.writeHead(503, { "Content-Type": "application/json" });
         res.end(body);
       });
   });

@@ -42,6 +42,7 @@ import { processEvent } from "./event-processor.js";
 import { startHealthServer } from "./health-server.js";
 import { createLogger } from "./logger.js";
 import type { WorkerHealthState } from "./health-server.js";
+import { waitForCurrentWork } from "./graceful-shutdown.js";
 
 // ---------------------------------------------------------------------------
 // Bootstrap
@@ -124,15 +125,17 @@ const healthServer = startHealthServer(
 // ---------------------------------------------------------------------------
 
 let shuttingDown = false;
+let currentWork: Promise<void> | null = null;
 
 async function shutdown(signal: string): Promise<void> {
+  if (shuttingDown) return;
   logger.info({ signal, workerId }, "worker shutting down");
   shuttingDown = true;
-  // Give the current event up to 10 s to finish before we force-close.
-  await new Promise<void>((resolve) => {
-    healthServer.close(() => resolve());
-    setTimeout(resolve, 10_000);
-  });
+  healthServer.close();
+  const finished = await waitForCurrentWork(currentWork, 10_000);
+  if (!finished) {
+    logger.warn({ workerId }, "shutdown grace period elapsed with work still in flight");
+  }
   await prisma.$disconnect();
   logger.info({ workerId }, "worker stopped");
   process.exit(0);
@@ -167,75 +170,81 @@ async function runPollLoop(): Promise<void> {
   logger.info({ workerId }, "poll loop started");
 
   while (!shuttingDown) {
-    healthState.lastPollAt = new Date().toISOString();
+    const iteration = runPollIteration();
+    currentWork = iteration;
+    await iteration;
+    if (currentWork === iteration) currentWork = null;
+  }
+}
 
-    let event: ScheduledEvent | null;
-    try {
-      event = await scheduledEventRepository.claimEvent(workerId);
-    } catch (err) {
-      logger.error(
-        { workerId, err: err instanceof Error ? err.message : String(err) },
-        "failed to claim event — will retry after poll interval",
-      );
-      await sleep(jitteredPollInterval());
-      continue;
-    }
+async function runPollIteration(): Promise<void> {
+  healthState.lastPollAt = new Date().toISOString();
 
-    if (!event) {
-      // No eligible event; back off and poll again.
-      await sleep(jitteredPollInterval());
-      continue;
-    }
+  let event: ScheduledEvent | null;
+  try {
+    event = await scheduledEventRepository.claimEvent(workerId);
+  } catch (err) {
+    logger.error(
+      { workerId, err: err instanceof Error ? err.message : String(err) },
+      "failed to claim event — will retry after poll interval",
+    );
+    await sleep(jitteredPollInterval());
+    return;
+  }
 
-    logger.info(
-      { workerId, eventId: event.id, type: event.type, attempts: event.attempts },
-      "claimed event",
+  if (!event) {
+    // No eligible event; back off and poll again.
+    await sleep(jitteredPollInterval());
+    return;
+  }
+
+  logger.info(
+    { workerId, eventId: event.id, type: event.type, attempts: event.attempts },
+    "claimed event",
+  );
+
+  try {
+    await processEvent(event, processorDeps);
+    await scheduledEventRepository.markCompleted(event.id);
+    healthState.lastSuccessAt = new Date().toISOString();
+    logger.info({ workerId, eventId: event.id }, "event completed");
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    logger.warn(
+      { workerId, eventId: event.id, attempts: event.attempts, err: errorMessage },
+      "event processing failed",
     );
 
     try {
-      await processEvent(event, processorDeps);
-      await scheduledEventRepository.markCompleted(event.id);
-      healthState.lastSuccessAt = new Date().toISOString();
-      logger.info({ workerId, eventId: event.id }, "event completed");
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      logger.warn(
-        { workerId, eventId: event.id, attempts: event.attempts, err: errorMessage },
-        "event processing failed",
-      );
+      await scheduledEventRepository.markFailed(event.id, errorMessage);
 
-      try {
-        await scheduledEventRepository.markFailed(event.id, errorMessage);
-
-        if (event.attempts < workerConfig.maxAttempts) {
-          const delay = retryDelayMs(event.attempts);
-          const retryAt = new Date(Date.now() + delay);
-          await scheduledEventRepository.resetForRetry(event.id, retryAt);
-          logger.info(
-            { workerId, eventId: event.id, retryAt: retryAt.toISOString(), delay },
-            "event scheduled for retry",
-          );
-        } else {
-          logger.warn(
-            { workerId, eventId: event.id, attempts: event.attempts },
-            "event exceeded max attempts — permanently failed",
-          );
-        }
-      } catch (repoErr) {
-        logger.error(
-          {
-            workerId,
-            eventId: event.id,
-            err: repoErr instanceof Error ? repoErr.message : String(repoErr),
-          },
-          "failed to update event status after processing failure",
+      if (event.attempts < workerConfig.maxAttempts) {
+        const delay = retryDelayMs(event.attempts);
+        const retryAt = new Date(Date.now() + delay);
+        await scheduledEventRepository.resetForRetry(event.id, retryAt);
+        logger.info(
+          { workerId, eventId: event.id, retryAt: retryAt.toISOString(), delay },
+          "event scheduled for retry",
+        );
+      } else {
+        logger.warn(
+          { workerId, eventId: event.id, attempts: event.attempts },
+          "event exceeded max attempts — permanently failed",
         );
       }
+    } catch (repoErr) {
+      logger.error(
+        {
+          workerId,
+          eventId: event.id,
+          err: repoErr instanceof Error ? repoErr.message : String(repoErr),
+        },
+        "failed to update event status after processing failure",
+      );
     }
-
-    // Immediately poll again — if there are more events we want to pick them
-    // up without waiting. The jitter only applies when the queue is empty.
   }
+
+  // The caller immediately polls again. Jitter only applies when the queue is empty.
 }
 
 // ---------------------------------------------------------------------------

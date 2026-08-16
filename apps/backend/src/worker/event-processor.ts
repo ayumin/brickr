@@ -109,7 +109,10 @@ async function handleCharacterRespond(
     return;
   }
 
-  // Verify the room is still active.
+  // Verify the persisted room state is still active. `archived` is the only
+  // persisted stopped state; SimulationService's in-memory set merely aborts
+  // API-process generation already in flight while that archive write occurs.
+  // A worker always reloads the row, so it neither needs nor can share that set.
   const simulation = await deps.simulations.findById(roomId);
   if (!simulation || simulation.status === "archived") {
     deps.logger.info(
@@ -165,6 +168,7 @@ async function handleCharacterRespond(
   // Generate and persist each character's response sequentially.
   // The worker does not need the concurrency limiter the API uses because
   // multiple worker replicas already provide parallelism at the process level.
+  let successCount = 0;
   for (const character of responders) {
     try {
       const action = selectAction({
@@ -190,6 +194,7 @@ async function handleCharacterRespond(
         replyTo,
         quoteOf,
       });
+      successCount += 1;
 
       deps.logger.info(
         {
@@ -212,5 +217,9 @@ async function handleCharacterRespond(
         "character generation failed in worker",
       );
     }
+  }
+
+  if (successCount === 0) {
+    throw new Error(`all ${String(responders.length)} responders failed for event ${event.id}`);
   }
 }
