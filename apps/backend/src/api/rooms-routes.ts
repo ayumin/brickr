@@ -806,6 +806,10 @@ export function registerRoomsRoutes(app: FastifyInstance, services: AppServices)
     response: roomDtoResponseSchema,
     handler: async ({ user, params }) => {
       const simulation = await services.rooms.archive(params.id, user);
+      // Terminate every open SSE stream for this room (§11.1 visibility
+      // re-evaluation). Clients reconnect and receive a 404 — the correct
+      // answer for a stopped room they cannot read (§10.4).
+      services.events.closeRoom(params.id);
       return { simulation };
     },
   }).register(app);

@@ -71,9 +71,14 @@ export function registerSimulationRoutes(app: FastifyInstance, services: AppServ
   app.post("/api/simulations/:id/stop", async (request, reply) => {
     const user = requireUser(request, reply);
     if (!user) return reply;
-    return withSimulation(request, reply, async (id) => ({
-      simulation: await services.simulations.stop(id, user),
-    }));
+    return withSimulation(request, reply, async (id) => {
+      const simulation = await services.simulations.stop(id, user);
+      // Terminate every open SSE stream for this room (§11.1 visibility
+      // re-evaluation). Clients reconnect and receive a 404 — the correct
+      // answer for a stopped room they cannot read (§10.4).
+      services.events.closeRoom(id);
+      return { simulation };
+    });
   });
 
   app.post("/api/simulations/:id/resume", async (request, reply) => {

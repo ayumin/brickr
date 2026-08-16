@@ -10,7 +10,7 @@ import { toFeedReader } from "./feed-reader.js";
 import { idParams } from "./schemas.js";
 
 /** Comment frames keep proxies from closing an idle stream. */
-const HEARTBEAT_MS = 20_000;
+const HEARTBEAT_MS = 30_000;
 
 /**
  * Extracts the CORS headers already negotiated for this reply.
@@ -36,15 +36,17 @@ function crossOriginHeaders(reply: FastifyReply): Record<string, string> {
 
 /**
  * Turns one subscription into an HTTP stream and keeps it open until the client
- * leaves.
+ * leaves or the server terminates the stream.
  *
- * `subscribe` is handed a listener rather than being chosen here, so the same
- * plumbing serves the unified feed and a single room.
+ * `subscribe` is handed a listener and an `onClose` callback rather than being
+ * chosen here, so the same plumbing serves the unified feed and a single room.
+ * The `onClose` callback is called by the EventHub when the room is archived or
+ * the connection's access is revoked (§11.1 visibility re-evaluation).
  */
 function streamEvents(
   request: FastifyRequest,
   reply: FastifyReply,
-  subscribe: (listener: EventListener) => () => void,
+  subscribe: (listener: EventListener, onClose: () => void) => () => void,
 ): Promise<void> {
   reply.raw.writeHead(200, {
     // Writing to `reply.raw` bypasses Fastify's header serialisation, so the
@@ -69,6 +71,18 @@ function streamEvents(
   write("retry: 3000\n\n");
   write(": connected\n\n");
 
+  let resolve: () => void;
+  const done = new Promise<void>((res) => {
+    resolve = res;
+  });
+
+  const terminate = (): void => {
+    if (!reply.raw.writableEnded) {
+      reply.raw.end();
+    }
+    resolve();
+  };
+
   const unsubscribe = subscribe((event) => {
     // The one conversion point (§11.4). Internal events map to nothing and are
     // never written; public events contain notification metadata and target ids.
@@ -77,13 +91,14 @@ function streamEvents(
     write(
       `id: ${publicEvent.eventId}\nevent: ${publicEvent.type}\ndata: ${JSON.stringify(publicEvent)}\n\n`,
     );
-  });
+  }, terminate);
 
   const heartbeat = setInterval(() => write(": ping\n\n"), HEARTBEAT_MS);
 
   const cleanup = (): void => {
     clearInterval(heartbeat);
     unsubscribe();
+    resolve();
   };
 
   request.raw.on("close", cleanup);
@@ -91,10 +106,8 @@ function streamEvents(
   reply.raw.on("error", cleanup);
 
   // Returning this promise keeps Fastify from finalising the reply. It stays
-  // pending until the client disconnects.
-  return new Promise<void>((resolve) => {
-    request.raw.on("close", () => resolve());
-  });
+  // pending until the client disconnects or the server terminates the stream.
+  return done;
 }
 
 /**
@@ -114,7 +127,7 @@ export function registerEventsRoute(app: FastifyInstance, services: AppServices)
     return streamEvents(
       request,
       reply,
-      (listener) => services.events.subscribeAll(listener),
+      (listener, _onClose) => services.events.subscribeAll(listener),
     );
   });
 
@@ -124,6 +137,10 @@ export function registerEventsRoute(app: FastifyInstance, services: AppServices)
    * A session is required and the room has to be readable (§11.1): without that,
    * subscribing would reveal that a stopped room exists and when it is active,
    * which the equivalent REST read refuses to say (§10.4).
+   *
+   * Visibility re-evaluation (§11.1): when the room is archived or the
+   * subscriber's membership is revoked, the EventHub calls `onClose` to
+   * terminate the stream. The client reconnects and receives a 404.
    */
   app.get("/api/simulations/:id/events", async (request, reply) => {
     const user = requireUser(request, reply);
@@ -146,10 +163,9 @@ export function registerEventsRoute(app: FastifyInstance, services: AppServices)
       throw error;
     }
 
-    return streamEvents(
-      request,
-      reply,
-      (listener) => services.events.subscribe(simulationId, listener),
-    );
+    return streamEvents(request, reply, (listener, onClose) => {
+      const { unsubscribe } = services.events.subscribe(simulationId, listener, onClose);
+      return unsubscribe;
+    });
   });
 }
