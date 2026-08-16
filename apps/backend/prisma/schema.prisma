@@ -342,6 +342,74 @@ model RoomMembership {
   @@map("room_memberships")
 }
 
+/// Lifecycle status of a scheduled background event.
+///
+/// Allowed transitions (enforced at the service/worker layer):
+///   pending     → processing (atomic claim by a worker)
+///   processing  → completed | failed (worker outcome)
+///   pending     → cancelled (room archived/deleted, or cast removed/banned)
+///   processing  → cancelled (rare: room archived while worker holds the lock)
+///   failed      → pending   (retry, up to maxAttempts)
+enum EventStatus {
+  pending
+  processing
+  completed
+  failed
+  cancelled
+}
+
+/// Asynchronous background event queue (design spec §9).
+///
+/// A single DB table acts as the shared queue; a separate worker process polls
+/// it and executes each event. The atomic claim uses a conditional UPDATE so
+/// that only one worker can own a given event at a time, even under concurrent
+/// polling (§9: "pending かつ期限到来済みを条件付き更新で原子的にロック").
+///
+/// Deduplication: at most one pending event per (type, roomId, postId,
+/// characterId) combination is allowed. The unique index enforces this at the
+/// DB level so the application never needs to check first.
+///
+/// Cancellation: when a Room is archived/deleted, or a Cast is removed/banned,
+/// all pending/processing events for that room or cast are set to cancelled.
+model ScheduledEvent {
+  id           String      @id @default(uuid())
+  type         String      // 'character.respond' | 'character.join.request' | etc.
+  status       EventStatus @default(pending)
+  scheduledAt  DateTime    @map("scheduled_at")
+
+  /// The room this event belongs to. Null only for global/system events (none defined yet).
+  roomId       String?     @map("room_id")
+  /// The post that triggered this event, if applicable.
+  postId       String?     @map("post_id")
+  /// The thread root of the triggering post, if applicable.
+  threadRootId String?     @map("thread_root_id")
+  /// The character this event is for, if applicable.
+  characterId  String?     @map("character_id")
+
+  /// Worker that currently holds the lock. Null when status is not processing.
+  lockedBy     String?     @map("locked_by")
+  /// When the lock was acquired. Used to reclaim events from crashed workers.
+  lockedAt     DateTime?   @map("locked_at")
+
+  /// Number of execution attempts so far (incremented on each claim).
+  attempts     Int         @default(0)
+  /// Last error message, for debugging failed events.
+  lastError    String?     @map("last_error")
+
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+
+  /// Primary polling index: find pending events whose scheduled time has arrived.
+  @@index([status, scheduledAt])
+  /// Lock-reclaim index: find events held by a worker whose lock has expired.
+  @@index([lockedBy, lockedAt])
+  /// Deduplication: at most one pending event per (type, roomId, postId, characterId).
+  /// Partial uniqueness (only for pending) cannot be expressed in Prisma schema;
+  /// the repository enforces it by checking before insert.
+  @@index([type, roomId, postId, characterId, status])
+  @@map("scheduled_events")
+}
+
 /// Running per-user LLM token totals (CLAUDE.md §66.4). One row per user,
 /// incremented on every successful character generation their post triggered —
 /// a log of every generation would grow without bound for no benefit, since
