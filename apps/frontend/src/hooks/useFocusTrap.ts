@@ -43,7 +43,6 @@ export function useFocusTrap<T extends HTMLElement>({
     };
     // Deliberately runs once per mount only: re-running on every re-render
     // would steal focus back from whatever the user just interacted with.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
