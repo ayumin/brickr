@@ -530,7 +530,7 @@ describe("RoomMembershipService.listPending", () => {
     const result = await service.listPending("room-1", OWNER);
 
     expect(result).toHaveLength(2);
-    expect(result[0].status).toBe("pending");
+    expect(result[0]!.status).toBe("pending");
   });
 
   it("returns pending memberships for an admin", async () => {
