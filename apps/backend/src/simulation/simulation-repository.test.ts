@@ -10,52 +10,76 @@ function makeDb(rows: unknown[]) {
   return { db: { room: { findMany } } as unknown as Db, findMany };
 }
 
+// Helper to build a minimal room row for findAllVisibleTo tests.
+function makeRoomRow(overrides: Record<string, unknown> = {}) {
+  const createdAt = new Date("2026-08-10T01:02:03.000Z");
+  return {
+    id: "simulation-1",
+    title: "テスト",
+    status: "active",
+    scope: "room",
+    visibility: "public",
+    createdAt,
+    updatedAt: createdAt,
+    lastActivityAt: createdAt,
+    createdByUserId: "user-1",
+    _count: { posts: 0, memberships: 0 },
+    createdByUser: null,
+    memberships: [],
+    ...overrides,
+  };
+}
+
 describe("SimulationRepository.findAllVisibleTo", () => {
   it("orders by activity and maps post counts and the creator", async () => {
     const createdAt = new Date("2026-08-10T01:02:03.000Z");
     const lastActivityAt = new Date("2026-08-12T09:00:00.000Z");
-    const { db, findMany } = makeDb([
+    const { db } = makeDb([
       {
         id: "simulation-1",
         title: "履歴",
         status: "active",
         scope: "room",
+        visibility: "public",
         createdAt,
         updatedAt: createdAt,
         lastActivityAt,
         createdByUserId: "user-1",
-        _count: { posts: 42 },
+        _count: { posts: 42, memberships: 0 },
         createdByUser: { id: "user-1", handle: "hanako", displayName: "花子" },
+        memberships: [],
       },
     ]);
 
-    await expect(new SimulationRepository(db).findAllVisibleTo(USER)).resolves.toEqual([
-      {
-        id: "simulation-1",
-        title: "履歴",
-        status: "active",
-        scope: "room",
-        createdAt,
-        lastActivityAt,
-        createdByUserId: "user-1",
-        postCount: 42,
-        creator: { id: "user-1", handle: "hanako", displayName: "花子" },
-      },
-    ]);
+    const [summary] = await new SimulationRepository(db).findAllVisibleTo(USER);
+
+    // Core fields are mapped correctly.
+    expect(summary).toMatchObject({
+      id: "simulation-1",
+      title: "履歴",
+      status: "active",
+      scope: "room",
+      createdAt,
+      lastActivityAt,
+      createdByUserId: "user-1",
+      postCount: 42,
+      creator: { id: "user-1", handle: "hanako", displayName: "花子" },
+    });
+  });
+
+  it("uses AND to combine the status and visibility conditions for a regular user", async () => {
+    const { db, findMany } = makeDb([]);
+
+    await new SimulationRepository(db).findAllVisibleTo(USER);
+
     // Rooms only, because the reserved global row is the feed itself rather than
     // an entry in the room list (§8.2). Activity order, not creation order, so an
     // active room cannot sink out of reach (§10.3).
-    expect(findMany).toHaveBeenCalledWith({
-      where: {
-        scope: "room",
-        OR: [{ status: "active" }, { createdByUserId: USER.id }],
-      },
-      include: {
-        _count: { select: { posts: true } },
-        createdByUser: { select: { id: true, handle: true, displayName: true } },
-      },
-      orderBy: [{ lastActivityAt: "desc" }, { id: "desc" }],
-    });
+    // The AND clause combines: (1) archived-room ownership and (2) visibility.
+    const call = findMany.mock.calls[0][0];
+    expect(call.where.scope).toBe("room");
+    expect(call.where.AND).toBeDefined();
+    expect(call.orderBy).toEqual([{ lastActivityAt: "desc" }, { id: "desc" }]);
   });
 
   it("asks the database for only the stopped rooms an ordinary caller owns", async () => {
@@ -65,41 +89,127 @@ describe("SimulationRepository.findAllVisibleTo", () => {
 
     // Filtered in the query rather than afterwards: a room this caller may not
     // see is never read, so it cannot leak through a mapping mistake later.
-    expect(findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: {
-          scope: "room",
-          OR: [{ status: "active" }, { createdByUserId: USER.id }],
-        },
-      }),
-    );
+    const call = findMany.mock.calls[0][0];
+    const statusClause = call.where.AND[0];
+    expect(statusClause.OR).toContainEqual({ status: "active" });
+    expect(statusClause.OR).toContainEqual({ createdByUserId: USER.id });
   });
 
-  it("puts no status condition on an administrator's list", async () => {
+  it("includes public/open/closed rooms for a regular user (visibility clause)", async () => {
+    const { db, findMany } = makeDb([]);
+
+    await new SimulationRepository(db).findAllVisibleTo(USER);
+
+    const call = findMany.mock.calls[0][0];
+    const visibilityClause = call.where.AND[1];
+    // public, open, closed are discoverable by all authenticated users
+    expect(visibilityClause.OR[0].visibility.in).toContain("public");
+    expect(visibilityClause.OR[0].visibility.in).toContain("open");
+    expect(visibilityClause.OR[0].visibility.in).toContain("closed");
+  });
+
+  it("requires active membership for private rooms", async () => {
+    const { db, findMany } = makeDb([]);
+
+    await new SimulationRepository(db).findAllVisibleTo(USER);
+
+    const call = findMany.mock.calls[0][0];
+    const visibilityClause = call.where.AND[1];
+    const privateClause = visibilityClause.OR[1];
+    expect(privateClause.visibility).toBe("private");
+    expect(privateClause.memberships.some).toMatchObject({
+      memberId: USER.id,
+      memberKind: "user",
+      status: "active",
+    });
+  });
+
+  it("puts no status or visibility condition on an administrator's list", async () => {
     const { db, findMany } = makeDb([]);
 
     await new SimulationRepository(db).findAllVisibleTo(ADMIN);
 
-    expect(findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { scope: "room" } }),
-    );
+    const call = findMany.mock.calls[0][0];
+    // Admin query has no AND clause — just scope: "room"
+    expect(call.where).toEqual({ scope: "room" });
+  });
+
+  it("includes pending membership count in the _count select", async () => {
+    const { db, findMany } = makeDb([]);
+
+    await new SimulationRepository(db).findAllVisibleTo(USER);
+
+    const call = findMany.mock.calls[0][0];
+    expect(call.include._count.select.memberships).toMatchObject({
+      where: { status: "pending" },
+    });
+  });
+
+  it("includes the caller's own membership in the include clause", async () => {
+    const { db, findMany } = makeDb([]);
+
+    await new SimulationRepository(db).findAllVisibleTo(USER);
+
+    const call = findMany.mock.calls[0][0];
+    expect(call.include.memberships).toMatchObject({
+      where: { memberId: USER.id, memberKind: "user" },
+    });
+  });
+
+  it("maps pendingCount and callerIsActiveMember from the row", async () => {
+    const createdAt = new Date("2026-08-16T00:00:00.000Z");
+    const { db } = makeDb([
+      makeRoomRow({
+        id: "room-1",
+        visibility: "open",
+        createdAt,
+        lastActivityAt: createdAt,
+        createdByUserId: "user-owner",
+        _count: { posts: 2, memberships: 3 },
+        createdByUser: { id: "user-owner", handle: "owner", displayName: "オーナー" },
+        memberships: [{ status: "active" }],
+      }),
+    ]);
+
+    const [summary] = await new SimulationRepository(db).findAllVisibleTo(USER);
+
+    expect(summary?.pendingCount).toBe(3);
+    expect(summary?.callerIsActiveMember).toBe(true);
+  });
+
+  it("sets callerIsActiveMember to false when the caller has no membership", async () => {
+    const createdAt = new Date("2026-08-16T00:00:00.000Z");
+    const { db } = makeDb([
+      makeRoomRow({
+        id: "room-2",
+        visibility: "public",
+        createdAt,
+        lastActivityAt: createdAt,
+        createdByUserId: "user-owner",
+        _count: { posts: 0, memberships: 0 },
+        createdByUser: null,
+        memberships: [],
+      }),
+    ]);
+
+    const [summary] = await new SimulationRepository(db).findAllVisibleTo(USER);
+
+    expect(summary?.callerIsActiveMember).toBe(false);
   });
 
   it("reports a room with no owner as having no creator", async () => {
     const createdAt = new Date("2026-08-10T01:02:03.000Z");
     const { db } = makeDb([
-      {
+      makeRoomRow({
         id: "simulation-2",
         title: null,
-        status: "active",
-        scope: "room",
         createdAt,
-        updatedAt: createdAt,
         lastActivityAt: createdAt,
         createdByUserId: null,
-        _count: { posts: 0 },
+        _count: { posts: 0, memberships: 0 },
         createdByUser: null,
-      },
+        memberships: [],
+      }),
     ]);
 
     const [summary] = await new SimulationRepository(db).findAllVisibleTo(ADMIN);
@@ -111,22 +221,20 @@ describe("SimulationRepository.findAllVisibleTo", () => {
   it("falls back to a handle derived from the id when a creator has none", async () => {
     const createdAt = new Date("2026-08-10T01:02:03.000Z");
     const { db } = makeDb([
-      {
+      makeRoomRow({
         id: "simulation-3",
         title: "旧アカウント",
-        status: "active",
-        scope: "room",
         createdAt,
-        updatedAt: createdAt,
         lastActivityAt: createdAt,
         createdByUserId: "0191d3f0-0000-4000-8000-000000000abc",
-        _count: { posts: 1 },
+        _count: { posts: 1, memberships: 0 },
         createdByUser: {
           id: "0191d3f0-0000-4000-8000-000000000abc",
           handle: null,
           displayName: "名前だけの人",
         },
-      },
+        memberships: [],
+      }),
     ]);
 
     const [summary] = await new SimulationRepository(db).findAllVisibleTo(ADMIN);

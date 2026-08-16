@@ -46,6 +46,14 @@ function toSimulation(row: SimulationRow): Simulation {
 type SimulationSummaryRow = SimulationRow & {
   _count: { posts: number };
   createdByUser: { id: string; handle: string | null; displayName: string } | null;
+  /** Pending membership count — only populated for the room list query. */
+  _pendingCount?: number;
+  /**
+   * Whether the caller holds an active membership in this room.
+   * Only populated for the room list query; used to apply metadata restrictions
+   * for closed rooms.
+   */
+  _callerIsActiveMember?: boolean;
 };
 
 // ---------------------------------------------------------------------------
@@ -65,6 +73,10 @@ function toSimulationSummary(row: SimulationSummaryRow): SimulationSummary {
           displayName: row.createdByUser.displayName,
         }
       : null,
+    ...(row._pendingCount !== undefined ? { pendingCount: row._pendingCount } : {}),
+    ...(row._callerIsActiveMember !== undefined
+      ? { callerIsActiveMember: row._callerIsActiveMember }
+      : {}),
   };
 }
 
@@ -161,19 +173,29 @@ export class SimulationRepository {
   }
 
   /**
-   * The rooms one actor may list, newest activity first (§10.3).
+   * The rooms one actor may list, newest activity first (§10.3, issue #155).
    *
-   * Three rules, all enforced here rather than by filtering afterwards, so a
-   * room the caller may not see is never even read:
+   * Visibility rules (enforced in the query, not by post-filtering):
    *
    * - The global row is excluded: it is the feed, not an entry in the room list
    *   (§8.2).
    * - A stopped room is listed only for its creator and for an administrator.
-   *   Everyone else gets a list in which it does not appear at all, rather than
-   *   an entry they cannot open (§10.3).
+   *   Everyone else gets a list in which it does not appear at all (§10.3).
+   * - `public` / `open` rooms are discoverable by all authenticated users.
+   * - `closed` rooms appear in the list for all authenticated users, but the
+   *   service layer restricts the metadata returned to non-members (issue #155).
+   * - `private` rooms are only visible to active members (and admins).
    * - Ordering is by `lastActivityAt`, not creation time, so an active room does
    *   not sink out of reach. An empty room keeps `lastActivityAt = createdAt`
    *   (§8.1), which makes it sort by creation time without a special case.
+   *
+   * Pending count: the number of pending join requests is included for each
+   * room so the owner can show a badge. The service layer strips it from the
+   * DTO for non-owners.
+   *
+   * Active membership snapshot: for each room, the caller's own active
+   * membership (if any) is included so the service layer can apply metadata
+   * restrictions without a second query.
    */
   async findAllVisibleTo(actor: SimulationActor): Promise<SimulationSummary[]> {
     const rows = await this.db.room.findMany({
@@ -181,15 +203,56 @@ export class SimulationRepository {
         scope: "room",
         ...(actor.isAdmin
           ? {}
-          : { OR: [{ status: "active" }, { createdByUserId: actor.id }] }),
+          : {
+              AND: [
+                // Archived rooms: only the creator sees them.
+                { OR: [{ status: "active" }, { createdByUserId: actor.id }] },
+                // Visibility: public/open/closed are discoverable by all;
+                // private requires an active membership.
+                {
+                  OR: [
+                    { visibility: { in: ["public", "open", "closed"] } },
+                    {
+                      visibility: "private",
+                      memberships: {
+                        some: { memberId: actor.id, memberKind: "user", status: "active" },
+                      },
+                    },
+                  ],
+                },
+              ],
+            }),
       },
       include: {
-        _count: { select: { posts: true } },
+        _count: {
+          select: {
+            posts: true,
+            memberships: { where: { status: "pending" } },
+          },
+        },
         createdByUser: { select: { id: true, handle: true, displayName: true } },
+        // Load the caller's own membership so the service can apply metadata
+        // restrictions for closed rooms without a second query.
+        memberships: {
+          where: { memberId: actor.id, memberKind: "user" },
+          select: { status: true },
+          take: 1,
+        },
       },
       orderBy: [{ lastActivityAt: "desc" }, { id: "desc" }],
     });
-    return rows.map(toSimulationSummary);
+
+    return rows.map((row) => {
+      const counts = row._count as { posts: number; memberships: number };
+      const callerMembership = (row.memberships as Array<{ status: string }>)[0];
+      const isActiveMember = callerMembership?.status === "active";
+      return toSimulationSummary({
+        ...row,
+        _count: { posts: counts.posts },
+        _pendingCount: counts.memberships,
+        _callerIsActiveMember: isActiveMember,
+      });
+    });
   }
 
   async findById(id: string): Promise<Simulation | null> {
