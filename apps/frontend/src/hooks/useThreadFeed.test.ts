@@ -237,7 +237,7 @@ describe("useThreadFeed — REST re-sync after SSE notification (refreshed actio
 
     const updatedA = thread("thread-a", "2026-08-13T10:09:00.000Z");
     const state = apply(
-      [{ kind: "refreshed", page: { threads: [updatedA] } as Parameters<typeof reduceFeed>[1] extends { kind: "refreshed" } ? Parameters<typeof reduceFeed>[1]["page"] : never }],
+      [{ kind: "refreshed", page: { threads: [updatedA], nextCursor: null } }],
       seeded,
     );
 
