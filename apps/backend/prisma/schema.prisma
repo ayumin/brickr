@@ -159,6 +159,7 @@ model Room {
   posts           Post[]
   memberships     RoomMembership[]
   scheduledEvents ScheduledEvent[]
+  llmUsages       LLMUsage[]
   createdByUser   UserProfile?     @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
 
   @@index([createdByUserId])
@@ -443,4 +444,51 @@ model TokenUsage {
   user UserProfile @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("token_usages")
+}
+
+/// Per-provider LLM token budget and circuit-breaker state (issue #162).
+///
+/// One row per provider. The `tokenLimit` is the administrator-configured
+/// ceiling; `totalTokens` is the running aggregate across all rooms.
+/// When `stopped` is true the simulation layer refuses to call that provider
+/// until an administrator resets the row.
+///
+/// Room-level usage is tracked in `LLMUsage`; deleting a room removes its
+/// rows but leaves the global aggregate here intact.
+model LLMBudget {
+  /// Provider identifier — matches `ProviderId` in the LLM layer.
+  provider     String  @id
+  /// Administrator-set token ceiling. Zero means "no limit configured".
+  tokenLimit   Int     @default(0) @map("token_limit")
+  /// Running total of tokens consumed across all rooms for this provider.
+  totalTokens  Int     @default(0) @map("total_tokens")
+  /// True when the budget has been exceeded and the circuit breaker is open.
+  /// Remains true until an administrator calls the reset endpoint.
+  stopped      Boolean @default(false)
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("llm_budgets")
+}
+
+/// Per-room, per-provider LLM token log (issue #162).
+///
+/// Each row records the tokens consumed by one generation call, tagged with
+/// the room it originated from. Deleting a room cascades to these rows,
+/// which reduces the room-level view but does NOT touch `LLMBudget.totalTokens`
+/// (the global aggregate is kept separately so the circuit breaker cannot be
+/// reset by deleting rooms).
+model LLMUsage {
+  id          String   @id @default(uuid())
+  provider    String
+  totalTokens Int      @map("total_tokens")
+  /// Null for system-level usage not tied to a specific room.
+  roomId      String?  @map("room_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  room Room? @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@index([provider, createdAt])
+  @@index([roomId])
+  @@map("llm_usages")
 }

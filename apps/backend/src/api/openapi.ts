@@ -453,6 +453,85 @@ export const openApiDocument: OpenAPIV3.Document = {
         },
       },
     },
+    "/api/llm-budget": {
+      get: {
+        operationId: "getLLMBudget",
+        security: sessionSecurity,
+        tags: ["System"],
+        summary: "Get per-provider LLM token budgets and circuit-breaker state",
+        description:
+          "Admin-only (issue #162). Returns the current token limit, running total and stopped flag for every provider that has a budget row. Providers with no row are omitted (no limit configured).",
+        responses: {
+          "200": jsonResponse("Provider budgets", ref("LLMBudgetResponse")),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "403": { $ref: "#/components/responses/Forbidden" },
+          "500": errorResponses["500"],
+        },
+      },
+    },
+    "/api/llm-budget/{provider}": {
+      put: {
+        operationId: "setLLMBudgetLimit",
+        security: sessionSecurity,
+        tags: ["System"],
+        summary: "Set the token limit for a provider",
+        description:
+          "Admin-only (issue #162). A limit of 0 removes the ceiling without resetting usage or the stopped flag.",
+        parameters: [
+          {
+            name: "provider",
+            in: "path",
+            required: true,
+            description: "Provider identifier",
+            schema: { type: "string", enum: ["openai", "anthropic", "gemini", "mock"] },
+          },
+        ],
+        requestBody: jsonBody({
+          type: "object",
+          required: ["tokenLimit"],
+          properties: {
+            tokenLimit: {
+              type: "integer",
+              minimum: 0,
+              description: "Token ceiling. 0 removes the limit.",
+            },
+          },
+        }),
+        responses: {
+          "200": jsonResponse("Updated provider budget", ref("ProviderBudgetResponse")),
+          "400": errorResponses["400"],
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "403": { $ref: "#/components/responses/Forbidden" },
+          "500": errorResponses["500"],
+        },
+      },
+    },
+    "/api/llm-budget/{provider}/reset": {
+      post: {
+        operationId: "resetLLMBudget",
+        security: sessionSecurity,
+        tags: ["System"],
+        summary: "Reset the circuit breaker for a provider",
+        description:
+          "Admin-only (issue #162). Clears the stopped flag and zeroes the global token aggregate. The configured token limit is preserved.",
+        parameters: [
+          {
+            name: "provider",
+            in: "path",
+            required: true,
+            description: "Provider identifier",
+            schema: { type: "string", enum: ["openai", "anthropic", "gemini", "mock"] },
+          },
+        ],
+        responses: {
+          "200": jsonResponse("Reset provider budget", ref("ProviderBudgetResponse")),
+          "400": errorResponses["400"],
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "403": { $ref: "#/components/responses/Forbidden" },
+          "500": errorResponses["500"],
+        },
+      },
+    },
     "/api/application-settings": {
       get: {
         operationId: "getApplicationSettings",
@@ -1426,6 +1505,40 @@ export const openApiDocument: OpenAPIV3.Document = {
             },
           },
         },
+      },
+      ProviderBudget: {
+        type: "object",
+        description: "Per-provider LLM token budget and circuit-breaker state (issue #162).",
+        required: ["provider", "tokenLimit", "totalTokens", "stopped"],
+        properties: {
+          provider: { type: "string", description: "Provider identifier, e.g. openai" },
+          tokenLimit: {
+            type: "integer",
+            minimum: 0,
+            description: "Administrator-configured token ceiling. 0 means no limit.",
+          },
+          totalTokens: {
+            type: "integer",
+            minimum: 0,
+            description: "Running total of tokens consumed across all rooms.",
+          },
+          stopped: {
+            type: "boolean",
+            description: "True when the circuit breaker is open (budget exceeded).",
+          },
+        },
+      },
+      LLMBudgetResponse: {
+        type: "object",
+        required: ["providers"],
+        properties: {
+          providers: { type: "array", items: ref("ProviderBudget") },
+        },
+      },
+      ProviderBudgetResponse: {
+        type: "object",
+        required: ["provider"],
+        properties: { provider: ref("ProviderBudget") },
       },
       UpdateApplicationSettingsRequest: {
         ...requestSchema(updateApplicationSettingsSchema),

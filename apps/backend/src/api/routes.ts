@@ -3,6 +3,7 @@ import { requireUser } from "../auth/auth-context.js";
 import type { AppServices } from "../services.js";
 import { registerApplicationSettingsRoutes } from "./application-settings-routes.js";
 import { registerAuthRoutes } from "./auth-routes.js";
+import { registerLLMBudgetRoutes } from "./llm-budget-routes.js";
 import { registerCharacterRoutes } from "./character-routes.js";
 import { registerEventsRoute } from "./events-route.js";
 import { registerFeedRoutes } from "./feed-routes.js";
@@ -43,6 +44,7 @@ export async function registerRoutes(
   registerProfileRoutes(app, services);
 
   registerApplicationSettingsRoutes(app, services);
+  registerLLMBudgetRoutes(app, services);
   registerCharacterRoutes(app, services);
 
   /**
