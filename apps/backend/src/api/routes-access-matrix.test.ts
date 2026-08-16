@@ -69,6 +69,7 @@ function room(id: string, overrides: Partial<Simulation> = {}): Simulation {
     title: id,
     status: "active",
     scope: "room",
+    visibility: "public",
     createdAt: NOW,
     lastActivityAt: NOW,
     createdByUserId: ROOM_OWNER.id,
@@ -86,6 +87,7 @@ const FEED_ROOM: Simulation = {
   title: "フィード",
   status: "active",
   scope: "global",
+  visibility: "public",
   createdAt: NOW,
   lastActivityAt: NOW,
 };
