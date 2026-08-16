@@ -1,4 +1,4 @@
-import { GLOBAL_SIMULATION_ID, type SimulationScope, type SimulationStatus } from "@brickr/shared";
+import { GLOBAL_SIMULATION_ID, type RoomVisibility, type SimulationScope, type SimulationStatus } from "@brickr/shared";
 import type { UserAccount } from "../auth/user-account.js";
 
 /**
@@ -16,6 +16,7 @@ export type Simulation = {
   status: SimulationStatus;
   /** Internal only (§8.1). `"global"` marks the reserved row behind the feed. */
   scope: SimulationScope;
+  visibility: RoomVisibility;
   createdAt: Date;
   /** Newest activity anywhere in the simulation, used to order rooms (§8.1). */
   lastActivityAt: Date;

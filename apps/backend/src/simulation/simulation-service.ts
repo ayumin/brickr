@@ -647,6 +647,7 @@ export function toSimulationDto(simulation: Simulation): SimulationDto {
     id: simulation.id,
     title: simulation.title,
     status: simulation.status,
+    visibility: simulation.visibility,
     createdAt: simulation.createdAt.toISOString(),
     ...optionalField("createdByUserId", simulation.createdByUserId),
   };
