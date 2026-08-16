@@ -33,6 +33,7 @@ function makeSummary(overrides: Partial<SimulationSummary> = {}): SimulationSumm
     status: "active",
     scope: "room",
     visibility: "public",
+    tags: [],
     createdAt: BASE_DATE,
     lastActivityAt: BASE_DATE,
     createdByUserId: OWNER.id,
@@ -220,5 +221,4 @@ describe("toRoomListEntryDto — pendingCount badge", () => {
     expect(entry).not.toHaveProperty("pendingCount");
   });
 });
-
 

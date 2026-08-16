@@ -348,7 +348,7 @@ export async function publishWelcomePost(
     }
 
     await deps.posts.publish({
-      simulationId: roomId,
+      roomId,
       authorId: characterId,
       content,
       replyTo: null,

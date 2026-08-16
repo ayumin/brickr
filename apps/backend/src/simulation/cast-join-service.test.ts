@@ -539,7 +539,7 @@ describe("publishWelcomePost", () => {
     expect(result).toEqual({ outcome: "published" });
     expect(deps.posts.publish).toHaveBeenCalledWith(
       expect.objectContaining({
-        simulationId: "room-1",
+        roomId: "room-1",
         authorId: "char-1",
         content: "こんにちは！よろしくお願いします。",
       }),
