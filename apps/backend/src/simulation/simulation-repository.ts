@@ -84,6 +84,7 @@ export class SimulationRepository {
         title,
         status: "active",
         scope: "room",
+        visibility: "public",
         createdByUserId,
         createdAt,
         lastActivityAt: createdAt,
