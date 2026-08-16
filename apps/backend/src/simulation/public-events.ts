@@ -11,6 +11,7 @@ import type { FeedRoom } from "../feed/feed-repository.js";
 export type ThreadActivityEvent = {
   type: "thread.activity";
   simulationId: string;
+  postId: string;
   room: FeedRoom;
   /** Capabilities as an anonymous reader would see them; recomputed per subscriber. */
   thread: FeedThreadDto;
@@ -64,3 +65,9 @@ export type InternalSseEvent =
   | ResponseFinishedInternalEvent
   | GenerationCompletedEvent
   | GenerationFailedEvent;
+
+/** Metadata assigned once by EventHub and shared by every subscriber. */
+export type PublishedInternalSseEvent = InternalSseEvent & {
+  eventId: string;
+  timestamp: string;
+};
