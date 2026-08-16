@@ -17,7 +17,9 @@
     "db:push": "dotenv -e ../../.env -- prisma db push --force-reset && dotenv -e ../../.env -- tsx prisma/seed.ts",
     "db:push:schema": "dotenv -e ../../.env -- prisma db push --skip-generate --accept-data-loss",
     "db:generate": "prisma generate",
-    "seed": "dotenv -e ../../.env -- tsx prisma/seed.ts"
+    "seed": "dotenv -e ../../.env -- tsx prisma/seed.ts",
+    "worker": "dotenv -e ../../.env -- tsx src/worker/index.ts",
+    "worker:raw": "tsx src/worker/index.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

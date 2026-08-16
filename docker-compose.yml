@@ -63,6 +63,61 @@ services:
       - ./apps/backend/prisma:/app/apps/backend/prisma
       - ./packages/shared/src:/app/packages/shared/src
 
+  worker:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    command: ["pnpm", "worker:raw"]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-brickr}:${POSTGRES_PASSWORD:-brickr}@db:5432/${POSTGRES_DB:-brickr}?schema=public
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-5}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash-lite}
+      LLM_TIMEOUT_MS: ${LLM_TIMEOUT_MS:-30000}
+      LLM_MAX_RETRIES: ${LLM_MAX_RETRIES:-1}
+      USE_MOCK_LLM: ${USE_MOCK_LLM:-false}
+      MIN_RESPONDERS: ${MIN_RESPONDERS:-2}
+      MAX_RESPONDERS: ${MAX_RESPONDERS:-6}
+      CONTEXT_POST_LIMIT: ${CONTEXT_POST_LIMIT:-16}
+      MAX_CONCURRENT_CHARACTERS: ${MAX_CONCURRENT_CHARACTERS:-4}
+      MAX_CASCADE_DEPTH: ${MAX_CASCADE_DEPTH:-2}
+      WORKER_POLL_INTERVAL_MS: ${WORKER_POLL_INTERVAL_MS:-2000}
+      WORKER_POLL_JITTER_MS: ${WORKER_POLL_JITTER_MS:-1000}
+      WORKER_MAX_ATTEMPTS: ${WORKER_MAX_ATTEMPTS:-4}
+      WORKER_HEALTH_PORT: "3001"
+      WORKER_HEALTH_HOST: "0.0.0.0"
+    # No host-port binding: multiple replicas would conflict on the same port.
+    # Use `docker compose ps` or `docker inspect` to find each replica's IP,
+    # or scale with `docker compose up --scale worker=2`.
+    expose:
+      - "3001"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    volumes:
+      # Live reload against the host source without clobbering node_modules.
+      - ./apps/backend/src:/app/apps/backend/src
+      - ./apps/backend/prisma:/app/apps/backend/prisma
+      - ./packages/shared/src:/app/packages/shared/src
+    deploy:
+      # Run 2 replicas by default. Each claims events independently via
+      # FOR UPDATE SKIP LOCKED, so they never process the same event twice.
+      # Scale further with: docker compose up --scale worker=N
+      replicas: 2
+
   frontend:
     build:
       context: .
