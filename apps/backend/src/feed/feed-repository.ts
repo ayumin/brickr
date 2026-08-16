@@ -241,6 +241,22 @@ export class FeedRepository {
    * visibility and membership in a single pass.
    */
   async findVisibleRoomIds(userId: string | null): Promise<string[]> {
+    const memberOnlyRooms: Prisma.RoomWhereInput[] =
+      userId !== null
+        ? [
+            {
+              visibility: { in: ["closed", "private"] },
+              memberships: {
+                some: {
+                  memberId: userId,
+                  memberKind: "user",
+                  status: "active",
+                },
+              },
+            },
+          ]
+        : [];
+
     const rows = await this.db.room.findMany({
       where: {
         OR: [
@@ -250,20 +266,7 @@ export class FeedRepository {
           { scope: "global" },
           // closed and private rooms: only active members (including the owner,
           // who always holds an active owner membership).
-          ...(userId !== null
-            ? [
-                {
-                  visibility: { in: ["closed", "private"] as const },
-                  memberships: {
-                    some: {
-                      memberId: userId,
-                      memberKind: "user" as const,
-                      status: "active" as const,
-                    },
-                  },
-                },
-              ]
-            : []),
+          ...memberOnlyRooms,
         ],
       },
       select: { id: true },
