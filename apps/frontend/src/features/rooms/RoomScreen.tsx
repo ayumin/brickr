@@ -125,7 +125,7 @@ export function RoomScreen({ roomId }: { roomId: string }) {
   }
 
   const { simulation } = selectedRoom.state;
-  const isStopped = simulation.status === "stopped";
+  const isStopped = simulation.status === "archived";
   const roomInfoProps = {
     simulation,
     onOpenAnalysis: () => navigate(roomAnalysisPath(simulation.id)),
