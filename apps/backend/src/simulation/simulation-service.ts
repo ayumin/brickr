@@ -18,6 +18,7 @@ import { resolveActionTargets, selectAction } from "./action-selector.js";
 import { runWithConcurrency } from "../lib/concurrency.js";
 import type { EventHub } from "./event-hub.js";
 import type { ThreadActivityEvent } from "./public-events.js";
+import { computeRoomCapabilities, type RoomActor } from "./room-authorization.js";
 import { selectCascadeResponders, selectResponders } from "./responder-selector.js";
 import type { UserProfile } from "../user-profile/user-profile.js";
 import type { SimulationRepository } from "./simulation-repository.js";
@@ -148,16 +149,29 @@ export function assertNotGlobalSimulation(
  *   does not exist for anyone else. Note that this is about reading a room; the
  *   posts themselves remain visible to everybody through the unified feed, which
  *   is deliberately the only place they show up (§10.1).
+ * - Closed/private rooms are not visible to non-members (§10.4, issue #152).
+ *   The authorization service centralises this rule.
  *
  * Shared by the room feed, the room detail and the room's post list, so a caller
  * cannot reach through one endpoint what another would refuse.
  */
 export function assertRoomReadable(
-  simulation: Pick<Simulation, "id" | "scope" | "status" | "createdByUserId">,
+  simulation: Pick<Simulation, "id" | "scope" | "status" | "visibility" | "createdByUserId">,
   actor: SimulationActor,
 ): void {
   if (isGlobalSimulation(simulation)) throw new SimulationNotFoundError(simulation.id);
-  if (simulation.status === "archived" && !isSimulationOwnerOrAdmin(simulation, actor)) {
+
+  // Convert the SimulationActor to a RoomActor for the authorization check.
+  // The RoomMembership table exists but is not yet queried here; we synthesise
+  // an owner membership from `createdByUserId` so the existing ownership rule
+  // (creator and admin may read a stopped room) is preserved (§10.4, issue #152).
+  const roomActor: RoomActor = toRoomActor(actor, simulation.createdByUserId);
+  const caps = computeRoomCapabilities(
+    { visibility: simulation.visibility, status: simulation.status },
+    roomActor,
+  );
+
+  if (!caps.canView) {
     throw new SimulationNotFoundError(simulation.id);
   }
 }
@@ -229,10 +243,20 @@ export class SimulationService {
    * `GET /api/simulations/:id`/`GET /api/simulations/:id/feed` — it was never
    * about whether a post's own thread (post detail, §10.8) can be reconstructed,
    * which must work the same way regardless of which simulation a post lives in.
+   *
+   * Visibility is still enforced here: a closed/private room's posts are not
+   * accessible to non-members even through the post-detail path (issue #152).
    */
   async requireReadableSimulation(id: string, actor: SimulationActor): Promise<Simulation> {
     const simulation = await this.requireSimulation(id);
-    if (simulation.status === "archived" && !isSimulationOwnerOrAdmin(simulation, actor)) {
+    // The global row is allowed through here (unlike assertRoomReadable), but
+    // visibility and archived checks still apply.
+    const roomActor: RoomActor = toRoomActor(actor, simulation.createdByUserId);
+    const caps = computeRoomCapabilities(
+      { visibility: simulation.visibility, status: simulation.status },
+      roomActor,
+    );
+    if (!caps.canView) {
       throw new SimulationNotFoundError(simulation.id);
     }
     return simulation;
@@ -673,6 +697,31 @@ export function toSimulationSummaryDto(
 }
 
 export type { SimulationActor } from "./simulation.js";
+
+/**
+ * Converts a `SimulationActor` to a `RoomActor` for the authorization service.
+ *
+ * Until the RoomMembership table is queried at this layer (issue #153), we
+ * synthesise an owner membership from `createdByUserId` so the existing
+ * ownership rule — creator and admin may read a stopped room — is preserved.
+ *
+ * A room with no owner (`createdByUserId` absent) matches no actor id, so only
+ * an admin may manage it — mirrors the Character rule (§66.14).
+ */
+export function toRoomActor(
+  actor: SimulationActor,
+  createdByUserId: string | undefined | null,
+): RoomActor {
+  const isOwner = createdByUserId != null && actor.id === createdByUserId;
+  return {
+    kind: "user",
+    userId: actor.id,
+    isAdmin: actor.isAdmin,
+    membership: isOwner
+      ? { memberKind: "user", role: "owner", status: "active" }
+      : undefined,
+  };
+}
 
 /**
  * A simulation with no owner (created before login existed) matches no actor
