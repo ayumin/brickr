@@ -3,6 +3,7 @@ import { z } from "zod";
 import { DomainError } from "../domain-error.js";
 import type { Character } from "./character.js";
 import type { ModelProfile } from "../model-profiles/model-profile.js";
+import { BEHAVIOR_PROFILE_KEYS } from "../simulation/behavior-profiles.js";
 
 const CHARACTER_CSV_COLUMNS = [
   { key: "id", label: "ID" },
@@ -19,6 +20,8 @@ const CHARACTER_CSV_COLUMNS = [
   { key: "replyProbability", label: "返信" },
   { key: "quoteProbability", label: "引用" },
   { key: "influence", label: "影響" },
+  { key: "behaviorProfileKey", label: "行動プロファイル" },
+  { key: "castAutonomous", label: "自律参加" },
   { key: "modelProfileId", label: "モデルプロファイルID" },
   { key: "providerId", label: "プロバイダー" },
   { key: "model", label: "モデル" },
@@ -62,6 +65,13 @@ const importedRowSchema = z.object({
   replyProbability: probability(),
   quoteProbability: probability(),
   influence: probability(),
+  behaviorProfileKey: z
+    .union([z.enum(BEHAVIOR_PROFILE_KEYS), z.literal("").transform(() => null)])
+    .optional(),
+  castAutonomous: z
+    .string()
+    .transform((raw, context) => parseBoolean(raw, context, "自律参加"))
+    .optional(),
   modelProfileId: z.string().trim().min(1).max(64),
   providerId: z.enum(["openai", "anthropic", "gemini", "mock"]),
   model: z.string().trim().min(1).max(200),
@@ -100,6 +110,8 @@ export function exportCharactersCsv(
       character.replyProbability,
       character.quoteProbability,
       character.influence,
+      character.behaviorProfileKey ?? "",
+      (character.castAutonomous ?? true).toString().toUpperCase(),
       character.modelProfileId,
       profile?.providerId ?? "",
       profile?.model ?? "",
@@ -115,8 +127,12 @@ export function parseCharactersCsv(csv: string): ImportedCharacterCsvRow[] {
   if (records.length < 2) throw new CharacterCsvError("CSVにデータ行がありません。");
   const header = records[0] ?? [];
   for (const { key, label } of CHARACTER_CSV_COLUMNS) {
-    // The deletion flag was added later; old exports import as active characters.
-    if (key !== "isDeleted" && !header.includes(label) && !header.includes(key)) {
+    // These columns were added later; old exports remain importable.
+    if (
+      !["isDeleted", "behaviorProfileKey", "castAutonomous"].includes(key) &&
+      !header.includes(label) &&
+      !header.includes(key)
+    ) {
       throw new CharacterCsvError(`CSV列「${label}」がありません。`);
     }
   }
@@ -125,7 +141,7 @@ export function parseCharactersCsv(csv: string): ImportedCharacterCsvRow[] {
     const raw = Object.fromEntries(
       CHARACTER_CSV_COLUMNS.map(({ key, label }) => {
         const column = header.indexOf(label) >= 0 ? header.indexOf(label) : header.indexOf(key);
-        return [key, column >= 0 ? record[column] ?? "" : ""];
+        return [key, column >= 0 ? record[column] ?? "" : undefined];
       }),
     );
     const result = importedRowSchema.safeParse(raw);
@@ -149,6 +165,18 @@ function probability() {
     }
     return value;
   });
+}
+
+function parseBoolean(
+  raw: string,
+  context: z.RefinementCtx,
+  label: string,
+): boolean | typeof z.NEVER {
+  const value = raw.trim().toLowerCase();
+  if (["true", "1", "yes", "有効"].includes(value)) return true;
+  if (["false", "0", "no", "無効"].includes(value)) return false;
+  context.addIssue({ code: "custom", message: `${label}はTRUEまたはFALSEで指定してください` });
+  return z.NEVER;
 }
 
 function csvCell(value: string): string {

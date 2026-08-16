@@ -66,6 +66,8 @@ export function toCharacterConfigDto(
     replyProbability: character.replyProbability,
     quoteProbability: character.quoteProbability,
     influence: character.influence,
+    behaviorProfileKey: character.behaviorProfileKey ?? null,
+    castAutonomous: character.castAutonomous ?? true,
     modelProfileId: character.modelProfileId,
     ...(ownerVisible && character.createdByUserId
       ? { createdByUserId: character.createdByUserId }

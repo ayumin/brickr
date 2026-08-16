@@ -374,6 +374,8 @@ function toSaveCharacter(input: SaveCharacterRequest): SaveCharacter {
     replyProbability: input.replyProbability,
     quoteProbability: input.quoteProbability,
     influence: input.influence,
+    behaviorProfileKey: input.behaviorProfileKey ?? null,
+    castAutonomous: input.castAutonomous ?? true,
     modelProfileId: input.modelProfileId,
     ...(input.avatarUrl ? { avatarUrl: input.avatarUrl } : {}),
   };

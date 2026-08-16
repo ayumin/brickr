@@ -120,6 +120,14 @@ export class CharacterCsvService {
           replyProbability: row.replyProbability,
           quoteProbability: row.quoteProbability,
           influence: row.influence,
+          behaviorProfileKey:
+            row.behaviorProfileKey !== undefined
+              ? row.behaviorProfileKey
+              : existing?.behaviorProfileKey ?? null,
+          castAutonomous:
+            row.castAutonomous !== undefined
+              ? row.castAutonomous
+              : existing?.castAutonomous ?? true,
           modelProfileId: row.modelProfileId,
           ...(row.avatarUrl ? { avatarUrl: row.avatarUrl } : {}),
         },

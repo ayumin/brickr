@@ -113,6 +113,8 @@ function csvRow(fields: {
     "0.5",
     "0.5",
     "0.5",
+    "casual",
+    "TRUE",
     fields.modelProfileId ?? PROFILE.id,
     fields.providerId ?? PROFILE.providerId,
     fields.model ?? PROFILE.model,
@@ -130,14 +132,43 @@ function buildCsv(rows: string[][]): string {
 
 describe("CharacterCsvService.importCsv", () => {
   it("round-trips an exported CSV back through import as an update", async () => {
-    const existing = makeCharacter("char-1", "existing1");
-    const { service } = makeService({ characters: [existing], profiles: [PROFILE] });
+    const existing = makeCharacter("char-1", "existing1", {
+      behaviorProfileKey: "night_owl",
+      castAutonomous: false,
+    });
+    const { service, importManyCalls } = makeService({ characters: [existing], profiles: [PROFILE] });
     const csv = exportCharactersCsv([existing], new Map([[PROFILE.id, PROFILE]]), new Map());
 
     await expect(service.importCsv(csv, ADMIN)).resolves.toEqual({
       importedCount: 1,
       createdCount: 0,
       updatedCount: 1,
+    });
+    expect(importManyCalls[0]?.[0]?.input).toMatchObject({
+      behaviorProfileKey: "night_owl",
+      castAutonomous: false,
+    });
+  });
+
+  it("preserves behavior settings when importing a legacy CSV without the new columns", async () => {
+    const existing = makeCharacter("char-1", "existing1", {
+      behaviorProfileKey: "thoughtful",
+      castAutonomous: false,
+    });
+    const { service, importManyCalls } = makeService({ characters: [existing] });
+    const newHeaders = new Set(["行動プロファイル", "自律参加"]);
+    const csv = exportCharactersCsv([existing], new Map([[PROFILE.id, PROFILE]]), new Map());
+    const [headerLine, dataLine] = csv.split("\r\n");
+    const headers = headerLine!.replace(/^\uFEFF/u, "").split(",");
+    const values = dataLine!.split(",");
+    const keptIndexes = headers.flatMap((header, index) => newHeaders.has(header) ? [] : [index]);
+    const legacyCsv = `\uFEFF${keptIndexes.map((index) => headers[index]).join(",")}\r\n${keptIndexes.map((index) => values[index]).join(",")}`;
+
+    await service.importCsv(legacyCsv, ADMIN);
+
+    expect(importManyCalls[0]?.[0]?.input).toMatchObject({
+      behaviorProfileKey: "thoughtful",
+      castAutonomous: false,
     });
   });
 
