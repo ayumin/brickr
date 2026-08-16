@@ -31,7 +31,7 @@ function makeDb(parents: Record<string, string> = {}) {
 
 function newPost(overrides: Partial<NewPost> & { id: string }): NewPost {
   return {
-    simulationId: "sim-1",
+    roomId: "sim-1",
     authorId: "user-1",
     content: "content",
     mentions: [],

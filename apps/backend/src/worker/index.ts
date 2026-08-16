@@ -34,6 +34,7 @@ import { PostService } from "../posts/post-service.js";
 import { ThreadService } from "../posts/thread-service.js";
 import { ScheduledEventRepository } from "../scheduled-events/scheduled-event-repository.js";
 import type { ScheduledEvent } from "../scheduled-events/scheduled-event.js";
+import { RoomMembershipRepository } from "../simulation/room-membership-repository.js";
 import { SimulationRepository } from "../simulation/simulation-repository.js";
 import { UserProfileRepository } from "../user-profile/user-profile-repository.js";
 import { RuntimeSettings } from "../settings/runtime-settings.js";
@@ -67,6 +68,7 @@ const modelProfileRepository = new ModelProfileRepository(prisma);
 const userProfileRepository = new UserProfileRepository(prisma);
 const postRepo = new PostRepository(prisma);
 const simulationRepository = new SimulationRepository(prisma);
+const roomMembershipRepository = new RoomMembershipRepository(prisma);
 const scheduledEventRepository = new ScheduledEventRepository(prisma);
 
 const runtime = new RuntimeSettings();
@@ -96,9 +98,12 @@ const threadService = new ThreadService(
 const processorDeps = {
   simulations: simulationRepository,
   characters: characterRepository,
+  memberships: roomMembershipRepository,
   posts: postService,
   threads: threadService,
   agents: agentService,
+  llm: llmClient,
+  providers: providerRegistry,
   logger,
 };
 

@@ -17,6 +17,8 @@ export type Simulation = {
   /** Internal only (§8.1). `"global"` marks the reserved row behind the feed. */
   scope: SimulationScope;
   visibility: RoomVisibility;
+  /** Free-form discovery tags used to match autonomous Cast interests. */
+  tags: string[];
   createdAt: Date;
   /** Newest activity anywhere in the simulation, used to order rooms (§8.1). */
   lastActivityAt: Date;

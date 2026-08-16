@@ -161,7 +161,7 @@ function makeServices(): AppServices {
     },
     posts: {
       toDto: () => Promise.resolve({ id: "p1" }),
-      listBySimulation: () => Promise.resolve([]),
+      listByRoom: () => Promise.resolve([]),
     },
     feed: {
       findVisiblePost: () => Promise.resolve({ id: "p1" }),

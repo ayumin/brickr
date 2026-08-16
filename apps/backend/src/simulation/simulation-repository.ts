@@ -10,6 +10,7 @@ type SimulationRow = {
   status: string;
   scope: string;
   visibility: string;
+  tags: string[];
   createdAt: Date;
   lastActivityAt: Date;
   createdByUserId: string | null;
@@ -37,6 +38,7 @@ function toSimulation(row: SimulationRow): Simulation {
     status: toSimulationStatus(row.status),
     scope: toSimulationScope(row.scope),
     visibility: toSimulationVisibility(row.visibility),
+    tags: row.tags,
     createdAt: row.createdAt,
     lastActivityAt: row.lastActivityAt,
     ...optionalField("createdByUserId", row.createdByUserId),

@@ -47,6 +47,7 @@ describe("SimulationRepository.findAllVisibleTo", () => {
         status: "active",
         scope: "room",
         visibility: "public",
+        tags: ["history"],
         createdAt,
         updatedAt: createdAt,
         lastActivityAt,
@@ -212,6 +213,7 @@ describe("SimulationRepository.findAllVisibleTo", () => {
       makeRoomRow({
         id: "simulation-2",
         title: null,
+        tags: [],
         createdAt,
         lastActivityAt: createdAt,
         createdByUserId: null,
@@ -233,6 +235,7 @@ describe("SimulationRepository.findAllVisibleTo", () => {
       makeRoomRow({
         id: "simulation-3",
         title: "旧アカウント",
+        tags: [],
         createdAt,
         lastActivityAt: createdAt,
         createdByUserId: "0191d3f0-0000-4000-8000-000000000abc",

@@ -11,6 +11,7 @@ import {
   isReservedHandle,
 } from "@brickr/shared";
 import { z } from "zod";
+import { PROVIDER_IDS } from "../llm/provider.js";
 import { BEHAVIOR_PROFILE_KEYS } from "../simulation/behavior-profiles.js";
 
 /**
@@ -21,6 +22,15 @@ import { BEHAVIOR_PROFILE_KEYS } from "../simulation/behavior-profiles.js";
  */
 
 const id = z.string().trim().min(1).max(64);
+
+export const llmBudgetProviderParams = z.object({
+  provider: z.enum(PROVIDER_IDS),
+});
+
+export const setBudgetLimitSchema = z.object({
+  /** Token ceiling. 0 removes the limit without resetting usage. */
+  tokenLimit: z.number().int().min(0),
+});
 
 export const createSimulationSchema = z.object({
   title: z.string().trim().min(1).max(120).optional(),

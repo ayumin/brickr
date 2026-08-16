@@ -14,7 +14,7 @@ export type ThreadRepairInput = {
    */
   detachedRootIds: string[];
   /** Room ids whose `lastActivityAt` must be recalculated after the delete. */
-  simulationIds: string[];
+  roomIds: string[];
 };
 
 /**
@@ -56,8 +56,8 @@ export async function repairThreads(tx: DbTransaction, input: ThreadRepairInput)
     await dateRootFromSubtree(tx, rootId, await collectSubtree(tx, rootId));
   }
 
-  for (const simulationId of input.simulationIds) {
-    await recalculateSimulationActivity(tx, simulationId);
+  for (const roomId of input.roomIds) {
+    await recalculateSimulationActivity(tx, roomId);
   }
 }
 
@@ -116,29 +116,29 @@ async function collectSubtree(tx: DbTransaction, rootId: string): Promise<string
  */
 async function recalculateSimulationActivity(
   tx: DbTransaction,
-  simulationId: string,
+  roomId: string,
 ): Promise<void> {
   const newest = await tx.post.aggregate({
-    where: { roomId: simulationId, replyTo: null },
+    where: { roomId, replyTo: null },
     _max: { threadActivityAt: true },
   });
 
   if (newest._max.threadActivityAt) {
     await tx.room.update({
-      where: { id: simulationId },
+      where: { id: roomId },
       data: { lastActivityAt: newest._max.threadActivityAt },
     });
     return;
   }
 
   const room = await tx.room.findUnique({
-    where: { id: simulationId },
+    where: { id: roomId },
     select: { createdAt: true },
   });
   if (!room) return;
 
   await tx.room.update({
-    where: { id: simulationId },
+    where: { id: roomId },
     data: { lastActivityAt: room.createdAt },
   });
 }

@@ -15,6 +15,7 @@ export const API_ERROR_CODES = [
   "invalid_params",
   "invalid_query",
   "invalid_setting",
+  "invalid_budget",
   // Room authorization producers are introduced by follow-up issues #151/#152.
   "membership_required",
   "not_found",

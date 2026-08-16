@@ -22,7 +22,7 @@ const taro: UserProfile = {
 function post(overrides: Partial<Post> = {}): Post {
   return {
     id: "post-1",
-    simulationId: "sim-1",
+    roomId: "sim-1",
     authorId: "user-1",
     content: "hello",
     mentions: [],
