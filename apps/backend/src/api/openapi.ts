@@ -3,7 +3,9 @@ import swaggerUi from "@fastify/swagger-ui";
 import { EDITABLE_APPLICATION_SETTING_NAMES } from "@brickr/shared";
 import type { FastifyInstance } from "fastify";
 import type { OpenAPIV3 } from "openapi-types";
+import { registeredRoutes } from "./define-route.js";
 import { propertySchema, requestSchema } from "./openapi-schemas.js";
+import "./routes.js";
 import {
   bulkCreateCharactersSchema,
   bulkDeleteCharactersSchema,
@@ -1809,6 +1811,27 @@ export const openApiDocument: OpenAPIV3.Document = {
     },
   },
 };
+
+type OpenApiMethod = "get" | "post" | "put" | "delete";
+
+/**
+ * Add operations declared through `defineRoute` to the document served by
+ * Swagger. Importing `routes.ts` above loads every route module first, so this
+ * is assembled from the same registered operation objects as the handlers.
+ */
+function addRegisteredRoutes(document: OpenAPIV3.Document): void {
+  for (const route of registeredRoutes) {
+    const method = route.method.toLowerCase() as OpenApiMethod;
+    const pathItem = document.paths[route.openApiPath] ?? {};
+    if (pathItem[method]) {
+      throw new Error(`duplicate OpenAPI operation: ${route.method} ${route.openApiPath}`);
+    }
+    pathItem[method] = route.operation;
+    document.paths[route.openApiPath] = pathItem;
+  }
+}
+
+addRegisteredRoutes(openApiDocument);
 
 export async function registerOpenApi(app: FastifyInstance): Promise<void> {
   await app.register(swagger, {
