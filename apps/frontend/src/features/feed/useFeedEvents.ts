@@ -3,6 +3,7 @@ import type { Dispatch } from "react";
 import type { SseEvent, ThreadFeedSource } from "@brickr/shared";
 
 import { subscribeToFeedEvents, subscribeToSimulationEvents } from "../../services/sse-client";
+import { createRefreshScheduler } from "../../services/sse-refresh";
 import type { FeedAction } from "./feed-reducer";
 
 /**
@@ -25,6 +26,7 @@ export function useFeedEvents(
     }
 
     dispatch({ kind: "connection", connection: "connecting" });
+    const refreshScheduler = createRefreshScheduler(onInvalidate);
 
     // A room-scoped feed accepts only notifications for its room. The all-room
     // feed accepts every notification delivered by its visibility-filtered stream.
@@ -35,7 +37,7 @@ export function useFeedEvents(
       switch (event.type) {
         case "post.created":
           if (event.roomId === null || !matchesScope(event.roomId)) return;
-          onInvalidate();
+          refreshScheduler.schedule();
           break;
         case "response.started":
           if (event.roomId === null) return;
@@ -65,6 +67,9 @@ export function useFeedEvents(
     const subscription =
       roomId !== null ? subscribeToSimulationEvents(roomId, handlers) : subscribeToFeedEvents(handlers);
 
-    return () => subscription.close();
+    return () => {
+      refreshScheduler.cancel();
+      subscription.close();
+    };
   }, [roomId, dispatch, enabled, onInvalidate]);
 }

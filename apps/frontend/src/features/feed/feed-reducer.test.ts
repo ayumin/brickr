@@ -48,13 +48,17 @@ function ids(state: FeedState): string[] {
 const threadA = thread("thread-a", "2026-08-13T10:00:00.000Z");
 const threadB = thread("thread-b", "2026-08-13T10:01:00.000Z");
 const threadC = thread("thread-c", "2026-08-13T10:02:00.000Z");
+const threadD = thread("thread-d", "2026-08-13T10:03:00.000Z");
 
 describe("feed reducer: initial page and load more (§13.4)", () => {
   it("replaces existing state on an initial page load", () => {
     const seeded = apply([{ kind: "initialLoaded", page: { threads: [threadA], nextCursor: null } }]);
 
     const state = apply(
-      [{ kind: "initialLoaded", page: { threads: [threadB, threadC], nextCursor: "cursor-1" } }],
+      [
+        { kind: "initialLoadStarted" },
+        { kind: "initialLoaded", page: { threads: [threadB, threadC], nextCursor: "cursor-1" } },
+      ],
       seeded,
     );
 
@@ -83,6 +87,37 @@ describe("feed reducer: initial page and load more (§13.4)", () => {
     expect(ids(state)).toEqual(["thread-c", "thread-b", "thread-a"]);
     expect(state.nextCursor).toBeNull();
     expect(state.loadingMore).toBe(false);
+  });
+
+  it("refreshes the newest page without discarding loaded pages or their cursor", () => {
+    const seeded = apply([
+      { kind: "initialLoaded", page: { threads: [threadC, threadB], nextCursor: "cursor-1" } },
+      { kind: "loadMoreLoaded", page: { threads: [threadA], nextCursor: null } },
+    ]);
+    const bumpedC = thread("thread-c", "2026-08-13T10:04:00.000Z");
+
+    const state = apply(
+      [{ kind: "refreshed", page: { threads: [bumpedC, threadD], nextCursor: "ignored" } }],
+      seeded,
+    );
+
+    expect(ids(state)).toEqual(["thread-c", "thread-d", "thread-b", "thread-a"]);
+    expect(state.byId.get("thread-a")).toBe(threadA);
+    expect(state.nextCursor).toBeNull();
+  });
+
+  it("does not let an older initial response overwrite a completed live refresh", () => {
+    const refreshed = apply([
+      { kind: "refreshed", page: { threads: [threadD], nextCursor: null } },
+    ]);
+
+    const state = apply(
+      [{ kind: "initialLoaded", page: { threads: [threadA], nextCursor: "stale" } }],
+      refreshed,
+    );
+
+    expect(ids(state)).toEqual(["thread-d"]);
+    expect(state.nextCursor).toBeNull();
   });
 });
 

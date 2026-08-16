@@ -3,6 +3,7 @@ import type { FeedThreadDto, PostDto, SseEvent } from "@brickr/shared";
 
 import { api, isAbortError, toErrorMessage } from "../../services/api-client";
 import { subscribeToSimulationEvents } from "../../services/sse-client";
+import { createRefreshScheduler } from "../../services/sse-refresh";
 import type { ConnectionState, ResponseActivity } from "../../types";
 import {
   INITIAL_SIMULATION_EVENT_STATE,
@@ -48,9 +49,10 @@ export function useSimulationEvents(
     }
 
     let cancelled = false;
-    const controller = new AbortController();
-
     dispatch({ kind: "connection", connection: "connecting" });
+    const refreshScheduler = createRefreshScheduler(() => {
+      setReloadToken((value) => value + 1);
+    });
 
     const handleEvent = (event: SseEvent): void => {
       if (cancelled) return;
@@ -58,7 +60,7 @@ export function useSimulationEvents(
       switch (event.type) {
         case "post.created": {
           if (event.roomId !== simulationId) return;
-          setReloadToken((value) => value + 1);
+          refreshScheduler.schedule();
           break;
         }
         case "response.started":
@@ -81,8 +83,6 @@ export function useSimulationEvents(
       }
     };
 
-    // Subscribe BEFORE the REST fetch so posts generated while the history
-    // request is in flight are kept (mergePosts dedupes them by id).
     const subscription = subscribeToSimulationEvents(simulationId, {
       onEvent: handleEvent,
       onOpen: () => {
@@ -96,6 +96,19 @@ export function useSimulationEvents(
         }
       },
     });
+
+    return () => {
+      cancelled = true;
+      refreshScheduler.cancel();
+      subscription.close();
+    };
+  }, [simulationId, enabled]);
+
+  useEffect(() => {
+    if (!enabled) return;
+
+    let cancelled = false;
+    const controller = new AbortController();
 
     void api
       .getPosts(simulationId, controller.signal)
@@ -114,7 +127,6 @@ export function useSimulationEvents(
     return () => {
       cancelled = true;
       controller.abort();
-      subscription.close();
     };
   }, [simulationId, reloadToken, enabled]);
 
