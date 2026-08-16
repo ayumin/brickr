@@ -42,7 +42,7 @@ export type FeedPostCreatedEvent = {
 export type ResponseStartedEvent = {
   type: "response.started";
   activityId: string;
-  simulationId: string;
+  roomId: string;
   targetPostId: string;
   threadRootId: string;
 };
@@ -51,7 +51,7 @@ export type ResponseStartedEvent = {
 export type ResponseFinishedEvent = {
   type: "response.finished";
   activityId: string;
-  simulationId: string;
+  roomId: string;
   targetPostId: string;
   threadRootId: string;
   outcome: ResponseOutcome;

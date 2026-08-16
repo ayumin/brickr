@@ -24,7 +24,7 @@ export type QuotedPostDto = {
 
 export type PostDto = {
   id: string;
-  simulationId: string;
+  roomId: string;
   /**
    * No sibling `authorId`: the id lives on `author` alone, so "is this mine?" is
    * always `post.author.id === sessionUser.id` (§9.1).

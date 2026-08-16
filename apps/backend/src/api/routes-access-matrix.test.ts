@@ -69,6 +69,7 @@ function room(id: string, overrides: Partial<Simulation> = {}): Simulation {
     title: id,
     status: "active",
     scope: "room",
+    visibility: "public",
     createdAt: NOW,
     lastActivityAt: NOW,
     createdByUserId: ROOM_OWNER.id,
@@ -86,6 +87,7 @@ const FEED_ROOM: Simulation = {
   title: "フィード",
   status: "active",
   scope: "global",
+  visibility: "public",
   createdAt: NOW,
   lastActivityAt: NOW,
 };
@@ -169,7 +171,7 @@ function makeServices(): { services: AppServices; listedFor: string[] } {
       Promise.resolve(
         POSTS.filter((p) => p.simulationId === simulationId).map((p) => ({ id: p.id })),
       ),
-    toDto: (p: Post) => Promise.resolve({ id: p.id, simulationId: p.simulationId }),
+    toDto: (p: Post) => Promise.resolve({ id: p.id, roomId: p.simulationId }),
     toDtos: (list: Post[]) => Promise.resolve(list.map((p) => ({ id: p.id }))),
   } as unknown as PostService;
 

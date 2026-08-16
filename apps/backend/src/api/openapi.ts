@@ -1707,7 +1707,7 @@ export const openApiDocument: OpenAPIV3.Document = {
         type: "object",
         required: [
           "id",
-          "simulationId",
+          "roomId",
           "author",
           "content",
           "mentions",
@@ -1718,7 +1718,7 @@ export const openApiDocument: OpenAPIV3.Document = {
         ],
         properties: {
           id: { type: "string" },
-          simulationId: { type: "string" },
+          roomId: { type: "string" },
           author: ref("PostAuthor"),
           content: { type: "string" },
           imageUrl: ref("PostImageUrl"),

@@ -26,7 +26,7 @@ export type ConnectionState = "connecting" | "open" | "reconnecting" | "disconne
  * What the composer dialog is posting to (Brickr-ux-refine §17.1).
  *
  * `simulationId` is the actual write destination and is always present, even
- * for `reply`/`quote` where it duplicates `post.simulationId` — the point is
+ * for `reply`/`quote` where it duplicates `post.roomId` — the point is
  * that a reply or quote always targets the post's own room, never wherever
  * the reader happened to be looking (the unified feed, in particular, has no
  * simulation of its own to reply into).

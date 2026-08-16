@@ -23,7 +23,7 @@ function post(
 ): PostDto {
   return {
     id,
-    simulationId: "simulation-1",
+    roomId: "simulation-1",
     author: overrides.author ?? { id: "user-1", handle: "hanako", displayName: "花子" },
     content: `${id} content`,
     mentions: [],
@@ -109,6 +109,7 @@ describe("SimulationAnalysisService.analyze ownership (§66.6)", () => {
     title: null,
     status: "active",
     scope: "room",
+    visibility: "public",
     createdAt: new Date("2026-08-10T00:00:00Z"),
     lastActivityAt: new Date("2026-08-10T00:00:00Z"),
     createdByUserId: "user-1",
@@ -173,6 +174,7 @@ describe("SimulationAnalysisService.analyze global feed protection (§8.2)", () 
       title: null,
       status: "active",
       scope: "global",
+      visibility: "public",
       createdAt: new Date("2026-08-10T00:00:00Z"),
       lastActivityAt: new Date("2026-08-10T00:00:00Z"),
     };

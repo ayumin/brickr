@@ -47,7 +47,7 @@ export function FeedThreadCard({
     <div data-thread-id={root.id}>
       <div className="px-4 pt-2.5 text-xs text-ink-faint">
         {actions.root.canOpenRoom ? (
-          <Link to={roomPath(root.simulationId)} className="hover:underline">
+          <Link to={roomPath(root.roomId)} className="hover:underline">
             {room.title}
           </Link>
         ) : (

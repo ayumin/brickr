@@ -31,6 +31,7 @@ const SIMULATION: Simulation = {
   title: "test",
   status: "active",
   scope: "room",
+  visibility: "public",
   createdAt: new Date("2026-01-01T00:00:00Z"),
   lastActivityAt: new Date("2026-01-01T00:00:00Z"),
   createdByUserId: USER_AUTHOR_ID,
@@ -118,7 +119,7 @@ function makeHarness(options: HarnessOptions): Harness {
     const character = authorById.get(post.authorId);
     return {
       id: post.id,
-      simulationId: post.simulationId,
+      roomId: post.simulationId,
       // One shape for both: nothing in a public post says whether its author is
       // a person or a character (§9.1).
       author:
@@ -730,6 +731,7 @@ describe("SimulationService global feed protection (§8.2)", () => {
     title: "フィード",
     status: "active",
     scope: "global",
+    visibility: "public",
     createdAt: new Date("2026-01-01T00:00:00Z"),
     lastActivityAt: new Date("2026-01-01T00:00:00Z"),
   };

@@ -65,7 +65,7 @@ export function PostDetailScreen({ postId }: { postId: string }) {
     if (state.status === "denied") navigate("/", { replace: true });
   }, [state.status, navigate]);
 
-  const simulationId = state.status === "ready" ? state.post.simulationId : null;
+  const simulationId = state.status === "ready" ? state.post.roomId : null;
 
   const userProfile = useUserProfile();
   const events = useSimulationEvents(simulationId ?? "", simulationId !== null);

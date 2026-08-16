@@ -6,7 +6,7 @@ import { INITIAL_FEED_STATE, reduceFeed, type FeedAction, type FeedState } from 
 function post(id: string, overrides: Partial<PostDto> = {}): PostDto {
   return {
     id,
-    simulationId: "room-1",
+    roomId: "room-1",
     author: { id: "author-1", handle: "author_1", displayName: "著者" },
     content: id,
     mentions: [],

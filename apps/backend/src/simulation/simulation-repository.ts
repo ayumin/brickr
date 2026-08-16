@@ -1,4 +1,4 @@
-import type { SimulationScope, SimulationStatus } from "@brickr/shared";
+import type { RoomVisibility, SimulationScope, SimulationStatus } from "@brickr/shared";
 import type { Db } from "../persistence/prisma.js";
 import { optionalField } from "../persistence/repository-mapping.js";
 import { toFallbackHandle } from "../user-profile/user-profile-repository.js";
@@ -9,6 +9,7 @@ type SimulationRow = {
   title: string | null;
   status: string;
   scope: string;
+  visibility: string;
   createdAt: Date;
   lastActivityAt: Date;
   createdByUserId: string | null;
@@ -24,12 +25,18 @@ export function toSimulationScope(value: string): SimulationScope {
   return value as SimulationScope;
 }
 
+/** The database column is an unconstrained string; this is the one place that trusts it. */
+export function toSimulationVisibility(value: string): RoomVisibility {
+  return value as RoomVisibility;
+}
+
 function toSimulation(row: SimulationRow): Simulation {
   return {
     id: row.id,
     title: row.title,
     status: toSimulationStatus(row.status),
     scope: toSimulationScope(row.scope),
+    visibility: toSimulationVisibility(row.visibility),
     createdAt: row.createdAt,
     lastActivityAt: row.lastActivityAt,
     ...optionalField("createdByUserId", row.createdByUserId),
@@ -77,6 +84,7 @@ export class SimulationRepository {
         title,
         status: "active",
         scope: "room",
+        visibility: "public",
         createdByUserId,
         createdAt,
         lastActivityAt: createdAt,
