@@ -169,7 +169,7 @@ function makeServices(): { services: AppServices; listedFor: string[] } {
       Promise.resolve(
         POSTS.filter((p) => p.simulationId === simulationId).map((p) => ({ id: p.id })),
       ),
-    toDto: (p: Post) => Promise.resolve({ id: p.id, simulationId: p.simulationId }),
+    toDto: (p: Post) => Promise.resolve({ id: p.id, roomId: p.simulationId }),
     toDtos: (list: Post[]) => Promise.resolve(list.map((p) => ({ id: p.id }))),
   } as unknown as PostService;
 

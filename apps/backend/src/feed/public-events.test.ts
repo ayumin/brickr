@@ -18,7 +18,7 @@ const READER: NonNullable<FeedReader> = { id: "reader-1", isAdmin: false, handle
 function post(id: string): PostDto {
   return {
     id,
-    simulationId: ROOM.id,
+    roomId: ROOM.id,
     author: { id: "author-1", handle: "author_1", displayName: "著者" },
     content: "本文",
     mentions: [],
@@ -135,7 +135,7 @@ describe("toPublicEvent response activity (§11.2)", () => {
     expect(toPublicEvent(started, READER)).toEqual({
       type: "response.started",
       activityId: "activity-1",
-      simulationId: ROOM.id,
+      roomId: ROOM.id,
       targetPostId: "root-1",
       threadRootId: "root-1",
     });
@@ -150,7 +150,7 @@ describe("toPublicEvent response activity (§11.2)", () => {
     expect(finished).toEqual({
       type: "response.finished",
       activityId: "activity-1",
-      simulationId: ROOM.id,
+      roomId: ROOM.id,
       targetPostId: "root-1",
       threadRootId: "root-1",
       outcome: "failed",

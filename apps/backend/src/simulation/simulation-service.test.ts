@@ -118,7 +118,7 @@ function makeHarness(options: HarnessOptions): Harness {
     const character = authorById.get(post.authorId);
     return {
       id: post.id,
-      simulationId: post.simulationId,
+      roomId: post.simulationId,
       // One shape for both: nothing in a public post says whether its author is
       // a person or a character (§9.1).
       author:

@@ -11,7 +11,7 @@ import {
 function makePost(overrides: Partial<PostDto> = {}): PostDto {
   return {
     id: "post-1",
-    simulationId: "sim-1",
+    roomId: "sim-1",
     author: { id: "author-1", handle: "architect", displayName: "Architect", avatarUrl: undefined },
     content: "hello",
     mentions: [],
@@ -47,8 +47,8 @@ describe("appendMentionOnce", () => {
 });
 
 describe("composerContextForReply / composerContextForQuote", () => {
-  it("targets the post's own simulation, not wherever the reader is", () => {
-    const post = makePost({ simulationId: "room-42" });
+  it("targets the post's own room, not wherever the reader is", () => {
+    const post = makePost({ roomId: "room-42" });
     expect(composerContextForReply(post)).toEqual({ mode: "reply", simulationId: "room-42", post });
     expect(composerContextForQuote(post)).toEqual({ mode: "quote", simulationId: "room-42", post });
   });

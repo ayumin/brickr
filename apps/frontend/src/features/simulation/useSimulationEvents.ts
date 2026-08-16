@@ -60,7 +60,7 @@ export function useSimulationEvents(
           // The event carries the whole thread (§11.3). This screen shows a flat
           // timeline, so it takes the posts and lets the server keep owning the
           // counts and capabilities.
-          if (event.thread.root.simulationId !== simulationId) return;
+          if (event.thread.root.roomId !== simulationId) return;
           dispatch({
             kind: "upsertPosts",
             posts: [event.thread.root, ...event.thread.latestReplies],
@@ -68,14 +68,14 @@ export function useSimulationEvents(
           break;
         }
         case "response.started":
-          if (event.simulationId !== simulationId) return;
+          if (event.roomId !== simulationId) return;
           dispatch({
             kind: "responseStarted",
             activity: { activityId: event.activityId, targetPostId: event.targetPostId },
           });
           break;
         case "response.finished":
-          if (event.simulationId !== simulationId) return;
+          if (event.roomId !== simulationId) return;
           dispatch({
             kind: "responseFinished",
             activityId: event.activityId,

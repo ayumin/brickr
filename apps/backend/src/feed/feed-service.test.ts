@@ -158,7 +158,7 @@ function makeHarness(input: { posts: Post[]; rooms?: FeedRoom[] }) {
 function toDto(entry: Post): PostDto {
   return {
     id: entry.id,
-    simulationId: entry.simulationId,
+    roomId: entry.simulationId,
     author: { id: entry.authorId, handle: entry.authorId, displayName: entry.authorId },
     content: entry.content,
     mentions: entry.mentions,

@@ -22,11 +22,11 @@ export function appendMentionOnce(content: string, handle: string): string {
  * simulation of its own to post into.
  */
 export function composerContextForReply(post: PostDto): ComposerContext {
-  return { mode: "reply", simulationId: post.simulationId, post };
+  return { mode: "reply", simulationId: post.roomId, post };
 }
 
 export function composerContextForQuote(post: PostDto): ComposerContext {
-  return { mode: "quote", simulationId: post.simulationId, post };
+  return { mode: "quote", simulationId: post.roomId, post };
 }
 
 /** The composer dialog's header title (§17.2), one per mode. */

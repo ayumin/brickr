@@ -63,7 +63,7 @@ export function toPublicEvent(event: InternalSseEvent, reader: FeedReader): SseE
       return {
         type: "response.started",
         activityId: event.activityId,
-        simulationId: event.simulationId,
+        roomId: event.simulationId,
         targetPostId: event.targetPostId,
         threadRootId: event.threadRootId,
       };
@@ -72,7 +72,7 @@ export function toPublicEvent(event: InternalSseEvent, reader: FeedReader): SseE
       return {
         type: "response.finished",
         activityId: event.activityId,
-        simulationId: event.simulationId,
+        roomId: event.simulationId,
         targetPostId: event.targetPostId,
         threadRootId: event.threadRootId,
         outcome: event.outcome,

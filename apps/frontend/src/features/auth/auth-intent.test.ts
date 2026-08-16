@@ -18,7 +18,7 @@ describe("composerContextLandingPath", () => {
   it("lands on the target post's room for a reply, not the feed", () => {
     const post = {
       id: "p1",
-      simulationId: "room-2",
+      roomId: "room-2",
       author: { id: "a", handle: "architect", displayName: "Architect" },
       content: "hi",
       mentions: [],

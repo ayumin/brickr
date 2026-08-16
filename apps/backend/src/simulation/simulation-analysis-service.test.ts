@@ -23,7 +23,7 @@ function post(
 ): PostDto {
   return {
     id,
-    simulationId: "simulation-1",
+    roomId: "simulation-1",
     author: overrides.author ?? { id: "user-1", handle: "hanako", displayName: "花子" },
     content: `${id} content`,
     mentions: [],

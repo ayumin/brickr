@@ -38,15 +38,15 @@ export function useFeedEvents(
     const handleEvent = (event: SseEvent): void => {
       switch (event.type) {
         case "feed.post-created":
-          if (!matchesScope(event.thread.root.simulationId)) return;
+          if (!matchesScope(event.thread.root.roomId)) return;
           dispatch({ kind: "upsertThread", thread: event.thread, filter });
           break;
         case "response.started":
-          if (!matchesScope(event.simulationId)) return;
+          if (!matchesScope(event.roomId)) return;
           dispatch({ kind: "responseStarted", activityId: event.activityId });
           break;
         case "response.finished":
-          if (!matchesScope(event.simulationId)) return;
+          if (!matchesScope(event.roomId)) return;
           dispatch({
             kind: "responseFinished",
             activityId: event.activityId,

@@ -53,7 +53,7 @@ function makePost(
   const quoteOf = overrides.quoteOf ?? null;
   return {
     id,
-    simulationId: "sim_1",
+    roomId: "sim_1",
     author,
     content: overrides.content ?? `post ${id}`,
     mentions: overrides.mentions ?? [],
@@ -413,7 +413,7 @@ function makeThread(
 ): FeedThreadDto {
   return {
     root,
-    room: { id: root.simulationId, title: "ルーム", isFeed: false },
+    room: { id: root.roomId, title: "ルーム", isFeed: false },
     latestReplies,
     replyCount: overrides.replyCount ?? latestReplies.length,
     lastActivityAt: root.createdAt,
