@@ -72,6 +72,7 @@ function makeDb(options: {
       findMany: vi.fn(() =>
         Promise.resolve(options.visibleRooms ?? [{ id: "room-1" }]),
       ),
+      findFirst: vi.fn<() => Promise<{ id: string } | null>>(() => Promise.resolve(null)),
     },
     // Typed with the parts of a Prisma statement the assertions below read.
     $queryRaw: vi.fn((_statement: { sql: string; values: unknown[] }) =>
@@ -243,6 +244,40 @@ describe("FeedRepository.findVisibleRoomIds (§10.1)", () => {
     const ids = await new FeedRepository(db).findVisibleRoomIds("user-1");
 
     expect(ids).toEqual(["room-a", "room-b"]);
+  });
+
+  it("returns every room for an administrator without applying visibility filters", async () => {
+    const { db, spies } = makeDb({ visibleRooms: [{ id: "room-private" }] });
+
+    const ids = await new FeedRepository(db).findVisibleRoomIds("admin-1", true);
+
+    expect(spies.room.findMany).toHaveBeenCalledWith({ select: { id: true } });
+    expect(ids).toEqual(["room-private"]);
+  });
+});
+
+describe("FeedRepository.hasActiveRoomMembership", () => {
+  it("checks one room and one user's active membership", async () => {
+    const { db, spies } = makeDb();
+    spies.room.findFirst.mockResolvedValueOnce({ id: "room-closed" });
+
+    await expect(
+      new FeedRepository(db).hasActiveRoomMembership("room-closed", "user-1"),
+    ).resolves.toBe(true);
+
+    expect(spies.room.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: "room-closed",
+        memberships: {
+          some: {
+            memberId: "user-1",
+            memberKind: "user",
+            status: "active",
+          },
+        },
+      },
+      select: { id: true },
+    });
   });
 });
 

@@ -102,6 +102,7 @@ export class FeedService {
   async getUnifiedFeed(request: FeedPageRequest): Promise<FeedPageDto> {
     const visibleRoomIds = await this.feed.findVisibleRoomIds(
       request.reader ? request.reader.id : null,
+      request.reader?.isAdmin ?? false,
     );
     return this.buildPage(request, { visibleRoomIds });
   }
@@ -143,12 +144,17 @@ export class FeedService {
     if (!simulation) throw new SimulationNotFoundError(simulationId);
     assertRoomReadable(simulation, reader);
 
-    // For active rooms, enforce closed/private visibility using the membership
-    // snapshot from the feed's visible-room query. We resolve the reader's
-    // membership for this specific room to apply the authorization matrix.
-    if (simulation.status === "active" && !isGlobalSimulation(simulation)) {
-      const visibleIds = await this.feed.findVisibleRoomIds(reader.id);
-      if (!visibleIds.includes(simulationId)) {
+    // Public/open rooms are readable without a membership. Owners and admins
+    // retain the same bypass used by the rest of the room authorization flow.
+    // For closed/private rooms, query only this room's membership instead of
+    // materialising every room visible to the reader.
+    if (
+      simulation.status === "active" &&
+      (simulation.visibility === "closed" || simulation.visibility === "private") &&
+      !isSimulationOwnerOrAdmin(simulation, reader)
+    ) {
+      const isMember = await this.feed.hasActiveRoomMembership(simulationId, reader.id);
+      if (!isMember) {
         throw new SimulationNotFoundError(simulationId);
       }
     }

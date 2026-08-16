@@ -90,7 +90,8 @@ function makeHarness(input: { posts: Post[]; rooms?: FeedRoom[]; memberRoomIds?:
   const allRoomIds = [...rooms.keys()];
 
   const feed = {
-    findVisibleRoomIds: vi.fn((userId: string | null) => {
+    findVisibleRoomIds: vi.fn((userId: string | null, isAdmin = false) => {
+      if (isAdmin) return Promise.resolve(allRoomIds);
       if (input.memberRoomIds !== undefined) {
         // Simulate visibility: public/open rooms + rooms the reader is a member of.
         const visibleIds = allRoomIds.filter((id) => {
@@ -106,6 +107,9 @@ function makeHarness(input: { posts: Post[]; rooms?: FeedRoom[]; memberRoomIds?:
       // Default: all rooms visible.
       return Promise.resolve(allRoomIds);
     }),
+    hasActiveRoomMembership: vi.fn((roomId: string, userId: string) =>
+      Promise.resolve(userId.length > 0 && (input.memberRoomIds ?? allRoomIds).includes(roomId)),
+    ),
     findThreadPage: vi.fn(
       (query: {
         simulationId?: string;
@@ -707,6 +711,35 @@ describe("FeedService room feed (§10.2, §10.4)", () => {
     expect(page.threads).toHaveLength(1);
   });
 
+  it("opens a closed room for an administrator without querying membership", async () => {
+    const { service, spies } = makeHarness({
+      posts: [post({ id: "root-1", roomId: CLOSED_ROOM.id })],
+      rooms: [CLOSED_ROOM],
+      memberRoomIds: [],
+    });
+
+    const page = await service.getRoomFeed(CLOSED_ROOM.id, {
+      reader: { id: "admin-1", isAdmin: true, handle: "admin" },
+      filter: "all",
+    });
+
+    expect(page.threads).toHaveLength(1);
+    expect(spies.hasActiveRoomMembership).not.toHaveBeenCalled();
+  });
+
+  it("checks only the requested closed room's membership", async () => {
+    const { service, spies } = makeHarness({
+      posts: [post({ id: "root-1", roomId: CLOSED_ROOM.id })],
+      rooms: [CLOSED_ROOM],
+      memberRoomIds: [CLOSED_ROOM.id],
+    });
+
+    await service.getRoomFeed(CLOSED_ROOM.id, { reader: READER, filter: "all" });
+
+    expect(spies.hasActiveRoomMembership).toHaveBeenCalledWith(CLOSED_ROOM.id, READER.id);
+    expect(spies.findVisibleRoomIds).not.toHaveBeenCalled();
+  });
+
   it("refuses a private room for a non-member", async () => {
     const { service } = makeHarness({
       posts: [post({ id: "root-1", roomId: PRIVATE_ROOM.id })],
@@ -767,6 +800,22 @@ describe("FeedService global feed visibility filtering (§10.1)", () => {
       "root-private",
       "root-public",
     ]);
+  });
+
+  it("includes every room for administrators", async () => {
+    const { service, spies } = makeHarness({
+      posts: [publicPost, closedPost, privatePost],
+      rooms: [ROOM, CLOSED_ROOM, PRIVATE_ROOM],
+      memberRoomIds: [],
+    });
+
+    const page = await service.getUnifiedFeed({
+      reader: { id: "admin-1", isAdmin: true, handle: "admin" },
+      filter: "all",
+    });
+
+    expect(page.threads).toHaveLength(3);
+    expect(spies.findVisibleRoomIds).toHaveBeenCalledWith("admin-1", true);
   });
 
   it("excludes closed and private room posts for anonymous readers", async () => {

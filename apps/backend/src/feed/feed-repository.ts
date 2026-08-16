@@ -240,7 +240,12 @@ export class FeedRepository {
    * One query regardless of how many rooms exist: the database filters by
    * visibility and membership in a single pass.
    */
-  async findVisibleRoomIds(userId: string | null): Promise<string[]> {
+  async findVisibleRoomIds(userId: string | null, isAdmin = false): Promise<string[]> {
+    if (isAdmin) {
+      const rows = await this.db.room.findMany({ select: { id: true } });
+      return rows.map((row: { id: string }) => row.id);
+    }
+
     const memberOnlyRooms: Prisma.RoomWhereInput[] =
       userId !== null
         ? [
@@ -273,6 +278,25 @@ export class FeedRepository {
     });
 
     return rows.map((row: { id: string }) => row.id);
+  }
+
+  /** Whether one user has an active membership in one specific room. */
+  async hasActiveRoomMembership(roomId: string, userId: string): Promise<boolean> {
+    const room = await this.db.room.findFirst({
+      where: {
+        id: roomId,
+        memberships: {
+          some: {
+            memberId: userId,
+            memberKind: "user",
+            status: "active",
+          },
+        },
+      },
+      select: { id: true },
+    });
+
+    return room !== null;
   }
 
   /**
