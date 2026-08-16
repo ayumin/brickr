@@ -18,6 +18,8 @@ import type { LLMProviderRegistry } from "./llm/provider-registry.js";
 import { createProviderRegistry } from "./llm/provider-registry.js";
 import { TokenUsageRepository } from "./llm/token-usage-repository.js";
 import { TokenUsageService } from "./llm/token-usage-service.js";
+import { LLMBudgetRepository } from "./llm/llm-budget-repository.js";
+import { LLMBudgetService } from "./llm/llm-budget-service.js";
 import { ModelProfileRepository } from "./model-profiles/model-profile-repository.js";
 import { ModelProfileService } from "./model-profiles/model-profile-service.js";
 import type { Db } from "./persistence/prisma.js";
@@ -56,6 +58,7 @@ export type AppServices = {
   providerRegistry: LLMProviderRegistry;
   applicationSettings: ApplicationSettingsService;
   tokenUsage: TokenUsageService;
+  llmBudget: LLMBudgetService;
 };
 
 /**
@@ -75,6 +78,8 @@ export async function buildServices(db: Db, logger: SimulationLogger): Promise<A
   const inviteCodeRepository = new InviteCodeRepository(db);
   const handleRepository = new HandleRepository(db);
   const tokenUsageRepository = new TokenUsageRepository(db);
+  const llmBudgetRepository = new LLMBudgetRepository(db);
+  const llmBudget = new LLMBudgetService(llmBudgetRepository);
   const runtime = new RuntimeSettings();
 
   const providerRegistry = createProviderRegistry();
@@ -88,6 +93,7 @@ export async function buildServices(db: Db, logger: SimulationLogger): Promise<A
       providerId === "openai" || providerId === "anthropic" || providerId === "gemini"
         ? runtime.values.models[providerId]
         : undefined,
+    llmBudget,
   );
 
   const postService = new PostService(
@@ -122,6 +128,7 @@ export async function buildServices(db: Db, logger: SimulationLogger): Promise<A
     logger,
     tokenUsage,
     threadActivity: feed,
+    llmBudget,
   });
   const simulationAnalysis = new SimulationAnalysisService(
     simulationRepository,
@@ -184,5 +191,6 @@ export async function buildServices(db: Db, logger: SimulationLogger): Promise<A
     providerRegistry,
     applicationSettings,
     tokenUsage,
+    llmBudget,
   };
 }

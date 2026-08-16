@@ -62,6 +62,9 @@ const expectedPaths = [
   "/api/rooms",
   "/api/rooms/{id}",
   "/api/rooms/{id}/archive",
+  "/api/llm-budget",
+  "/api/llm-budget/{provider}",
+  "/api/llm-budget/{provider}/reset",
 ];
 
 const sessionProtectedOperationIds = [
@@ -116,6 +119,9 @@ const sessionProtectedOperationIds = [
   "updateRoom",
   "archiveRoom",
   "deleteRoom",
+  "getLLMBudget",
+  "setLLMBudgetLimit",
+  "resetLLMBudget",
 ];
 
 describe("OpenAPI documentation", () => {

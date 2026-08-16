@@ -10,6 +10,8 @@ import type { CharacterRepository } from "../characters/character-repository.js"
 import type { Character } from "../characters/character.js";
 import { DomainError } from "../domain-error.js";
 import type { TokenUsageService } from "../llm/token-usage-service.js";
+import type { LLMBudgetService } from "../llm/llm-budget-service.js";
+import type { ProviderId } from "../llm/provider.js";
 import { optionalField } from "../persistence/repository-mapping.js";
 import type { Post } from "../posts/post.js";
 import type { PostService } from "../posts/post-service.js";
@@ -78,6 +80,8 @@ export type SimulationServiceDeps = {
   logger: SimulationLogger;
   tokenUsage: TokenUsageService;
   threadActivity: ThreadActivitySource;
+  /** Optional: when present, token usage is recorded against the provider budget (issue #162). */
+  llmBudget?: LLMBudgetService;
 };
 
 export class SimulationNotFoundError extends DomainError {
@@ -533,6 +537,7 @@ export class SimulationService {
       await this.recordUsage(billingUserId, generated.usage, {
         simulationId,
         characterId: character.id,
+        providerId: generated.providerId,
       });
     }
 
@@ -591,7 +596,7 @@ export class SimulationService {
   private async recordUsage(
     billingUserId: string,
     usage: NonNullable<GeneratedPost["usage"]>,
-    context: { simulationId: string; characterId: string },
+    context: { simulationId: string; characterId: string; providerId: ProviderId },
   ): Promise<void> {
     try {
       await this.deps.tokenUsage.record(billingUserId, usage);
@@ -600,6 +605,24 @@ export class SimulationService {
         { ...context, billingUserId, err: describe(error) },
         "failed to record token usage",
       );
+    }
+
+    // Record against the provider budget (issue #162). Failures are logged but
+    // never surfaced — a tracking hiccup must not turn a successful generation
+    // into a failed outcome.
+    if (this.deps.llmBudget) {
+      try {
+        await this.deps.llmBudget.recordUsage(
+          context.providerId,
+          usage.totalTokens,
+          context.simulationId,
+        );
+      } catch (error) {
+        this.deps.logger.warn(
+          { ...context, err: describe(error) },
+          "failed to record LLM budget usage",
+        );
+      }
     }
   }
 

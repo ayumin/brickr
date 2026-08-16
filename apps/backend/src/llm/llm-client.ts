@@ -27,6 +27,18 @@ export type LLMClientLogger = {
   debug: (msg: string) => void;
 };
 
+/**
+ * Narrow interface for the budget circuit-breaker (issue #162).
+ *
+ * Declared here rather than importing `LLMBudgetService` directly so the LLM
+ * layer does not depend on the budget persistence layer — the concrete service
+ * is injected from the composition root.
+ */
+export type LLMBudgetChecker = {
+  isAllowed(provider: ProviderId): Promise<boolean>;
+  recordUsage(provider: ProviderId, tokens: number, roomId: string | null): Promise<void>;
+};
+
 export class LLMClient {
   private readonly loggedFallbacks = new Set<ProviderId>();
 
@@ -36,6 +48,7 @@ export class LLMClient {
     private readonly logger?: LLMClientLogger,
     private readonly usageTracker?: LLMUsageTracker,
     private readonly fallbackModel?: (providerId: ProviderId) => string | undefined,
+    private readonly budgetChecker?: LLMBudgetChecker,
   ) {}
 
   async generate(
@@ -52,6 +65,20 @@ export class LLMClient {
             ...requested,
             model: this.fallbackModel?.(provider.id) ?? provider.defaultModel,
           };
+
+    // Budget circuit-breaker check (issue #162). The mock provider is exempt
+    // so tests and development environments are never blocked by budget state.
+    if (this.budgetChecker && provider.id !== MOCK_PROVIDER_ID) {
+      let allowed: boolean;
+      try {
+        allowed = await this.budgetChecker.isAllowed(provider.id);
+      } catch (error) {
+        throw normalizeError(error, provider.id);
+      }
+      if (!allowed) {
+        throw new LLMBudgetExceededError(provider.id);
+      }
+    }
 
     const attempts = Math.max(0, this.options.maxRetries) + 1;
 
@@ -169,4 +196,22 @@ function normalizeError(error: unknown, providerId: ProviderId): LLMError {
   return new LLMError(`${providerId} request failed: ${message}`, providerId, retryable, {
     cause: error,
   });
+}
+
+/**
+ * Raised when the budget circuit breaker is open for a provider (issue #162).
+ *
+ * Not retryable: the breaker stays open until an administrator resets it.
+ * Treated as an expected failure by the simulation layer (same as `LLMError`),
+ * so one character dropping out does not stop the rest.
+ */
+export class LLMBudgetExceededError extends LLMError {
+  constructor(providerId: ProviderId) {
+    super(
+      `LLM budget exceeded for provider "${providerId}"; all generation is stopped until an administrator resets the budget`,
+      providerId,
+      false, // not retryable — admin action required
+    );
+    this.name = "LLMBudgetExceededError";
+  }
 }
