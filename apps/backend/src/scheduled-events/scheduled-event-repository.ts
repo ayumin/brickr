@@ -13,7 +13,10 @@ import type {
  */
 const LOCK_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
-type ScheduledEventRow = {
+/**
+ * Raw SQL row returned by `$queryRaw`. Postgres returns snake_case column names.
+ */
+type RawScheduledEventRow = {
   id: string;
   type: string;
   status: string;
@@ -30,11 +33,15 @@ type ScheduledEventRow = {
   updated_at: Date;
 };
 
-function toScheduledEvent(row: ScheduledEventRow): ScheduledEvent {
+/**
+ * Converts a raw SQL row (snake_case) to the camelCase shape that
+ * `fromPrismaRow` expects, so a single mapper handles both code paths.
+ */
+function rawToPrismaShape(row: RawScheduledEventRow): PrismaScheduledEventRow {
   return {
     id: row.id,
-    type: row.type as ScheduledEventType,
-    status: row.status as EventStatus,
+    type: row.type,
+    status: row.status,
     scheduledAt: row.scheduled_at,
     roomId: row.room_id,
     postId: row.post_id,
@@ -153,7 +160,7 @@ export class ScheduledEventRepository {
     // The subquery selects the id of one eligible event with SKIP LOCKED so
     // concurrent workers skip rows already held by another transaction.
     // The outer UPDATE atomically transitions it to processing.
-    const rows = await this.db.$queryRaw<ScheduledEventRow[]>(
+    const rows = await this.db.$queryRaw<RawScheduledEventRow[]>(
       Prisma.sql`
         UPDATE scheduled_events
         SET
@@ -193,7 +200,7 @@ export class ScheduledEventRepository {
     // Also reclaim events whose lock has expired (crashed workers).
     // Run as a separate query so the primary claim path stays simple.
     if (rows.length === 0) {
-      const reclaimed = await this.db.$queryRaw<ScheduledEventRow[]>(
+      const reclaimed = await this.db.$queryRaw<RawScheduledEventRow[]>(
         Prisma.sql`
           UPDATE scheduled_events
           SET
@@ -229,10 +236,10 @@ export class ScheduledEventRepository {
             updated_at
         `,
       );
-      return reclaimed.length > 0 ? toScheduledEvent(reclaimed[0]!) : null;
+      return reclaimed.length > 0 ? fromPrismaRow(rawToPrismaShape(reclaimed[0]!)) : null;
     }
 
-    return toScheduledEvent(rows[0]!);
+    return fromPrismaRow(rawToPrismaShape(rows[0]!));
   }
 
   /**
