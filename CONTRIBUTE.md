@@ -105,7 +105,7 @@ packages/
 | DB Schema | `apps/backend/prisma/schema.prisma` | PostgreSQLのデータモデル |
 | Frontend起動 | `apps/frontend/src/App.tsx` | 初期ロードとSimulation復元 |
 | Frontend Route | `apps/frontend/src/routes.ts` | URL生成と静的Path優先のRoute match |
-| 主要画面 | `apps/frontend/src/features/simulation/SimulationView.tsx` | 画面遷移と主要UIの統合 |
+| 主要画面 | `apps/frontend/src/features/feed/FeedScreen.tsx`, `apps/frontend/src/features/rooms/RoomScreen.tsx`, `apps/frontend/src/features/rooms/PostDetailScreen.tsx` | 統合Feed・個別Room・投稿詳細のUI統合 |
 | API Client | `apps/frontend/src/services/api-client.ts` | Frontend唯一のRESTアクセス層 |
 | SSE Client | `apps/frontend/src/services/sse-client.ts` | EventSourceの薄いラッパー |
 
@@ -250,7 +250,7 @@ docs: explain local database setup
 ### Frontend画面を追加する
 
 1. `routes.ts`へPath生成とMatchを追加し、静的Pathを`/:handle`より先に判定します。
-2. `SimulationView`を不要にremountしてSSE接続やShell状態を失わない構成にします。
+2. `AppShell`が`/`と`/rooms/:roomId`を`<Route>`ツリーの外で保持する方針（`AppRoutes.tsx`のコメント参照）に沿い、SSE接続やShell状態を失う不要なremountを避けます。
 3. Network処理と表示ロジックを分離します。
 4. 配列の絞り込み、並び替え、Thread展開は可能なら純粋関数にします。
 5. Loading、Error、Empty、Disabled、Unauthenticated、Forbiddenの各状態を実装します。
@@ -295,6 +295,22 @@ git diff --check
 
 実Providerを使うテストは、料金、Rate Limit、応答の非決定性があるため通常のTest Suiteへ入れません。
 必要な場合は手動検証として実施し、使用Provider、確認内容、Secretを含まない結果をPRへ記載してください。
+
+### 手動検証チェックリスト（ブラウザが必要な確認項目）
+
+Modal focus trap、スクロール位置、Visual viewportなど、Vitestだけでは検証できない項目です。
+Playwright等のE2E基盤は導入していないため、該当する変更を行うPRでは以下をブラウザで確認し、
+結果をPR本文へ記載してください。
+
+- Modal / bottom sheetのfocus trap、Escapeで閉じる、閉じた後にtriggerへFocusが戻ること
+  （`Dialog`利用箇所全般、および独自実装の`SecretResultDialog`）
+- 未ログイン → Login / Signup → 投稿Composerが自動再開すること
+- SSEによる並び替え発生時、読んでいるスクロール位置が維持されること
+- Mobile幅でのBottom Navigationがsafe areaを避けて表示されること
+- 未ログイン時、投稿・返信・引用等のactionがdisabled表示ではなく非表示であること
+- 停止中Roomでも同様にactionが非表示であること
+- 旧URL（`/characters`, `/simulations`, `/simulations/:id/analysis`）が新URLへ遷移すること
+- 390×844 / 768×1024 / 1280×800 / 1440×1000 の各幅で、Brickr Dark / Lightそれぞれ崩れがないこと
 
 ## GitLab CI
 

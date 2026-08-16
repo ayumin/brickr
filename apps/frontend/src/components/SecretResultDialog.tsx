@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import { useFocusTrap } from "../hooks/useFocusTrap";
 import { Icon } from "./Icon";
 
 export type SecretResult = { title: string; value: string };
@@ -8,6 +9,10 @@ export type SecretResult = { title: string; value: string };
  * Shown exactly once (CLAUDE.md §66.10): the invite code or temporary
  * password is never retrievable again after this, so closing requires an
  * explicit click rather than a background click that could happen by accident.
+ * Deliberately does not use the shared `Dialog` (its backdrop-click-to-close
+ * would violate that "explicit click only" requirement), but still needs the
+ * same keyboard accessibility as `Dialog`: a focus trap, Escape-to-close, and
+ * focus restored to the trigger on close (§27).
  *
  * Shared by `UserManagementList` (reset-password) and `InviteSettings`
  * (invite code) — both surface a one-time secret the same way.
@@ -21,11 +26,13 @@ export function SecretResultDialog({
 }) {
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState(false);
+  const containerRef = useFocusTrap<HTMLDivElement>({ onClose });
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
       <div
+        ref={containerRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="secret-result-title"
