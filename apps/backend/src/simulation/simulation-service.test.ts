@@ -13,7 +13,9 @@ import type { SimulationRepository } from "./simulation-repository.js";
 import {
   GlobalSimulationMutationError,
   PostNotFoundError,
+  assertRoomReadable,
   SimulationForbiddenError,
+  SimulationNotFoundError,
   SimulationService,
   type SimulationActor,
   type SimulationLogger,
@@ -38,6 +40,22 @@ const SIMULATION: Simulation = {
 };
 
 const OWNER: SimulationActor = { id: USER_AUTHOR_ID, isAdmin: false };
+
+describe("assertRoomReadable membership rollout", () => {
+  const nonOwner: SimulationActor = { id: "other-user", isAdmin: false };
+
+  it("does not reject an active closed room before membership lookup is wired", () => {
+    expect(() =>
+      assertRoomReadable({ ...SIMULATION, visibility: "closed" }, nonOwner),
+    ).not.toThrow();
+  });
+
+  it("continues to hide an archived room from a non-owner", () => {
+    expect(() =>
+      assertRoomReadable({ ...SIMULATION, visibility: "closed", status: "archived" }, nonOwner),
+    ).toThrow(SimulationNotFoundError);
+  });
+});
 
 function makeCharacter(id: string, overrides: Partial<Character> = {}): Character {
   return {
