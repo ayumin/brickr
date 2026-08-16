@@ -21,7 +21,6 @@
  *     returns a `skipped` outcome — this is not an error.
  */
 
-import type { Character } from "../characters/character.js";
 import type { CharacterRepository } from "../characters/character-repository.js";
 import type { AgentService } from "../agents/agent-service.js";
 import type { PostService } from "../posts/post-service.js";

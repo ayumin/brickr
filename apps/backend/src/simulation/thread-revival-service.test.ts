@@ -46,14 +46,6 @@ const eagerCharacter: Character = {
   behaviorProfileKey: "eager", // revivalWeight = 0.4
 };
 
-const lurkerCharacter: Character = {
-  ...eagerCharacter,
-  id: "char-lurker",
-  handle: "lurker",
-  displayName: "Lurker",
-  behaviorProfileKey: "lurker", // revivalWeight = 0.05
-};
-
 const dormantPost: Post = {
   id: "post-dormant",
   roomId: "room-1",
@@ -205,7 +197,9 @@ describe("reviveThread", () => {
   });
 
   it("calls findDormantThreadRoots with the correct dormant threshold", async () => {
-    const findDormantThreadRoots = vi.fn(() => Promise.resolve([]));
+    const findDormantThreadRoots = vi.fn(
+      (_roomId: string, _dormantBefore: Date, _limit: number) => Promise.resolve([]),
+    );
     const deps = makeDeps({
       posts: {
         findDormantThreadRoots,
@@ -222,7 +216,7 @@ describe("reviveThread", () => {
       expect.any(Number),
     );
     // The dormantBefore date should be now - DORMANT_THRESHOLD_MS
-    const [, dormantBefore] = findDormantThreadRoots.mock.calls[0] as [string, Date, number];
+    const [, dormantBefore] = findDormantThreadRoots.mock.calls[0]!;
     expect(dormantBefore.getTime()).toBe(now.getTime() - DORMANT_THRESHOLD_MS);
   });
 
@@ -279,7 +273,9 @@ describe("reviveThread", () => {
 
   it("uses the injected clock to compute the dormant threshold", async () => {
     const customNow = new Date("2026-01-01T00:00:00.000Z");
-    const findDormantThreadRoots = vi.fn(() => Promise.resolve([]));
+    const findDormantThreadRoots = vi.fn(
+      (_roomId: string, _dormantBefore: Date, _limit: number) => Promise.resolve([]),
+    );
     const deps = makeDeps({
       clock: () => customNow,
       posts: {
@@ -291,7 +287,7 @@ describe("reviveThread", () => {
 
     await reviveThread("room-1", deps);
 
-    const [, dormantBefore] = findDormantThreadRoots.mock.calls[0] as [string, Date, number];
+    const [, dormantBefore] = findDormantThreadRoots.mock.calls[0]!;
     expect(dormantBefore.getTime()).toBe(customNow.getTime() - DORMANT_THRESHOLD_MS);
   });
 });

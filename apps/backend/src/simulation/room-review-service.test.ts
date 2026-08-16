@@ -121,7 +121,7 @@ describe("reviewRoom", () => {
   });
 
   it("schedules a thread.revive event for each dormant thread", async () => {
-    const create = vi.fn(() =>
+    const create = vi.fn((_input: { scheduledAt: Date }) =>
       Promise.resolve({ id: "new-event", type: "thread.revive" }),
     );
     const deps = makeDeps({
@@ -180,7 +180,7 @@ describe("reviewRoom", () => {
   });
 
   it("schedules revivals with a future scheduledAt", async () => {
-    const create = vi.fn(() =>
+    const create = vi.fn((_input: { scheduledAt: Date }) =>
       Promise.resolve({ id: "new-event", type: "thread.revive" }),
     );
     const deps = makeDeps({
@@ -189,13 +189,15 @@ describe("reviewRoom", () => {
 
     await reviewRoom("room-1", deps);
 
-    const [input] = create.mock.calls[0] as [{ scheduledAt: Date }];
+    const [input] = create.mock.calls[0]!;
     expect(input.scheduledAt.getTime()).toBeGreaterThan(now.getTime());
   });
 
   it("uses the injected clock to compute the dormant threshold", async () => {
     const customNow = new Date("2026-01-01T00:00:00.000Z");
-    const findDormantThreadRoots = vi.fn(() => Promise.resolve([]));
+    const findDormantThreadRoots = vi.fn(
+      (_roomId: string, _dormantBefore: Date, _limit: number) => Promise.resolve([]),
+    );
     const deps = makeDeps({
       clock: () => customNow,
       posts: {
@@ -210,7 +212,7 @@ describe("reviewRoom", () => {
       expect.any(Date),
       expect.any(Number),
     );
-    const [, dormantBefore] = findDormantThreadRoots.mock.calls[0] as [string, Date, number];
+    const [, dormantBefore] = findDormantThreadRoots.mock.calls[0]!;
     // dormantBefore should be customNow - DORMANT_THRESHOLD_MS
     expect(dormantBefore.getTime()).toBeLessThan(customNow.getTime());
   });
