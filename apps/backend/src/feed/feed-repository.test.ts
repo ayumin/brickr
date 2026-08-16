@@ -23,7 +23,7 @@ function postRow(overrides: Record<string, unknown> = {}) {
   const createdAt = new Date("2026-08-13T10:00:00.000Z");
   return {
     id: "root-1",
-    simulationId: "room-1",
+    roomId: "room-1",
     authorId: "author-1",
     content: "本文",
     imageUrl: null,
@@ -54,7 +54,7 @@ function makeDb(options: { roots?: Record<string, unknown>[]; threadIds?: string
         }
         if (args.include) {
           return Promise.resolve(
-            (options.roots ?? [postRow()]).map((root) => ({ ...root, simulation: ROOM_ROW })),
+            (options.roots ?? [postRow()]).map((root) => ({ ...root, room: ROOM_ROW })),
           );
         }
         return Promise.resolve(options.roots ?? []);
@@ -90,7 +90,7 @@ describe("FeedRepository.findThreadPage (§10.1)", () => {
     const rows = await new FeedRepository(db).findThreadPage({ limit: 21 });
 
     expect(calls[0]?.include).toEqual({
-      simulation: {
+      room: {
         select: {
           id: true,
           title: true,
@@ -114,7 +114,7 @@ describe("FeedRepository.findThreadPage (§10.1)", () => {
     const repository = new FeedRepository(db);
     const spies = db as unknown as { post: { findMany: ReturnType<typeof vi.fn> } };
     spies.post.findMany.mockImplementationOnce(() =>
-      Promise.resolve([{ ...postRow(), simulation: { ...ROOM_ROW, createdByUserId: null } }]),
+      Promise.resolve([{ ...postRow(), room: { ...ROOM_ROW, createdByUserId: null } }]),
     );
 
     const rows = await repository.findThreadPage({ limit: 21 });
@@ -127,7 +127,7 @@ describe("FeedRepository.findThreadPage (§10.1)", () => {
 
     await new FeedRepository(db).findThreadPage({ limit: 21, simulationId: "room-1" });
 
-    expect(calls[0]?.where).toMatchObject({ simulationId: "room-1" });
+    expect(calls[0]?.where).toMatchObject({ roomId: "room-1" });
   });
 
   /**
@@ -172,10 +172,10 @@ describe("FeedRepository mine filter (§12.3)", () => {
     expect(lookups[0]?.where).toMatchObject({ replyToPost: { authorId: "reader-1" } });
     expect(lookups[1]?.where).toMatchObject({ mentions: { has: "hanako" } });
     expect(lookups[2]?.where).toMatchObject({ quoteOfPost: { authorId: "reader-1" } });
-    // The unified feed spans every simulation, so none of the lookups are narrowed.
-    expect(lookups[0]?.where).not.toHaveProperty("simulationId");
-    expect(lookups[1]?.where).not.toHaveProperty("simulationId");
-    expect(lookups[2]?.where).not.toHaveProperty("simulationId");
+    // The unified feed spans every room, so none of the lookups are narrowed.
+    expect(lookups[0]?.where).not.toHaveProperty("roomId");
+    expect(lookups[1]?.where).not.toHaveProperty("roomId");
+    expect(lookups[2]?.where).not.toHaveProperty("roomId");
     // Four queries in total, whatever the page holds.
     expect(spies.post.findMany).toHaveBeenCalledTimes(4);
   });
@@ -196,20 +196,20 @@ describe("FeedRepository mine filter (§12.3)", () => {
 
     const lookups = calls.filter((call) => call.distinct !== undefined);
     expect(lookups[0]?.where).toMatchObject({
-      simulationId: "room-1",
+      roomId: "room-1",
       replyToPost: { authorId: "reader-1" },
     });
     expect(lookups[1]?.where).toMatchObject({
-      simulationId: "room-1",
+      roomId: "room-1",
       mentions: { has: "hanako" },
     });
     expect(lookups[2]?.where).toMatchObject({
-      simulationId: "room-1",
+      roomId: "room-1",
       quoteOfPost: { authorId: "reader-1" },
     });
     // The roots keep both of their own conditions.
     const roots = calls.find((call) => call.include !== undefined);
-    expect(roots?.where).toMatchObject({ replyTo: null, simulationId: "room-1" });
+    expect(roots?.where).toMatchObject({ replyTo: null, roomId: "room-1" });
     expect(roots?.where).toHaveProperty("AND");
   });
 

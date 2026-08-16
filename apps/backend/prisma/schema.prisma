@@ -1,6 +1,6 @@
 // Brickr — MVP schema.
 //
-// Keep the schema small: characters, model_profiles, simulations, posts, and
+// Keep the schema small: characters, model_profiles, rooms, posts, and
 // the singleton editable user profile.
 
 generator client {
@@ -66,21 +66,40 @@ model Character {
   @@map("characters")
 }
 
-model Simulation {
-  id        String   @id @default(uuid())
-  title     String?
-  status    String   @default("active")
+model Room {
+  id    String  @id @default(uuid())
+  /// Human-readable room name (optional, same role as the old Simulation.title).
+  title String?
+  /// "active" | "archived".
+  status String @default("active")
   /// "global" | "room". Internal only, never a label on screen: the reserved
   /// global row backs the unified feed (Brickr-ux-refine §8.1, §8.2).
-  scope     String   @default("room")
-  /// Public to everyone, unlike Character ownership (§66.6). Null for simulations
+  scope  String @default("room")
+
+  // Extended room metadata (Phase-1 redesign).
+  // These fields are schema scaffolding for a future phase; none of them are
+  // read or enforced by the current application code.
+  /// Optional short description shown in the room list.
+  description    String? @map("description")
+  /// "public" | "private". Intended to control visibility, but not yet
+  /// enforced — findAllVisibleTo still filters only by status and owner.
+  /// Stored now so the column exists when the enforcement phase lands.
+  visibility     String  @default("public") @map("visibility")
+  /// Free-form tags for filtering / discovery (unenforced scaffolding).
+  tags           String[] @default([]) @map("tags")
+  /// UI theme identifier (e.g. "default", "dark") (unenforced scaffolding).
+  theme          String?  @map("theme")
+  /// Whether Cast characters may join this room autonomously (unenforced scaffolding).
+  castAutonomous Boolean  @default(true) @map("cast_autonomous")
+
+  /// Public to everyone, unlike Character ownership (§66.6). Null for rooms
   /// created before login existed, and for the reserved global row.
   createdByUserId String? @map("created_by_user_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  /// Newest post or reply anywhere in this simulation. Denormalised so the room
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  /// Newest post or reply anywhere in this room. Denormalised so the room
   /// list can order by activity without aggregating posts (§8.1).
-  lastActivityAt DateTime @default(now()) @map("last_activity_at")
+  lastActivityAt  DateTime @default(now()) @map("last_activity_at")
 
   posts         Post[]
   createdByUser UserProfile? @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
@@ -88,12 +107,12 @@ model Simulation {
   @@index([createdByUserId])
   @@index([scope, status, lastActivityAt])
   @@index([createdByUserId, status, lastActivityAt])
-  @@map("simulations")
+  @@map("rooms")
 }
 
 model Post {
-  id           String @id @default(uuid())
-  simulationId String @map("simulation_id")
+  id     String @id @default(uuid())
+  roomId String @map("room_id")
 
   /// Character id, or the id of the signed-in account that wrote the post.
   /// Deliberately not a foreign key: user posts and character posts share
@@ -120,7 +139,7 @@ model Post {
   /// new thread and never bumps the post it quotes.
   threadActivityAt DateTime @map("thread_activity_at")
 
-  simulation Simulation @relation(fields: [simulationId], references: [id], onDelete: Cascade)
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
 
   replyToPost Post?  @relation("PostReplies", fields: [replyTo], references: [id], onDelete: SetNull, onUpdate: NoAction)
   replies     Post[] @relation("PostReplies")
@@ -128,13 +147,13 @@ model Post {
   quoteOfPost Post?  @relation("PostQuotes", fields: [quoteOf], references: [id], onDelete: SetNull, onUpdate: NoAction)
   quotedBy    Post[] @relation("PostQuotes")
 
-  @@index([simulationId, createdAt])
+  @@index([roomId, createdAt])
   @@index([replyTo])
   @@index([quoteOf])
   /// Feed paging: roots (`replyTo = null`) ordered by thread activity, globally
   /// and per room. The third index reads one thread's posts in order.
   @@index([replyTo, threadActivityAt, id])
-  @@index([simulationId, replyTo, threadActivityAt, id])
+  @@index([roomId, replyTo, threadActivityAt, id])
   @@index([threadRootId, createdAt, id])
   @@map("posts")
 }
@@ -176,7 +195,7 @@ model UserProfile {
   issuedInviteCodes   InviteCode[] @relation("InviteCodeIssuer")
   redeemedInviteCodes InviteCode[] @relation("InviteCodeRedeemer")
   createdCharacters   Character[]
-  createdSimulations  Simulation[]
+  createdRooms        Room[]
   tokenUsage          TokenUsage?
 
   @@index([handle])

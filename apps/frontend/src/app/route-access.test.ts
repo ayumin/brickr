@@ -30,14 +30,14 @@ describe("checkRoomAccess", () => {
   });
 
   it("allows only the creator or an admin into a stopped room", () => {
-    const stopped = { status: "stopped" as const, createdByUserId: OWNER.id };
+    const stopped = { status: "archived" as const, createdByUserId: OWNER.id };
     expect(checkRoomAccess(stopped, OWNER)).toEqual({ allowed: true });
     expect(checkRoomAccess(stopped, ADMIN)).toEqual({ allowed: true });
     expect(checkRoomAccess(stopped, OTHER_USER)).toEqual({ allowed: false, redirectTo: "/" });
   });
 
   it("denies everyone but an admin for a stopped, ownerless room", () => {
-    const stopped = { status: "stopped" as const, createdByUserId: undefined };
+    const stopped = { status: "archived" as const, createdByUserId: undefined };
     expect(checkRoomAccess(stopped, OTHER_USER)).toEqual({ allowed: false, redirectTo: "/" });
     expect(checkRoomAccess(stopped, ADMIN)).toEqual({ allowed: true });
   });

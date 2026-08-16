@@ -29,7 +29,7 @@ function RoomCard({
       <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left">
         <p className="flex min-w-0 items-center gap-2">
           <span className="truncate font-semibold text-ink">{room.title ?? "無題のルーム"}</span>
-          {room.status === "stopped" ? (
+          {room.status === "archived" ? (
             <span className="shrink-0 rounded-full bg-surface-raised px-2 py-0.5 text-[11px] text-ink-muted">
               停止中
             </span>

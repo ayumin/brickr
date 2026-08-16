@@ -79,7 +79,7 @@ export function PostDetailScreen({ postId }: { postId: string }) {
     const controller = new AbortController();
     api
       .getSimulation(simulationId, controller.signal)
-      .then(({ simulation }) => setCanPost(simulation.status !== "stopped"))
+      .then(({ simulation }) => setCanPost(simulation.status !== "archived"))
       .catch((cause: unknown) => {
         if (!isAbortError(cause)) setCanPost(false);
       });

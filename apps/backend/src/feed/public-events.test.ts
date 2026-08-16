@@ -102,7 +102,7 @@ describe("toPublicEvent thread activity (§11.3)", () => {
 
   /** A stopped room can still receive an update through a repair or a backfill. */
   it("keeps a stopped room's thread unwritable, and readable only for its owner", () => {
-    const stopped: FeedRoom = { ...ROOM, status: "stopped" };
+    const stopped: FeedRoom = { ...ROOM, status: "archived" };
 
     const stranger = toPublicEvent(threadActivity(stopped), READER);
     const owner = toPublicEvent(threadActivity(stopped), {

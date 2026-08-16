@@ -51,7 +51,7 @@ export function ComposerDialog({ context, userProfile, onClose, onPosted, onUnau
         setRoomState({
           status: "ready",
           label: simulation.title ?? "無題のルーム",
-          disabled: simulation.status === "stopped",
+          disabled: simulation.status === "archived",
         });
       })
       .catch((cause: unknown) => {

@@ -77,7 +77,7 @@ export class ProfileRepository {
 function visibleRooms(viewer: ProfileViewer): Prisma.PostWhereInput {
   if (viewer.isAdmin) return {};
   return {
-    simulation: {
+    room: {
       OR: [{ status: "active" }, { createdByUserId: viewer.id }],
     },
   };

@@ -547,7 +547,7 @@ describe("SimulationService orchestration", () => {
     const harness = makeHarness({ characters: [alpha] });
 
     const stopped = await harness.service.stop(SIMULATION.id, OWNER);
-    expect(stopped.status).toBe("stopped");
+    expect(stopped.status).toBe("archived");
 
     const resumed = await harness.service.resume(SIMULATION.id, OWNER);
     expect(resumed.status).toBe("active");
@@ -686,7 +686,7 @@ describe("SimulationService ownership (CLAUDE.md §66.6)", () => {
     const harness = makeHarness({ characters: [makeCharacter("alpha")] });
 
     await expect(harness.service.stop(SIMULATION.id, OWNER)).resolves.toMatchObject({
-      status: "stopped",
+      status: "archived",
     });
     await expect(harness.service.resume(SIMULATION.id, OWNER)).resolves.toMatchObject({
       status: "active",
@@ -700,7 +700,7 @@ describe("SimulationService ownership (CLAUDE.md §66.6)", () => {
     const harness = makeHarness({ characters: [makeCharacter("alpha")] });
 
     await expect(harness.service.stop(SIMULATION.id, ADMIN)).resolves.toMatchObject({
-      status: "stopped",
+      status: "archived",
     });
   });
 

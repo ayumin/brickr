@@ -41,7 +41,7 @@ type PostFindManyArgs = {
 function makeDb(
   postFindMany: (
     args: PostFindManyArgs,
-  ) => Array<{ id: string; simulationId?: string; threadRootId?: string }> = () => [],
+  ) => Array<{ id: string; roomId?: string; threadRootId?: string }> = () => [],
 ) {
   const tx = {
     post: {
@@ -53,7 +53,7 @@ function makeDb(
         Promise.resolve({ _max: { createdAt: null, threadActivityAt: null } }),
       ),
     },
-    simulation: {
+    room: {
       update: vi.fn(() => Promise.resolve({})),
       findUnique: vi.fn(() =>
         Promise.resolve({ createdAt: new Date("2026-08-01T00:00:00Z") }),
@@ -163,7 +163,7 @@ describe("CharacterRepository hard deletion", () => {
     const { db, tx } = makeDb((args) => {
       if (args.where.authorId?.in) {
         calls.push("read-doomed");
-        return [{ id: "root-1", simulationId: "sim-1", threadRootId: "root-1" }];
+        return [{ id: "root-1", roomId: "sim-1", threadRootId: "root-1" }];
       }
       if (args.where.authorId?.notIn) {
         calls.push("read-orphans");
@@ -188,7 +188,7 @@ describe("CharacterRepository hard deletion", () => {
     expect(tx.post.deleteMany).toHaveBeenCalledWith({
       where: { authorId: { in: ["character-1"] } },
     });
-    expect(tx.simulation.update).toHaveBeenCalledWith({
+    expect(tx.room.update).toHaveBeenCalledWith({
       where: { id: "sim-1" },
       data: { lastActivityAt: new Date("2026-08-01T00:00:00Z") },
     });
@@ -202,7 +202,7 @@ describe("CharacterRepository hard deletion", () => {
   it("reads the root of each deleted post, so a surviving root can be re-dated", async () => {
     const { db, tx } = makeDb((args) => {
       if (args.where.authorId?.in) {
-        return [{ id: "reply-1", simulationId: "sim-1", threadRootId: "root-1" }];
+        return [{ id: "reply-1", roomId: "sim-1", threadRootId: "root-1" }];
       }
       if (args.where.authorId?.notIn) return [{ id: "reply-2" }];
       return [];
@@ -212,7 +212,7 @@ describe("CharacterRepository hard deletion", () => {
 
     expect(tx.post.findMany).toHaveBeenCalledWith({
       where: { authorId: { in: ["character-1"] } },
-      select: { id: true, simulationId: true, threadRootId: true },
+      select: { id: true, roomId: true, threadRootId: true },
     });
     // The surviving root is walked for what is left of its thread, the deleted
     // reply is not.

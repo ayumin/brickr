@@ -4,7 +4,7 @@ import { repairThreads } from "./thread-repair.js";
 
 type PostFixture = {
   id: string;
-  simulationId: string;
+  roomId: string;
   replyTo: string | null;
   createdAt: Date;
   threadRootId: string;
@@ -64,12 +64,12 @@ function makeTx(posts: PostFixture[]) {
         ({
           where,
         }: {
-          where: { id?: { in: string[] }; simulationId?: string; replyTo?: null };
+          where: { id?: { in: string[] }; roomId?: string; replyTo?: null };
         }) => {
           const scope = where.id
             ? posts.filter((post) => where.id?.in.includes(post.id))
             : posts.filter(
-                (post) => post.simulationId === where.simulationId && post.replyTo === null,
+                (post) => post.roomId === where.roomId && post.replyTo === null,
               );
           return Promise.resolve({
             _max: {
@@ -80,7 +80,7 @@ function makeTx(posts: PostFixture[]) {
         },
       ),
     },
-    simulation: {
+    room: {
       findUnique: vi.fn(() => Promise.resolve({ createdAt: simulationCreatedAt })),
       update: vi.fn(() => Promise.resolve({})),
     },
@@ -97,7 +97,7 @@ function maxOf(dates: Date[]): Date | null {
 
 function post(overrides: Partial<PostFixture> & { id: string }): PostFixture {
   return {
-    simulationId: "sim-1",
+    roomId: "sim-1",
     replyTo: null,
     createdAt: at(2),
     threadRootId: "deleted-root",
@@ -136,7 +136,7 @@ describe("repairThreads after a hard delete (§8.5)", () => {
     });
 
     expect(posts[0]?.threadActivityAt).toEqual(at(6));
-    expect(spies.simulation.update).toHaveBeenCalledWith({
+    expect(spies.room.update).toHaveBeenCalledWith({
       where: { id: "sim-1" },
       data: { lastActivityAt: at(6) },
     });
@@ -173,7 +173,7 @@ describe("repairThreads after a hard delete (§8.5)", () => {
       simulationIds: ["sim-1"],
     });
 
-    expect(spies.simulation.update).toHaveBeenCalledWith({
+    expect(spies.room.update).toHaveBeenCalledWith({
       where: { id: "sim-1" },
       data: { lastActivityAt: simulationCreatedAt },
     });
@@ -201,7 +201,7 @@ describe("repairThreads after a hard delete (§8.5)", () => {
     expect(posts[0]?.threadActivityAt).toEqual(at(2));
     expect(posts[1]?.threadActivityAt).toEqual(at(7));
     // The room is still as recent as the promoted thread, just not because of `root`.
-    expect(spies.simulation.update).toHaveBeenCalledWith({
+    expect(spies.room.update).toHaveBeenCalledWith({
       where: { id: "sim-1" },
       data: { lastActivityAt: at(7) },
     });

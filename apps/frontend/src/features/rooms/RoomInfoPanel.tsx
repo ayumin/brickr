@@ -35,7 +35,7 @@ export function RoomInfoContent({
 }: RoomInfoContentProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const isStopped = simulation.status === "stopped";
+  const isStopped = simulation.status === "archived";
 
   const run = async (operation: () => Promise<void>): Promise<void> => {
     setBusy(true);
