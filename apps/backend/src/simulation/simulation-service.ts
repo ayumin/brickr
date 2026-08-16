@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type {
   ResponseOutcome,
+  RoomListEntryDto,
   SimulationDto,
   SimulationResponse,
   SimulationSummaryDto,
@@ -215,6 +216,22 @@ export class SimulationService {
   async list(actor: SimulationActor): Promise<SimulationSummaryDto[]> {
     const simulations = await this.deps.simulations.findAllVisibleTo(actor);
     return simulations.map((simulation) => toSimulationSummaryDto(simulation, actor));
+  }
+
+  /**
+   * The visibility-aware room list for one caller (issue #155).
+   *
+   * Extends `list()` with:
+   * - Visibility enforcement: public/open/closed are discoverable; private
+   *   requires active membership.
+   * - Metadata restriction: closed rooms where the caller is not an active
+   *   member return only id, title, visibility (no creator, postCount, etc.).
+   * - Pending badge: owners receive a `pendingCount` field with the number of
+   *   pending join requests.
+   */
+  async listRooms(actor: SimulationActor): Promise<RoomListEntryDto[]> {
+    const simulations = await this.deps.simulations.findAllVisibleTo(actor);
+    return simulations.map((simulation) => toRoomListEntryDto(simulation, actor));
   }
 
   /**
@@ -712,17 +729,25 @@ export function toSimulationDto(simulation: Simulation): SimulationDto {
  * rather than left to the client, since the same rule decides whether
  * `rename`/`stop`/`resume` will be accepted — deriving it twice is how a
  * button appears for an action the server then refuses.
+ *
+ * `pendingCount` is included only for the room owner (issue #155): it is the
+ * number of pending join requests, used to show a badge on the room entry.
+ * Non-owners receive no `pendingCount` field at all.
  */
 export function toSimulationSummaryDto(
   simulation: SimulationSummary,
   actor: SimulationActor,
 ): SimulationSummaryDto {
+  const isOwner = isSimulationOwnerOrAdmin(simulation, actor);
   return {
     ...toSimulationDto(simulation),
     postCount: simulation.postCount,
     lastActivityAt: simulation.lastActivityAt.toISOString(),
     creator: simulation.creator,
-    canManage: isSimulationOwnerOrAdmin(simulation, actor),
+    canManage: isOwner,
+    ...(isOwner && simulation.pendingCount !== undefined
+      ? { pendingCount: simulation.pendingCount }
+      : {}),
   };
 }
 
@@ -772,6 +797,46 @@ export function assertSimulationOwnerOrAdmin(
   if (!isSimulationOwnerOrAdmin(simulation, actor)) {
     throw new SimulationForbiddenError(simulation.id);
   }
+}
+
+/**
+ * Converts a `SimulationSummary` to a `RoomListEntryDto` for the visibility-
+ * aware room list (issue #155).
+ *
+ * For `closed` rooms where the caller is not an active member, only the
+ * prescribed metadata fields are returned (restricted entry). For all other
+ * rooms, the full summary DTO is returned with `restricted: false`.
+ *
+ * The `callerIsActiveMember` flag is set by the repository query so this
+ * function does not need a second DB round-trip.
+ */
+export function toRoomListEntryDto(
+  simulation: SimulationSummary,
+  actor: SimulationActor,
+): RoomListEntryDto {
+  const isOwnerOrAdmin = isSimulationOwnerOrAdmin(simulation, actor);
+  const isActiveMember = simulation.callerIsActiveMember ?? false;
+
+  // Closed rooms: non-members (who are not the owner or admin) receive only
+  // the prescribed metadata. Owners and admins always get the full entry.
+  if (
+    simulation.visibility === "closed" &&
+    !isActiveMember &&
+    !isOwnerOrAdmin
+  ) {
+    return {
+      restricted: true,
+      id: simulation.id,
+      title: simulation.title,
+      visibility: simulation.visibility,
+      createdAt: simulation.createdAt.toISOString(),
+    };
+  }
+
+  return {
+    restricted: false,
+    ...toSimulationSummaryDto(simulation, actor),
+  };
 }
 
 /**

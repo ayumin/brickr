@@ -1,9 +1,11 @@
 /**
- * Tests for room lifecycle routes (issues #150, #151).
+ * Tests for room lifecycle routes (issues #150, #151, #154, #155).
  *
  * Issue #150: GET /api/rooms/:id (defineRoute demo)
  * Issue #151: POST /api/rooms, PUT /api/rooms/:id, POST /api/rooms/:id/archive,
  *             DELETE /api/rooms/:id
+ * Issue #154: membership management endpoints
+ * Issue #155: GET /api/rooms (visibility-aware room list)
  *
  * Verifies for each route:
  *   - auth: "required" → 401 when signed out
@@ -24,6 +26,7 @@ import {
   updateRoomOpenApiMeta,
   archiveRoomOpenApiMeta,
   deleteRoomOpenApiMeta,
+  listRoomsOpenApiMeta,
   inviteMemberOpenApiMeta,
   listPendingMembershipsOpenApiMeta,
   removeRoomMemberOpenApiMeta,
@@ -135,6 +138,7 @@ function makeServices(
   return {
     simulations: {
       get: () => Promise.resolve({ simulation: roomSummary }),
+      listRooms: () => Promise.resolve([]),
       ...simulationsOverrides,
     },
     rooms: makeRoomService(roomsOverrides),
@@ -1042,6 +1046,123 @@ describe("POST /api/rooms/:id/members/:mid/reject", () => {
   });
 });
 
+// ── GET /api/rooms ────────────────────────────────────────────────────────────
+
+describe("GET /api/rooms", () => {
+  const apps: FastifyInstance[] = [];
+
+  afterEach(async () => {
+    await Promise.all(apps.splice(0).map((app) => app.close()));
+  });
+
+  it("answers 401 when signed out", async () => {
+    const app = await buildApp(null);
+    apps.push(app);
+
+    const response = await app.inject({ method: "GET", url: "/api/rooms" });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toMatchObject({ error: { code: "unauthenticated" } });
+  });
+
+  it("returns an empty list when there are no visible rooms", async () => {
+    const app = await buildApp(signedInUser);
+    apps.push(app);
+
+    const response = await app.inject({ method: "GET", url: "/api/rooms" });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ rooms: [] });
+  });
+
+  it("returns full room entries for public rooms", async () => {
+    const publicRoom = {
+      restricted: false as const,
+      id: "room-public",
+      title: "パブリックルーム",
+      status: "active" as const,
+      visibility: "public" as const,
+      createdAt: "2026-08-16T00:00:00.000Z",
+      postCount: 3,
+      lastActivityAt: "2026-08-16T00:00:00.000Z",
+      creator: null,
+      canManage: false,
+    };
+    const services = makeServices({ listRooms: () => Promise.resolve([publicRoom]) });
+    const app = await buildApp(signedInUser, services);
+    apps.push(app);
+
+    const response = await app.inject({ method: "GET", url: "/api/rooms" });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ rooms: [publicRoom] });
+  });
+
+  it("returns restricted entries for closed rooms where the caller is not a member", async () => {
+    const closedRestricted = {
+      restricted: true as const,
+      id: "room-closed",
+      title: "クローズドルーム",
+      visibility: "closed" as const,
+      createdAt: "2026-08-16T00:00:00.000Z",
+    };
+    const services = makeServices({ listRooms: () => Promise.resolve([closedRestricted]) });
+    const app = await buildApp(signedInUser, services);
+    apps.push(app);
+
+    const response = await app.inject({ method: "GET", url: "/api/rooms" });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.rooms).toHaveLength(1);
+    expect(body.rooms[0]).toEqual(closedRestricted);
+    expect(body.rooms[0]).not.toHaveProperty("postCount");
+    expect(body.rooms[0]).not.toHaveProperty("creator");
+    expect(body.rooms[0]).not.toHaveProperty("canManage");
+  });
+
+  it("returns pendingCount for the room owner", async () => {
+    const ownerRoom = {
+      restricted: false as const,
+      id: "room-1",
+      title: "オーナールーム",
+      status: "active" as const,
+      visibility: "open" as const,
+      createdAt: "2026-08-16T00:00:00.000Z",
+      createdByUserId: signedInUser.id,
+      postCount: 0,
+      lastActivityAt: "2026-08-16T00:00:00.000Z",
+      creator: { id: signedInUser.id, handle: "hanako", displayName: "花子" },
+      canManage: true,
+      pendingCount: 3,
+    };
+    const services = makeServices({ listRooms: () => Promise.resolve([ownerRoom]) });
+    const app = await buildApp(signedInUser, services);
+    apps.push(app);
+
+    const response = await app.inject({ method: "GET", url: "/api/rooms" });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().rooms[0]).toMatchObject({ pendingCount: 3 });
+  });
+
+  it("passes the signed-in user to the service", async () => {
+    let receivedUser: UserAccount | undefined;
+    const services = makeServices({
+      listRooms: (user: UserAccount) => {
+        receivedUser = user;
+        return Promise.resolve([]);
+      },
+    });
+    const app = await buildApp(signedInUser, services);
+    apps.push(app);
+
+    await app.inject({ method: "GET", url: "/api/rooms" });
+
+    expect(receivedUser?.id).toBe(signedInUser.id);
+  });
+});
+
 // ── OpenAPI registration ──────────────────────────────────────────────────────
 
 describe("rooms route OpenAPI registration", () => {
@@ -1106,6 +1227,23 @@ describe("rooms route OpenAPI registration", () => {
     expect(found).toBeDefined();
     expect(found?.method).toBe("DELETE");
     expect(found?.openApiPath).toBe("/api/rooms/{id}");
+  });
+
+  it("registers the listRooms operation", () => {
+    const found = registeredRoutes.find(
+      (r) => r.operation.operationId === listRoomsOpenApiMeta.operationId,
+    );
+    expect(found).toBeDefined();
+    expect(found?.method).toBe("GET");
+    expect(found?.openApiPath).toBe("/api/rooms");
+  });
+
+  it("marks the listRooms operation as session-protected", () => {
+    const found = registeredRoutes.find(
+      (r) => r.operation.operationId === listRoomsOpenApiMeta.operationId,
+    );
+    expect(found?.operation.security).toEqual([{ cookieAuth: [] }]);
+    expect(found?.operation.responses?.["401"]).toBeDefined();
   });
 
   it("registers the inviteRoomMember operation", () => {
