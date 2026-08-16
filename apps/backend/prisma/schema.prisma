@@ -402,7 +402,7 @@ model ScheduledEvent {
   /// Primary polling index: find pending events whose scheduled time has arrived.
   @@index([status, scheduledAt])
   /// Lock-reclaim index: find events held by a worker whose lock has expired.
-  @@index([lockedBy, lockedAt])
+  @@index([status, lockedAt])
   /// Deduplication: at most one pending event per (type, roomId, postId, characterId).
   /// Partial uniqueness (only for pending) cannot be expressed in Prisma schema;
   /// the repository enforces it by checking before insert.
