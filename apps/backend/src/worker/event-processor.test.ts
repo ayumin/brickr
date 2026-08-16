@@ -5,6 +5,19 @@ import type { ScheduledEvent } from "../scheduled-events/scheduled-event.js";
 import type { Simulation } from "../simulation/simulation.js";
 import { processEvent, type EventProcessorDeps } from "./event-processor.js";
 
+// Mock the thread revival and room review services so we can control their
+// return values without needing to wire up all their dependencies.
+vi.mock("../simulation/thread-revival-service.js", () => ({
+  reviveThread: vi.fn(),
+  DORMANT_THRESHOLD_MS: 2 * 60 * 60 * 1_000,
+}));
+vi.mock("../simulation/room-review-service.js", () => ({
+  reviewRoom: vi.fn(),
+}));
+
+import { reviveThread } from "../simulation/thread-revival-service.js";
+import { reviewRoom } from "../simulation/room-review-service.js";
+
 const now = new Date("2026-08-17T00:00:00.000Z");
 
 const character: Character = {
@@ -68,6 +81,7 @@ const event: ScheduledEvent = {
 function makeDeps(generate: () => Promise<unknown>) {
   const publish = vi.fn(() => Promise.resolve(triggerPost));
   const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+  const scheduledEventsCreate = vi.fn(() => Promise.resolve(null));
   const deps = {
     simulations: { findById: () => Promise.resolve(room) },
     characters: {
@@ -85,6 +99,7 @@ function makeDeps(generate: () => Promise<unknown>) {
     posts: {
       findById: () => Promise.resolve(triggerPost),
       findUsersByIds: () => Promise.resolve([]),
+      findDormantThreadRoots: () => Promise.resolve([]),
       publish,
     },
     threads: {
@@ -100,9 +115,10 @@ function makeDeps(generate: () => Promise<unknown>) {
         }),
     },
     providers: { preferred: () => null },
+    scheduledEvents: { create: scheduledEventsCreate },
     logger,
   } as unknown as EventProcessorDeps;
-  return { deps, publish, logger };
+  return { deps, publish, logger, scheduledEventsCreate };
 }
 
 describe("processEvent character.respond", () => {
@@ -170,5 +186,111 @@ describe("processEvent Cast join events", () => {
       expect.anything(),
       "cast welcome post published",
     );
+  });
+});
+
+describe("processEvent thread.revive", () => {
+  const reviveEvent: ScheduledEvent = {
+    ...event,
+    type: "thread.revive",
+    postId: triggerPost.id,
+    threadRootId: triggerPost.id,
+    characterId: null,
+  };
+
+  it("logs skipped when the revival service returns skipped", async () => {
+    vi.mocked(reviveThread).mockResolvedValue({
+      outcome: "skipped",
+      reason: "no dormant threads found",
+    });
+    const { deps, logger } = makeDeps(() => Promise.resolve({}));
+
+    await processEvent(reviveEvent, deps);
+
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: "no dormant threads found" }),
+      "thread revival skipped",
+    );
+  });
+
+  it("logs revived when the revival service returns revived", async () => {
+    vi.mocked(reviveThread).mockResolvedValue({
+      outcome: "revived",
+      characterId: character.id,
+      postId: "post-revived",
+    });
+    const { deps, logger } = makeDeps(() => Promise.resolve({}));
+
+    await processEvent(reviveEvent, deps);
+
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.objectContaining({ characterId: character.id, postId: "post-revived" }),
+      "thread revived",
+    );
+  });
+
+  it("throws when roomId is missing so the worker retries", async () => {
+    const { deps } = makeDeps(() => Promise.resolve({}));
+
+    await expect(
+      processEvent({ ...reviveEvent, roomId: null }, deps),
+    ).rejects.toThrow("thread.revive event event-1 is missing roomId");
+  });
+
+  it("throws when the revival service returns an error so the worker retries", async () => {
+    vi.mocked(reviveThread).mockResolvedValue({
+      outcome: "error",
+      reason: "LLM down",
+    });
+    const { deps } = makeDeps(() => Promise.resolve({}));
+
+    await expect(processEvent(reviveEvent, deps)).rejects.toThrow(
+      /thread\.revive failed for event event-1/,
+    );
+  });
+});
+
+describe("processEvent room.review", () => {
+  const reviewEvent: ScheduledEvent = {
+    ...event,
+    type: "room.review",
+    postId: null,
+    threadRootId: null,
+    characterId: null,
+  };
+
+  it("logs skipped when the review service returns a skipped reason", async () => {
+    vi.mocked(reviewRoom).mockResolvedValue({
+      revivalsScheduled: 0,
+      skippedReason: "room not found or archived",
+    });
+    const { deps, logger } = makeDeps(() => Promise.resolve({}));
+
+    await processEvent(reviewEvent, deps);
+
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: "room not found or archived" }),
+      "room review skipped",
+    );
+  });
+
+  it("logs completed with revival count when the review service schedules revivals", async () => {
+    vi.mocked(reviewRoom).mockResolvedValue({ revivalsScheduled: 2 });
+    const { deps, logger } = makeDeps(() => Promise.resolve({}));
+
+    await processEvent(reviewEvent, deps);
+
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.objectContaining({ revivalsScheduled: 2 }),
+      "room review completed",
+    );
+  });
+
+  it("throws when roomId is missing so the worker retries", async () => {
+    const { deps } = makeDeps(() => Promise.resolve({}));
+
+    await expect(
+      processEvent({ ...reviewEvent, roomId: null }, deps),
+    ).rejects.toThrow("room.review event event-1 is missing roomId");
   });
 });

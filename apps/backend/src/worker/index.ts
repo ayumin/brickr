@@ -104,6 +104,7 @@ const processorDeps = {
   agents: agentService,
   llm: llmClient,
   providers: providerRegistry,
+  scheduledEvents: scheduledEventRepository,
   logger,
 };
 

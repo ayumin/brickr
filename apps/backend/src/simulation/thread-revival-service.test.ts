@@ -1,0 +1,297 @@
+/**
+ * Unit tests for the thread revival service (issue #165).
+ *
+ * All external dependencies are mocked so the tests run without a database or
+ * LLM provider.
+ */
+import { describe, expect, it, vi } from "vitest";
+import type { Character } from "../characters/character.js";
+import type { Post } from "../posts/post.js";
+import type { Simulation } from "../simulation/simulation.js";
+import { reviveThread, DORMANT_THRESHOLD_MS, type ThreadRevivalDeps } from "./thread-revival-service.js";
+
+// ---------------------------------------------------------------------------
+// Fixtures
+// ---------------------------------------------------------------------------
+
+const now = new Date("2026-08-17T12:00:00.000Z");
+const dormantAt = new Date(now.getTime() - DORMANT_THRESHOLD_MS - 1_000); // just past threshold
+
+const room: Simulation = {
+  id: "room-1",
+  title: "Test Room",
+  status: "active",
+  scope: "room",
+  visibility: "public",
+  tags: [],
+  createdAt: now,
+  lastActivityAt: now,
+  createdByUserId: "user-1",
+};
+
+const eagerCharacter: Character = {
+  id: "char-eager",
+  handle: "eager",
+  displayName: "Eager",
+  description: "desc",
+  rolePrompt: "role",
+  tonePrompt: "tone",
+  interests: [],
+  activityLevel: 1,
+  responseProbability: 1,
+  replyProbability: 0.8,
+  quoteProbability: 0.1,
+  influence: 0,
+  modelProfileId: "test-profile",
+  behaviorProfileKey: "eager", // revivalWeight = 0.4
+};
+
+const lurkerCharacter: Character = {
+  ...eagerCharacter,
+  id: "char-lurker",
+  handle: "lurker",
+  displayName: "Lurker",
+  behaviorProfileKey: "lurker", // revivalWeight = 0.05
+};
+
+const dormantPost: Post = {
+  id: "post-dormant",
+  roomId: "room-1",
+  authorId: "user-1",
+  content: "This thread has gone quiet",
+  mentions: [],
+  replyTo: null,
+  quoteOf: null,
+  threadRootId: "post-dormant",
+  threadActivityAt: dormantAt,
+  createdAt: dormantAt,
+};
+
+const revivedPost: Post = {
+  id: "post-revived",
+  roomId: "room-1",
+  authorId: "char-eager",
+  content: "Let me revive this!",
+  mentions: [],
+  replyTo: "post-dormant",
+  quoteOf: null,
+  threadRootId: "post-dormant",
+  threadActivityAt: now,
+  createdAt: now,
+};
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function makeDeps(overrides: Partial<ThreadRevivalDeps> = {}): ThreadRevivalDeps {
+  return {
+    simulations: {
+      findById: vi.fn(() => Promise.resolve(room)),
+    } as unknown as ThreadRevivalDeps["simulations"],
+    characters: {
+      findAll: vi.fn(() => Promise.resolve([eagerCharacter])),
+    } as unknown as ThreadRevivalDeps["characters"],
+    memberships: {
+      findActiveCastIds: vi.fn(() => Promise.resolve([eagerCharacter.id])),
+    } as unknown as ThreadRevivalDeps["memberships"],
+    posts: {
+      findDormantThreadRoots: vi.fn(() => Promise.resolve([dormantPost])),
+      findUsersByIds: vi.fn(() => Promise.resolve([])),
+      publish: vi.fn(() => Promise.resolve(revivedPost)),
+    } as unknown as ThreadRevivalDeps["posts"],
+    threads: {
+      getCurrentThread: vi.fn(() =>
+        Promise.resolve({ target: dormantPost, posts: [dormantPost] }),
+      ),
+    } as unknown as ThreadRevivalDeps["threads"],
+    agents: {
+      generate: vi.fn(() =>
+        Promise.resolve({
+          content: "Let me revive this!",
+          action: "reply",
+          providerId: "mock",
+          model: "test",
+        }),
+      ),
+    } as unknown as ThreadRevivalDeps["agents"],
+    clock: () => now,
+    rng: () => 0.1, // always below revivalWeight for eager (0.4)
+    ...overrides,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+describe("reviveThread", () => {
+  it("returns skipped when the room is archived", async () => {
+    const deps = makeDeps({
+      simulations: {
+        findById: vi.fn(() => Promise.resolve({ ...room, status: "archived" })),
+      } as unknown as ThreadRevivalDeps["simulations"],
+    });
+
+    const result = await reviveThread("room-1", deps);
+
+    expect(result.outcome).toBe("skipped");
+    expect((result as { outcome: "skipped"; reason: string }).reason).toContain("archived");
+  });
+
+  it("returns skipped when the room does not exist", async () => {
+    const deps = makeDeps({
+      simulations: {
+        findById: vi.fn(() => Promise.resolve(null)),
+      } as unknown as ThreadRevivalDeps["simulations"],
+    });
+
+    const result = await reviveThread("room-1", deps);
+
+    expect(result.outcome).toBe("skipped");
+  });
+
+  it("returns skipped when no dormant threads exist", async () => {
+    const deps = makeDeps({
+      posts: {
+        findDormantThreadRoots: vi.fn(() => Promise.resolve([])),
+        findUsersByIds: vi.fn(() => Promise.resolve([])),
+        publish: vi.fn(),
+      } as unknown as ThreadRevivalDeps["posts"],
+    });
+
+    const result = await reviveThread("room-1", deps);
+
+    expect(result.outcome).toBe("skipped");
+    expect((result as { outcome: "skipped"; reason: string }).reason).toContain("no dormant threads");
+  });
+
+  it("returns skipped when no active Cast members exist", async () => {
+    const deps = makeDeps({
+      memberships: {
+        findActiveCastIds: vi.fn(() => Promise.resolve([])),
+      } as unknown as ThreadRevivalDeps["memberships"],
+    });
+
+    const result = await reviveThread("room-1", deps);
+
+    expect(result.outcome).toBe("skipped");
+    expect((result as { outcome: "skipped"; reason: string }).reason).toContain("no active Cast");
+  });
+
+  it("returns skipped when no character is willing to revive (rng always above revivalWeight)", async () => {
+    const deps = makeDeps({
+      rng: () => 0.99, // always above any revivalWeight
+    });
+
+    const result = await reviveThread("room-1", deps);
+
+    expect(result.outcome).toBe("skipped");
+    expect((result as { outcome: "skipped"; reason: string }).reason).toContain("no character willing");
+  });
+
+  it("returns revived when an eager character successfully posts", async () => {
+    const deps = makeDeps();
+
+    const result = await reviveThread("room-1", deps);
+
+    expect(result.outcome).toBe("revived");
+    expect((result as { outcome: "revived"; characterId: string; postId: string }).characterId).toBe(
+      eagerCharacter.id,
+    );
+    expect((result as { outcome: "revived"; characterId: string; postId: string }).postId).toBe(
+      revivedPost.id,
+    );
+  });
+
+  it("calls findDormantThreadRoots with the correct dormant threshold", async () => {
+    const findDormantThreadRoots = vi.fn(() => Promise.resolve([]));
+    const deps = makeDeps({
+      posts: {
+        findDormantThreadRoots,
+        findUsersByIds: vi.fn(() => Promise.resolve([])),
+        publish: vi.fn(),
+      } as unknown as ThreadRevivalDeps["posts"],
+    });
+
+    await reviveThread("room-1", deps);
+
+    expect(findDormantThreadRoots).toHaveBeenCalledWith(
+      "room-1",
+      expect.any(Date),
+      expect.any(Number),
+    );
+    // The dormantBefore date should be now - DORMANT_THRESHOLD_MS
+    const [, dormantBefore] = findDormantThreadRoots.mock.calls[0] as [string, Date, number];
+    expect(dormantBefore.getTime()).toBe(now.getTime() - DORMANT_THRESHOLD_MS);
+  });
+
+  it("returns error when the agent fails to generate", async () => {
+    const deps = makeDeps({
+      agents: {
+        generate: vi.fn(() => Promise.reject(new Error("LLM timeout"))),
+      } as unknown as ThreadRevivalDeps["agents"],
+    });
+
+    const result = await reviveThread("room-1", deps);
+
+    expect(result.outcome).toBe("error");
+    expect((result as { outcome: "error"; reason: string }).reason).toContain("LLM timeout");
+  });
+
+  it("returns skipped when thread context is unavailable", async () => {
+    const deps = makeDeps({
+      threads: {
+        getCurrentThread: vi.fn(() => Promise.resolve(null)),
+      } as unknown as ThreadRevivalDeps["threads"],
+    });
+
+    const result = await reviveThread("room-1", deps);
+
+    expect(result.outcome).toBe("skipped");
+    expect((result as { outcome: "skipped"; reason: string }).reason).toContain("thread context");
+  });
+
+  it("prefers the most recently active dormant thread (first in list)", async () => {
+    const olderPost: Post = {
+      ...dormantPost,
+      id: "post-older",
+      threadActivityAt: new Date(dormantAt.getTime() - 60_000),
+    };
+    const findDormantThreadRoots = vi.fn(() => Promise.resolve([dormantPost, olderPost]));
+    const getCurrentThread = vi.fn(() =>
+      Promise.resolve({ target: dormantPost, posts: [dormantPost] }),
+    );
+    const deps = makeDeps({
+      posts: {
+        findDormantThreadRoots,
+        findUsersByIds: vi.fn(() => Promise.resolve([])),
+        publish: vi.fn(() => Promise.resolve(revivedPost)),
+      } as unknown as ThreadRevivalDeps["posts"],
+      threads: { getCurrentThread } as unknown as ThreadRevivalDeps["threads"],
+    });
+
+    await reviveThread("room-1", deps);
+
+    // getCurrentThread should be called with the first (most recent) dormant post
+    expect(getCurrentThread).toHaveBeenCalledWith(dormantPost.id);
+  });
+
+  it("uses the injected clock to compute the dormant threshold", async () => {
+    const customNow = new Date("2026-01-01T00:00:00.000Z");
+    const findDormantThreadRoots = vi.fn(() => Promise.resolve([]));
+    const deps = makeDeps({
+      clock: () => customNow,
+      posts: {
+        findDormantThreadRoots,
+        findUsersByIds: vi.fn(() => Promise.resolve([])),
+        publish: vi.fn(),
+      } as unknown as ThreadRevivalDeps["posts"],
+    });
+
+    await reviveThread("room-1", deps);
+
+    const [, dormantBefore] = findDormantThreadRoots.mock.calls[0] as [string, Date, number];
+    expect(dormantBefore.getTime()).toBe(customNow.getTime() - DORMANT_THRESHOLD_MS);
+  });
+});
