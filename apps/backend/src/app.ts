@@ -44,12 +44,19 @@ export async function buildApp(db: Db): Promise<FastifyInstance> {
   app.setNotFoundHandler((_request, reply) => sendError(reply, 404, "not_found", "route not found"));
 
   app.setErrorHandler((error: FastifyError | AppError | Error, request, reply) => {
-    request.log.error({ err: error }, "unhandled request error");
-
     // A known AppError carries its own status, code, and safe message.
+    // Log 4xx AppErrors at warn level to avoid noise in error monitoring;
+    // reserve error level for 5xx and truly unexpected failures.
     if (error instanceof AppError) {
+      if (error.status < 500) {
+        request.log.warn({ err: error }, "request error");
+      } else {
+        request.log.error({ err: error }, "request error");
+      }
       return reply.status(error.status).send(error.toResponse());
     }
+
+    request.log.error({ err: error }, "unhandled request error");
 
     const status = (error as FastifyError).statusCode ?? 500;
     // Never leak internal failure detail to the client.
