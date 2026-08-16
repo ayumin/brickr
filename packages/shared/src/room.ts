@@ -183,6 +183,49 @@ export type RoomResponse = {
   simulation: RoomSummaryDto;
 };
 
+// ---------------------------------------------------------------------------
+// Room analysis snapshot (issue #166)
+// ---------------------------------------------------------------------------
+
+/** Lifecycle status of a room analysis snapshot. */
+export const SNAPSHOT_STATUSES = ["pending", "completed", "failed"] as const;
+
+export type SnapshotStatus = (typeof SNAPSHOT_STATUSES)[number];
+
+/**
+ * A room analysis snapshot as returned by the API.
+ *
+ * Contains the LLM-generated summary and post statistics for a room.
+ * Only one snapshot is kept per room (the latest).
+ *
+ * When `status` is `"failed"`, `lastSuccessful` may be present and contains
+ * the most recent successfully completed snapshot so the caller can still
+ * display useful data.
+ */
+export type RoomAnalysisSnapshotDto = {
+  id: string;
+  roomId: string;
+  postCount: number;
+  latestPostId: string | null;
+  summary: string | null;
+  status: SnapshotStatus;
+  error: string | null;
+  createdAt: string;
+  updatedAt: string;
+  /** Present when status is "failed" and a prior successful snapshot exists. */
+  lastSuccessful?: RoomAnalysisSnapshotDto;
+};
+
+export type RoomAnalysisSnapshotResponse = {
+  snapshot: RoomAnalysisSnapshotDto;
+};
+
+export type UpdateRoomAnalysisSnapshotResponse = {
+  snapshot: RoomAnalysisSnapshotDto;
+  /** True when the snapshot was regenerated; false when no change was detected. */
+  updated: boolean;
+};
+
 /** A room membership record as returned by the API. */
 export type RoomMembershipDto = {
   id: string;

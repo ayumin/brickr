@@ -27,6 +27,7 @@ export const API_ERROR_CODES = [
   "room_archived",
   "room_not_archived",
   "room_not_found",
+  "snapshot_not_found",
   "unauthenticated",
   "underage",
   "visibility_immutable",

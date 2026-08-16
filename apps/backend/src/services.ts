@@ -32,6 +32,8 @@ import { EventHub } from "./simulation/event-hub.js";
 import { RoomMembershipRepository } from "./simulation/room-membership-repository.js";
 import { RoomMembershipService } from "./simulation/room-membership-service.js";
 import { RoomService } from "./simulation/room-service.js";
+import { RoomAnalysisSnapshotRepository } from "./simulation/room-analysis-snapshot-repository.js";
+import { RoomAnalysisSnapshotService } from "./simulation/room-analysis-snapshot-service.js";
 import { SimulationRepository } from "./simulation/simulation-repository.js";
 import { SimulationAnalysisService } from "./simulation/simulation-analysis-service.js";
 import type { SimulationLogger } from "./simulation/simulation-service.js";
@@ -56,6 +58,7 @@ export type AppServices = {
   simulationAnalysis: SimulationAnalysisService;
   rooms: RoomService;
   roomMemberships: RoomMembershipService;
+  roomAnalysisSnapshot: RoomAnalysisSnapshotService;
   events: EventHub;
   providerRegistry: LLMProviderRegistry;
   applicationSettings: ApplicationSettingsService;
@@ -73,6 +76,7 @@ export async function buildServices(db: Db, logger: SimulationLogger): Promise<A
   const postRepository = new PostRepository(db);
   const roomMembershipRepository = new RoomMembershipRepository(db);
   const simulationRepository = new SimulationRepository(db);
+  const roomAnalysisSnapshotRepository = new RoomAnalysisSnapshotRepository(db);
   const userProfileRepository = new UserProfileRepository(db);
   const applicationSettingRepository = new ApplicationSettingRepository(db);
   const userAccountRepository = new UserAccountRepository(db);
@@ -149,6 +153,15 @@ export async function buildServices(db: Db, logger: SimulationLogger): Promise<A
     memberships: roomMembershipRepository,
   });
 
+  const roomAnalysisSnapshot = new RoomAnalysisSnapshotService({
+    snapshots: roomAnalysisSnapshotRepository,
+    simulations: simulationRepository,
+    memberships: roomMembershipRepository,
+    posts: postService,
+    llm: llmClient,
+    providers: providerRegistry,
+  });
+
   const modelProfiles = new ModelProfileService(
     modelProfileRepository,
     providerRegistry,
@@ -195,6 +208,7 @@ export async function buildServices(db: Db, logger: SimulationLogger): Promise<A
     simulationAnalysis,
     rooms,
     roomMemberships,
+    roomAnalysisSnapshot,
     events,
     providerRegistry,
     applicationSettings,

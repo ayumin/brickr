@@ -156,11 +156,12 @@ model Room {
   /// list can order by activity without aggregating posts (§8.1).
   lastActivityAt  DateTime @default(now()) @map("last_activity_at")
 
-  posts           Post[]
-  memberships     RoomMembership[]
-  scheduledEvents ScheduledEvent[]
-  llmUsages       LLMUsage[]
-  createdByUser   UserProfile?     @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  posts             Post[]
+  memberships       RoomMembership[]
+  scheduledEvents   ScheduledEvent[]
+  llmUsages         LLMUsage[]
+  analysisSnapshot  RoomAnalysisSnapshot?
+  createdByUser     UserProfile?     @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
 
   @@index([createdByUserId])
   @@index([scope, status, lastActivityAt])
@@ -444,6 +445,48 @@ model TokenUsage {
   user UserProfile @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("token_usages")
+}
+
+/// Lifecycle status of a room analysis snapshot (issue #166).
+///
+/// Allowed transitions:
+///   pending    → completed | failed
+///   failed     → pending   (retry on next explicit update request)
+enum SnapshotStatus {
+  pending
+  completed
+  failed
+}
+
+/// Room analysis snapshot — one row per room, always the latest (issue #166).
+///
+/// Stores the LLM-generated summary and post statistics for a room.
+/// Only one snapshot is kept per room (roomId is unique). When a new snapshot
+/// is generated it overwrites the previous one via upsert.
+///
+/// Change detection: a new snapshot is only generated when `latestPostId` or
+/// `postCount` has changed since the last completed snapshot.
+///
+/// Archived rooms: the update endpoint refuses to generate a new snapshot for
+/// an archived room (enforced at the service layer).
+///
+/// Failure recovery: when the latest snapshot has status `failed`, the API
+/// returns the most recent `completed` snapshot alongside the error, so the
+/// caller can still display useful data.
+model RoomAnalysisSnapshot {
+  id           String         @id @default(uuid())
+  roomId       String         @unique @map("room_id")
+  postCount    Int            @map("post_count")
+  latestPostId String?        @map("latest_post_id")
+  summary      String?
+  status       SnapshotStatus @default(pending)
+  error        String?
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@map("room_analysis_snapshots")
 }
 
 /// Per-provider LLM token budget and circuit-breaker state (issue #162).
