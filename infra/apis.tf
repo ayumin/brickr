@@ -1,6 +1,8 @@
 locals {
   required_apis = toset(concat([
     "artifactregistry.googleapis.com",
+    # Keep the already-enabled API managed during the migration away from
+    # Cloud Build. Enabling an unused API has no runtime cost.
     "cloudbuild.googleapis.com",
     "compute.googleapis.com",
     "iam.googleapis.com",

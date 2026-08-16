@@ -43,11 +43,6 @@ output "gitlab_deployer_service_account" {
   value       = local.gitlab_deploy_enabled ? google_service_account.gitlab_deployer[0].email : null
 }
 
-output "cloud_build_service_account" {
-  description = "User-managed service account used to execute Cloud Build."
-  value       = local.gitlab_deploy_enabled ? google_service_account.cloud_build[0].email : null
-}
-
 output "admin_password" {
   description = "Generated or supplied initial administrator password. Retrieve with terraform output -raw admin_password."
   value       = local.admin_password

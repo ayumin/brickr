@@ -2,22 +2,11 @@ locals {
   gitlab_deploy_enabled = var.gitlab_namespace_id != null && var.gitlab_project_id != null
 }
 
-data "google_project" "current" {
-  project_id = var.project_id
-}
-
 resource "google_service_account" "gitlab_deployer" {
   count = local.gitlab_deploy_enabled ? 1 : 0
 
   account_id   = "${local.name}-deployer"
   display_name = "Brickr ${var.environment} GitLab deployer"
-}
-
-resource "google_service_account" "cloud_build" {
-  count = local.gitlab_deploy_enabled ? 1 : 0
-
-  account_id   = "${local.name}-builder"
-  display_name = "Brickr ${var.environment} Cloud Build"
 }
 
 resource "google_iam_workload_identity_pool" "gitlab" {
@@ -62,28 +51,12 @@ resource "google_service_account_iam_member" "gitlab_workload_identity_user" {
   member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.gitlab[0].name}/attribute.project_id/${var.gitlab_project_id}"
 }
 
-resource "google_project_iam_member" "gitlab_cloudbuild_editor" {
-  count = local.gitlab_deploy_enabled ? 1 : 0
-
-  project = var.project_id
-  role    = "roles/cloudbuild.builds.editor"
-  member  = "serviceAccount:${google_service_account.gitlab_deployer[0].email}"
-}
-
 resource "google_project_iam_member" "gitlab_run_developer" {
   count = local.gitlab_deploy_enabled ? 1 : 0
 
   project = var.project_id
   role    = "roles/run.developer"
   member  = "serviceAccount:${google_service_account.gitlab_deployer[0].email}"
-}
-
-resource "google_service_account_iam_member" "gitlab_build_user" {
-  count = local.gitlab_deploy_enabled ? 1 : 0
-
-  service_account_id = google_service_account.cloud_build[0].name
-  role               = "roles/iam.serviceAccountUser"
-  member             = "serviceAccount:${google_service_account.gitlab_deployer[0].email}"
 }
 
 resource "google_service_account_iam_member" "gitlab_backend_user" {
@@ -102,27 +75,11 @@ resource "google_service_account_iam_member" "gitlab_frontend_user" {
   member             = "serviceAccount:${google_service_account.gitlab_deployer[0].email}"
 }
 
-resource "google_artifact_registry_repository_iam_member" "cloud_build_writer" {
+resource "google_artifact_registry_repository_iam_member" "gitlab_image_writer" {
   count = local.gitlab_deploy_enabled ? 1 : 0
 
   location   = google_artifact_registry_repository.app.location
   repository = google_artifact_registry_repository.app.repository_id
   role       = "roles/artifactregistry.writer"
-  member     = "serviceAccount:${google_service_account.cloud_build[0].email}"
-}
-
-resource "google_project_iam_member" "cloud_build_log_writer" {
-  count = local.gitlab_deploy_enabled ? 1 : 0
-
-  project = var.project_id
-  role    = "roles/logging.logWriter"
-  member  = "serviceAccount:${google_service_account.cloud_build[0].email}"
-}
-
-resource "google_storage_bucket_iam_member" "cloud_build_source_reader" {
-  count = local.gitlab_deploy_enabled ? 1 : 0
-
-  bucket = "${var.project_id}_cloudbuild"
-  role   = "roles/storage.objectViewer"
-  member = "serviceAccount:${google_service_account.cloud_build[0].email}"
+  member     = "serviceAccount:${google_service_account.gitlab_deployer[0].email}"
 }
