@@ -123,9 +123,9 @@ async function main(): Promise<void> {
   // fresh database. Memberships cover active / pending / left / removed /
   // banned statuses so the membership lifecycle is testable without manual setup.
   //
-  // These rooms are owned by no user (createdByUserId: null) because the admin
-  // account may not exist yet when the seed runs for the first time. Character
-  // memberships are seeded instead so the rooms are not completely empty.
+  // These rooms are owned by no user (createdByUserId: null) — demo rooms are
+  // intentionally unowned so they don't appear as personal rooms of the admin.
+  // Character memberships are seeded instead so the rooms are not completely empty.
 
   await seedDemoRooms();
 }
