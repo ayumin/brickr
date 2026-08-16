@@ -137,7 +137,7 @@ function makeHarness(options: HarnessOptions): Harness {
     const character = authorById.get(post.authorId);
     return {
       id: post.id,
-      roomId: post.simulationId,
+      roomId: post.roomId,
       // One shape for both: nothing in a public post says whether its author is
       // a person or a character (§9.1).
       author:
@@ -166,7 +166,7 @@ function makeHarness(options: HarnessOptions): Harness {
         : undefined;
       const post: Post = {
         id,
-        simulationId: input.simulationId,
+        roomId: input.roomId,
         authorId: input.authorId,
         content: input.content,
         mentions: knownMentions(input.content, options.characters),
@@ -188,9 +188,9 @@ function makeHarness(options: HarnessOptions): Harness {
     toDto(post: Post): Promise<PostDto> {
       return Promise.resolve(toDto(post));
     },
-    listBySimulation(simulationId: string): Promise<PostDto[]> {
+    listByRoom(roomId: string): Promise<PostDto[]> {
       return Promise.resolve(
-        posts.filter((post) => post.simulationId === simulationId).map(toDto),
+        posts.filter((post) => post.roomId === roomId).map(toDto),
       );
     },
     // These tests have no user accounts: characters supply every handle in the
@@ -248,7 +248,7 @@ function makeHarness(options: HarnessOptions): Harness {
       threadActivityCalls.push(post.id);
       return Promise.resolve({
         type: "thread.activity",
-        simulationId: post.simulationId,
+        simulationId: post.roomId,
         postId: post.id,
         room: {
           id: simulation.id,
@@ -381,7 +381,7 @@ describe("SimulationService orchestration", () => {
     const stream = collectUntilCompleted(harness.events);
 
     const userPost = await harness.service.submitUserPost({
-      simulationId: SIMULATION.id,
+      roomId: SIMULATION.id,
       authorId: USER_AUTHOR_ID,
       content: "hello",
       responderIds: [alpha.id],
@@ -424,7 +424,7 @@ describe("SimulationService orchestration", () => {
     const stream = collectUntilCompleted(harness.events);
 
     await harness.service.submitUserPost({
-      simulationId: SIMULATION.id,
+      roomId: SIMULATION.id,
       authorId: USER_AUTHOR_ID,
       content: "hello",
       responderIds: [alpha.id, beta.id],
@@ -464,7 +464,7 @@ describe("SimulationService orchestration", () => {
     const stream = collectUntilCompleted(harness.events);
 
     await harness.service.submitUserPost({
-      simulationId: SIMULATION.id,
+      roomId: SIMULATION.id,
       authorId: USER_AUTHOR_ID,
       content: "hello",
       responderIds: [broken.id, healthy.id],
@@ -503,7 +503,7 @@ describe("SimulationService orchestration", () => {
     const stream = collectUntilTerminal(harness.events);
 
     await harness.service.submitUserPost({
-      simulationId: SIMULATION.id,
+      roomId: SIMULATION.id,
       authorId: USER_AUTHOR_ID,
       content: "hello",
       responderIds: [alpha.id],
@@ -542,7 +542,7 @@ describe("SimulationService orchestration", () => {
     const stream = collectUntilCompleted(harness.events);
 
     await harness.service.submitUserPost({
-      simulationId: SIMULATION.id,
+      roomId: SIMULATION.id,
       authorId: USER_AUTHOR_ID,
       content: "hello",
       responderIds: [alpha.id],
@@ -574,7 +574,7 @@ describe("SimulationService orchestration", () => {
 
     const stream = collectUntilCompleted(harness.events);
     await harness.service.submitUserPost({
-      simulationId: SIMULATION.id,
+      roomId: SIMULATION.id,
       authorId: USER_AUTHOR_ID,
       content: "hello again",
       responderIds: [alpha.id],
@@ -593,7 +593,7 @@ describe("SimulationService cross-simulation post validation", () => {
     const harness = makeHarness({ characters: [] });
     const foreignPost: Post = {
       id: "post-in-another-simulation",
-      simulationId: "sim-other",
+      roomId: "sim-other",
       authorId: USER_AUTHOR_ID,
       content: "from a different room",
       mentions: [],
@@ -607,7 +607,7 @@ describe("SimulationService cross-simulation post validation", () => {
 
     await expect(
       harness.service.submitUserPost({
-        simulationId: SIMULATION.id,
+        roomId: SIMULATION.id,
         authorId: USER_AUTHOR_ID,
         content: "hello",
         responderIds: [],
@@ -623,7 +623,7 @@ describe("SimulationService cross-simulation post validation", () => {
     const harness = makeHarness({ characters: [] });
     const foreignPost: Post = {
       id: "post-in-another-simulation",
-      simulationId: "sim-other",
+      roomId: "sim-other",
       authorId: USER_AUTHOR_ID,
       content: "from a different room",
       mentions: [],
@@ -637,7 +637,7 @@ describe("SimulationService cross-simulation post validation", () => {
 
     await expect(
       harness.service.submitUserPost({
-        simulationId: SIMULATION.id,
+        roomId: SIMULATION.id,
         authorId: USER_AUTHOR_ID,
         content: "hello",
         responderIds: [],
@@ -658,7 +658,7 @@ describe("SimulationService cross-simulation post validation", () => {
  */
 describe("SimulationService thread events (§11.3)", () => {
   const onlyUserPost = {
-    simulationId: SIMULATION.id,
+    roomId: SIMULATION.id,
     authorId: USER_AUTHOR_ID,
     content: "hello",
     responderIds: [],
@@ -775,13 +775,13 @@ describe("SimulationService global feed protection (§8.2)", () => {
     const harness = makeHarness({ characters: [makeCharacter("alpha")], simulation: GLOBAL });
 
     const post = await harness.service.submitUserPost({
-      simulationId: GLOBAL.id,
+      roomId: GLOBAL.id,
       authorId: USER_AUTHOR_ID,
       content: "フィードへの投稿",
       responderIds: [],
     });
 
-    expect(post.simulationId).toBe(GLOBAL.id);
+    expect(post.roomId).toBe(GLOBAL.id);
     expect(post.threadRootId).toBe(post.id);
   });
 });
@@ -809,7 +809,7 @@ describe("SimulationService token usage (CLAUDE.md §66.4)", () => {
     const stream = collectUntilCompleted(harness.events);
 
     await harness.service.submitUserPost({
-      simulationId: SIMULATION.id,
+      roomId: SIMULATION.id,
       authorId: USER_AUTHOR_ID,
       content: "hello",
       responderIds: [alpha.id],
@@ -831,7 +831,7 @@ describe("SimulationService token usage (CLAUDE.md §66.4)", () => {
     const stream = collectUntilCompleted(harness.events);
 
     await harness.service.submitUserPost({
-      simulationId: SIMULATION.id,
+      roomId: SIMULATION.id,
       authorId: USER_AUTHOR_ID,
       content: "hello",
       responderIds: [alpha.id],
@@ -859,7 +859,7 @@ describe("SimulationService token usage (CLAUDE.md §66.4)", () => {
     const stream = collectUntilCompleted(harness.events);
 
     await harness.service.submitUserPost({
-      simulationId: SIMULATION.id,
+      roomId: SIMULATION.id,
       authorId: USER_AUTHOR_ID,
       content: "hello",
       responderIds: [alpha.id],

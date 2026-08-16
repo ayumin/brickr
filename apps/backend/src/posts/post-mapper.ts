@@ -67,7 +67,7 @@ export function toPostDto(
 ): PostDto {
   return {
     id: post.id,
-    roomId: post.simulationId,
+    roomId: post.roomId,
     author: toAuthorDto(post.authorId, charactersById, usersById),
     content: post.content,
     ...(post.imageUrl ? { imageUrl: post.imageUrl } : {}),

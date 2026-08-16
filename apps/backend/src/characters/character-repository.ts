@@ -267,7 +267,7 @@ export class CharacterRepository {
           detachedRootIds: [...new Set(doomed.map((post) => post.threadRootId))].filter(
             (rootId) => !doomedIds.has(rootId),
           ),
-          simulationIds: [...new Set(doomed.map((post) => post.roomId))],
+          roomIds: [...new Set(doomed.map((post) => post.roomId))],
         });
       },
       { timeout: BULK_TRANSACTION_TIMEOUT_MS },

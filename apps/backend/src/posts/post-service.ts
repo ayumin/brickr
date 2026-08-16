@@ -10,7 +10,7 @@ import type { NewPost, Post } from "./post.js";
 import type { PostRepository } from "./post-repository.js";
 
 export type PublishInput = {
-  simulationId: string;
+  roomId: string;
   authorId: string;
   content: string;
   imageUrl?: string;
@@ -47,7 +47,7 @@ export class PostService {
 
     const newPost: NewPost = {
       id,
-      simulationId: input.simulationId,
+      roomId: input.roomId,
       authorId: input.authorId,
       content: input.content,
       ...(input.imageUrl ? { imageUrl: input.imageUrl } : {}),
@@ -66,8 +66,8 @@ export class PostService {
     return this.posts.findById(id);
   }
 
-  async listBySimulation(simulationId: string): Promise<PostDto[]> {
-    return this.toDtos(await this.posts.findBySimulation(simulationId));
+  async listByRoom(roomId: string): Promise<PostDto[]> {
+    return this.toDtos(await this.posts.findByRoom(roomId));
   }
 
   /**

@@ -188,7 +188,7 @@ async function handleCharacterRespond(
       const { replyTo, quoteOf } = resolveActionTargets(action, thread.target);
 
       await deps.posts.publish({
-        simulationId: roomId,
+        roomId,
         authorId: character.id,
         content: generated.content,
         replyTo,

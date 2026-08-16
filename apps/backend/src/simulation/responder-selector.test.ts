@@ -437,7 +437,7 @@ describe("shouldRespond", () => {
 function makePost(overrides: Partial<Post> & { mentions: string[] }): Post {
   return {
     id: "post-1",
-    simulationId: "sim-1",
+    roomId: "sim-1",
     authorId: "author",
     content: "hello",
     replyTo: null,

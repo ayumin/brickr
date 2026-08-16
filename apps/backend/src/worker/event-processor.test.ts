@@ -25,7 +25,7 @@ const character: Character = {
 
 const triggerPost: Post = {
   id: "post-1",
-  simulationId: "room-1",
+  roomId: "room-1",
   authorId: "user-1",
   content: "hello",
   mentions: [],
