@@ -18,7 +18,7 @@
  * | canManage   | owner/admin | owner/admin | owner/admin | owner/admin |
  *
  * *  Active membership required for closed/private; for public/open any
- *    authenticated user may post (they auto-join on first post).
+ *    authenticated user who is not banned may post (they auto-join on first post).
  * †  open rooms require approval (pending → active), so canJoin is true but
  *    the resulting membership starts as "pending".
  *
@@ -27,8 +27,9 @@
  * "admin"  means: actor.isAdmin === true (bypasses all membership checks).
  *
  * Metadata restriction for closed rooms (non-members):
- *   canViewMetadata is false for non-members of closed/private rooms.
- *   The service layer uses this to strip description/tags from the DTO.
+ *   canDiscover controls whether the title may be exposed in discovery.
+ *   canViewMetadata covers the room's full metadata and currently follows
+ *   canView, so non-members of closed/private rooms receive neither.
  */
 
 import type { MemberKind, MemberRole, MembershipStatus, RoomVisibility } from "@brickr/shared";
@@ -96,7 +97,7 @@ export type RoomCapabilities = {
   canDiscover: boolean;
   /** Whether the actor may read the room's posts and full metadata. */
   canView: boolean;
-  /** Whether the actor may read the room's title (but not description/tags). */
+  /** Whether the actor may read the room's full metadata. */
   canViewMetadata: boolean;
   /** Whether the actor may create posts in the room. */
   canPost: boolean;
@@ -161,6 +162,7 @@ export function computeRoomCapabilities(
   const owner = isOwner(actor);
   const member = isActiveMember(actor);
   const authed = isAuthenticated(actor);
+  const banned = anyMembership(actor)?.status === "banned";
   const archived = room.status === "archived";
 
   // Admins bypass all membership checks, but archived rooms still restrict
@@ -207,7 +209,7 @@ export function computeRoomCapabilities(
   if (archived) {
     canPost = false;
   } else if (visibility === "public" || visibility === "open") {
-    canPost = authed;
+    canPost = authed && !banned;
   } else {
     // closed / private: must be an active member
     canPost = member;
@@ -222,7 +224,7 @@ export function computeRoomCapabilities(
   //
   // "No existing membership row" means no row at all — a pending membership
   // means the actor has already requested to join and must not submit again.
-  // left/removed/banned actors may re-join public/open rooms (the service
+  // left/removed actors may re-join public/open rooms (the service
   // layer decides whether to create a new row or update the existing one).
   const hasActiveMembership = member;
 
@@ -232,10 +234,10 @@ export function computeRoomCapabilities(
     canJoin = false;
   } else if (visibility === "public" || visibility === "open") {
     // Public/open: any authenticated actor without a pending membership can join.
-    // left/removed/banned may re-join; pending must wait for approval.
+    // left/removed may re-join; pending must wait and banned actors stay excluded.
     const hasPendingMembership =
       anyMembership(actor)?.status === "pending";
-    canJoin = authed && !hasPendingMembership;
+    canJoin = authed && !hasPendingMembership && !banned;
   } else {
     // closed/private: invitation only, no self-initiated join.
     canJoin = false;

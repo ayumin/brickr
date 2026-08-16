@@ -224,15 +224,15 @@ const testCases: TestCase[] = [
     },
   },
   {
-    label: "public/active — user:banned: can discover/view/post/join (public), cannot invite/manage",
+    label: "public/active — user:banned: can discover/view but cannot post/rejoin/invite/manage",
     room: room("public"),
     actor: user({ status: "banned" }),
     expected: {
       discover: true,
       view: true,
       viewMeta: true,
-      post: true,
-      join: true,
+      post: false,
+      join: false,
       invite: false,
       manage: false,
     },
@@ -796,6 +796,14 @@ describe("computeRoomCapabilities — closed/private non-member metadata restric
     const result = computeRoomCapabilities(room("public", "archived"), user());
     expect(result.canViewMetadata).toBe(false);
     expect(result.canView).toBe(false);
+  });
+});
+
+describe("computeRoomCapabilities — banned actors", () => {
+  it("cannot post or re-join an open room", () => {
+    const result = computeRoomCapabilities(room("open"), user({ status: "banned" }));
+    expect(result.canPost).toBe(false);
+    expect(result.canJoin).toBe(false);
   });
 });
 

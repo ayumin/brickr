@@ -149,8 +149,9 @@ export function assertNotGlobalSimulation(
  *   does not exist for anyone else. Note that this is about reading a room; the
  *   posts themselves remain visible to everybody through the unified feed, which
  *   is deliberately the only place they show up (§10.1).
- * - Closed/private rooms are not visible to non-members (§10.4, issue #152).
- *   The authorization service centralises this rule.
+ * - Closed/private membership enforcement is intentionally deferred until the
+ *   service can load the actor's RoomMembership (#153). Applying the capability
+ *   result without that row would incorrectly hide the room from real members.
  *
  * Shared by the room feed, the room detail and the room's post list, so a caller
  * cannot reach through one endpoint what another would refuse.
@@ -160,6 +161,11 @@ export function assertRoomReadable(
   actor: SimulationActor,
 ): void {
   if (isGlobalSimulation(simulation)) throw new SimulationNotFoundError(simulation.id);
+
+  // Until #153 supplies real membership snapshots, retain the existing access
+  // behaviour for active rooms. Otherwise every non-owner member of a closed or
+  // private room would be represented as a non-member and receive a false 404.
+  if (simulation.status !== "archived") return;
 
   // Convert the SimulationActor to a RoomActor for the authorization check.
   // The RoomMembership table exists but is not yet queried here; we synthesise
@@ -244,13 +250,14 @@ export class SimulationService {
    * about whether a post's own thread (post detail, §10.8) can be reconstructed,
    * which must work the same way regardless of which simulation a post lives in.
    *
-   * Visibility is still enforced here: a closed/private room's posts are not
-   * accessible to non-members even through the post-detail path (issue #152).
+   * Closed/private membership enforcement is deferred to #153. Enforcing it
+   * before loading RoomMembership would hide posts from legitimate members.
    */
   async requireReadableSimulation(id: string, actor: SimulationActor): Promise<Simulation> {
     const simulation = await this.requireSimulation(id);
+    if (simulation.status !== "archived") return simulation;
     // The global row is allowed through here (unlike assertRoomReadable), but
-    // visibility and archived checks still apply.
+    // the archived-room ownership check still applies.
     const roomActor: RoomActor = toRoomActor(actor, simulation.createdByUserId);
     const caps = computeRoomCapabilities(
       { visibility: simulation.visibility, status: simulation.status },
