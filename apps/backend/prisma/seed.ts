@@ -120,8 +120,8 @@ async function main(): Promise<void> {
   // --- Demo rooms (scope: "room") -------------------------------------------
   //
   // One room per visibility type so every code path can be exercised on a
-  // fresh database. Memberships cover owner / active-member / pending /
-  // banned states so the membership lifecycle is testable without manual setup.
+  // fresh database. Memberships cover active / pending / left / removed /
+  // banned statuses so the membership lifecycle is testable without manual setup.
   //
   // These rooms are owned by no user (createdByUserId: null) because the admin
   // account may not exist yet when the seed runs for the first time. Character
