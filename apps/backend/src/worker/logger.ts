@@ -29,7 +29,6 @@ function write(level: LogLevel, minLevel: string, obj: Record<string, unknown>, 
     msg,
     ...obj,
   };
-  // eslint-disable-next-line no-console
   console.log(JSON.stringify(entry));
 }
 

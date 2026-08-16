@@ -33,6 +33,7 @@ import { PostRepository } from "../posts/post-repository.js";
 import { PostService } from "../posts/post-service.js";
 import { ThreadService } from "../posts/thread-service.js";
 import { ScheduledEventRepository } from "../scheduled-events/scheduled-event-repository.js";
+import type { ScheduledEvent } from "../scheduled-events/scheduled-event.js";
 import { SimulationRepository } from "../simulation/simulation-repository.js";
 import { UserProfileRepository } from "../user-profile/user-profile-repository.js";
 import { RuntimeSettings } from "../settings/runtime-settings.js";
@@ -168,7 +169,7 @@ async function runPollLoop(): Promise<void> {
   while (!shuttingDown) {
     healthState.lastPollAt = new Date().toISOString();
 
-    let event = null;
+    let event: ScheduledEvent | null;
     try {
       event = await scheduledEventRepository.claimEvent(workerId);
     } catch (err) {
