@@ -134,7 +134,7 @@
       artifacts: false
   variables:
     DOCKERFILE: apps/backend/Dockerfile
-    IMAGE: asia-northeast1-docker.pkg.dev/aaizawa-sandbox-505606/brickr-staging/backend
+    IMAGE: $BACKEND_IMAGE
 
 "staging:frontend-image":
   extends: [.staging-image, .main-frontend-rules]
