@@ -102,9 +102,10 @@ describe("BEHAVIOR_PROFILES", () => {
   });
 
   it("night_owl and morning_person share the same timing parameters", () => {
-    const { label: _labelNight, ...nightRest } = BEHAVIOR_PROFILES.night_owl;
-    const { label: _labelMorning, ...morningRest } = BEHAVIOR_PROFILES.morning_person;
-    expect(nightRest).toEqual(morningRest);
+    expect(BEHAVIOR_PROFILES.night_owl).toEqual({
+      ...BEHAVIOR_PROFILES.morning_person,
+      label: BEHAVIOR_PROFILES.night_owl.label,
+    });
   });
 });
 
