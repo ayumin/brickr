@@ -119,18 +119,24 @@ describe("SimulationRepository.findAllVisibleTo", () => {
     );
   });
 
-  it("requires active membership for private rooms", async () => {
+  it("allows private rooms for their creator or an active member", async () => {
     const { db, findMany } = makeDb([]);
 
     await new SimulationRepository(db).findAllVisibleTo(USER);
 
     const call = firstFindManyArgs(findMany);
     expect(call).toHaveProperty("where.AND.1.OR.1.visibility", "private");
-    expect(call).toHaveProperty("where.AND.1.OR.1.memberships.some", {
-      memberId: USER.id,
-      memberKind: "user",
-      status: "active",
-    });
+    expect(call).toHaveProperty(
+      "where.AND.1.OR.1.OR",
+      expect.arrayContaining([
+        { createdByUserId: USER.id },
+        {
+          memberships: {
+            some: { memberId: USER.id, memberKind: "user", status: "active" },
+          },
+        },
+      ]),
+    );
   });
 
   it("puts no status or visibility condition on an administrator's list", async () => {

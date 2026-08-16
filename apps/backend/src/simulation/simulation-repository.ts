@@ -186,7 +186,7 @@ export class SimulationRepository {
    * - `public` / `open` rooms are discoverable by all authenticated users.
    * - `closed` rooms appear in the list for all authenticated users, but the
    *   service layer restricts the metadata returned to non-members (issue #155).
-   * - `private` rooms are only visible to active members (and admins).
+   * - `private` rooms are visible to their creator, active members, and admins.
    * - Ordering is by `lastActivityAt`, not creation time, so an active room does
    *   not sink out of reach. An empty room keeps `lastActivityAt = createdAt`
    *   (§8.1), which makes it sort by creation time without a special case.
@@ -210,15 +210,26 @@ export class SimulationRepository {
                 // Archived rooms: only the creator sees them.
                 { OR: [{ status: "active" }, { createdByUserId: actor.id }] },
                 // Visibility: public/open/closed are discoverable by all;
-                // private requires an active membership.
+                // private requires ownership or an active membership. Ownership
+                // is checked explicitly so legacy rooms whose owner membership
+                // is absent remain consistent with the single-room read path.
                 {
                   OR: [
                     { visibility: { in: ["public", "open", "closed"] } },
                     {
                       visibility: "private",
-                      memberships: {
-                        some: { memberId: actor.id, memberKind: "user", status: "active" },
-                      },
+                      OR: [
+                        { createdByUserId: actor.id },
+                        {
+                          memberships: {
+                            some: {
+                              memberId: actor.id,
+                              memberKind: "user",
+                              status: "active",
+                            },
+                          },
+                        },
+                      ],
                     },
                   ],
                 },
