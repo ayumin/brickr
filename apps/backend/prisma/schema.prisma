@@ -41,6 +41,12 @@ enum MemberStatus {
 }
 
 /// Visibility of a room to non-members.
+///
+/// Schema management note: this project uses `prisma db push --accept-data-loss`
+/// (see docker-entrypoint.sh) rather than `prisma migrate dev`, so no migration
+/// file is generated. The `--accept-data-loss` flag instructs Prisma to issue the
+/// necessary `ALTER COLUMN ... TYPE "RoomVisibility" USING (visibility::text::"RoomVisibility")`
+/// DDL automatically when the schema is pushed to the database.
 enum RoomVisibility {
   /// Visible and joinable by anyone.
   public
