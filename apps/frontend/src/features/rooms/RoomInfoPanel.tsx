@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { SimulationSummaryDto } from "@brickr/shared";
 
+import { Dialog } from "../../components/Dialog";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { Icon } from "../../components/Icon";
 import { Spinner } from "../../components/Spinner";
@@ -12,18 +13,24 @@ export type RoomInfoContentProps = {
   onRename: () => void;
   onStop: () => Promise<void>;
   onResume: () => Promise<void>;
+  onArchive: () => Promise<void>;
+  onDelete: () => Promise<void>;
   /** Lets `RoomInfoSheet` disable its `Dialog`'s backdrop/Escape close while a stop/resume request is in flight (CLAUDE.md §50). */
   onBusyChange?: (busy: boolean) => void;
 };
 
+type ConfirmDialog =
+  | { kind: "archive" }
+  | { kind: "delete" };
+
 /**
  * The room info content (§19.2), shared by the desktop `RoomInfoPanel` and
- * the mobile `RoomInfoSheet` — phase 1 shows only room name / creator / post
- * count / a link to the detailed analysis / rename / pause-resume, all
- * gated by the server's own `canManage` (never re-derived here). Topic, cast
- * roster, temperature, depth, concurrency, and an AI summary are all
- * deliberately absent — none of them exist yet, and an inert control for one
- * would be exactly the "見せかけの設定" the ground rules ban.
+ * the mobile `RoomInfoSheet` — shows room name / creator / post count / a
+ * link to the detailed analysis / rename / pause-resume / archive / delete,
+ * all gated by the server's own `canManage` (never re-derived here).
+ *
+ * Archive and delete require confirmation dialogs (issue #169: "archive/delete
+ * は確認ダイアログ必須"). Delete is only available for archived rooms.
  */
 export function RoomInfoContent({
   simulation,
@@ -31,10 +38,13 @@ export function RoomInfoContent({
   onRename,
   onStop,
   onResume,
+  onArchive,
+  onDelete,
   onBusyChange,
 }: RoomInfoContentProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialog | null>(null);
   const isStopped = simulation.status === "archived";
 
   const run = async (operation: () => Promise<void>): Promise<void> => {
@@ -49,6 +59,13 @@ export function RoomInfoContent({
       setBusy(false);
       onBusyChange?.(false);
     }
+  };
+
+  const handleConfirm = async (): Promise<void> => {
+    if (!confirmDialog) return;
+    const operation = confirmDialog.kind === "archive" ? onArchive : onDelete;
+    setConfirmDialog(null);
+    await run(operation);
   };
 
   return (
@@ -93,10 +110,85 @@ export function RoomInfoContent({
             {busy ? <Spinner size="sm" /> : <Icon name={isStopped ? "play-circle" : "pause-circle"} />}
             {isStopped ? "再開する" : "一時停止する"}
           </button>
+
+          {/* Archive — only for active rooms */}
+          {!isStopped ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setConfirmDialog({ kind: "archive" })}
+              className="flex w-full items-center gap-2 rounded-xl border border-line px-3 py-2 text-sm text-ink-muted transition hover:bg-surface-hover hover:text-ink disabled:opacity-50"
+            >
+              <Icon name="clock-history" />
+              アーカイブする
+            </button>
+          ) : null}
+
+          {/* Delete — only for archived rooms */}
+          {isStopped ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setConfirmDialog({ kind: "delete" })}
+              className="flex w-full items-center gap-2 rounded-xl border border-line px-3 py-2 text-sm text-error transition hover:bg-error/10 disabled:opacity-50"
+            >
+              <Icon name="trash" />
+              削除する
+            </button>
+          ) : null}
         </div>
       ) : null}
 
       {error ? <ErrorBanner message="操作できませんでした" detail={error} onDismiss={() => setError(null)} /> : null}
+
+      {/* Confirmation dialog for archive/delete */}
+      {confirmDialog ? (
+        <Dialog
+          titleId="room-confirm-dialog-title"
+          title={confirmDialog.kind === "archive" ? "ルームをアーカイブ" : "ルームを削除"}
+          onClose={() => setConfirmDialog(null)}
+          closeDisabled={busy}
+        >
+          <div className="p-5">
+            <p className="text-sm text-ink">
+              {confirmDialog.kind === "archive"
+                ? "このルームをアーカイブしますか？アーカイブ後は投稿できなくなります。後から再開することもできます。"
+                : "このルームを完全に削除しますか？この操作は取り消せません。ルーム内のすべての投稿も削除されます。"}
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDialog(null)}
+                disabled={busy}
+                className="rounded-full border border-line px-4 py-2 text-sm text-ink-muted hover:bg-surface-hover disabled:opacity-50"
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void handleConfirm()}
+                className={`rounded-full px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 ${
+                  confirmDialog.kind === "delete"
+                    ? "bg-error hover:bg-error/80"
+                    : "bg-accent-strong hover:bg-accent"
+                }`}
+              >
+                {busy ? (
+                  <span className="flex items-center gap-2">
+                    <Spinner size="sm" />
+                    処理中…
+                  </span>
+                ) : confirmDialog.kind === "archive" ? (
+                  "アーカイブする"
+                ) : (
+                  "削除する"
+                )}
+              </button>
+            </div>
+          </div>
+        </Dialog>
+      ) : null}
     </div>
   );
 }

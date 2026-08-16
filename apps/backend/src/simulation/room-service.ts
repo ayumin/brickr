@@ -1,5 +1,5 @@
 /**
- * Room lifecycle service (issue #151).
+ * Room lifecycle service (issue #151, #169).
  *
  * Handles:
  *   - Room creation with automatic owner membership
@@ -7,11 +7,15 @@
  *   - Archiving (owner/admin only)
  *   - Deletion of archived rooms (owner/admin only)
  *   - Owner-deactivation archive rule (called by UserAdminService on suspend)
+ *   - User join requests (public: auto-join; open: pending approval)
+ *   - User invite by handle (owner/admin only)
+ *   - Membership approval/rejection (owner/admin only)
  */
 import type { RoomMembershipDto, RoomVisibility } from "@brickr/shared";
 import { DomainError } from "../domain-error.js";
 import type { SimulationRepository } from "./simulation-repository.js";
 import type { RoomMembershipRepository } from "./room-membership-repository.js";
+import type { HandleRepository } from "../handles/handle-repository.js";
 import {
   assertNotGlobalSimulation,
   isSimulationOwnerOrAdmin,
@@ -64,6 +68,46 @@ export class VisibilityImmutableError extends DomainError {
   }
 }
 
+export class RoomJoinNotAllowedError extends DomainError {
+  readonly httpStatus = 403;
+  readonly errorCode = "room_join_not_allowed" as const;
+  constructor(id: string) {
+    super(`cannot join room "${id}": invitation required`);
+  }
+}
+
+export class RoomAlreadyMemberError extends DomainError {
+  readonly httpStatus = 409;
+  readonly errorCode = "room_already_member" as const;
+  constructor(id: string) {
+    super(`already a member of room "${id}"`);
+  }
+}
+
+export class RoomMemberBannedError extends DomainError {
+  readonly httpStatus = 403;
+  readonly errorCode = "room_member_banned" as const;
+  constructor(id: string) {
+    super(`banned from room "${id}"`);
+  }
+}
+
+export class UserNotFoundError extends DomainError {
+  readonly httpStatus = 404;
+  readonly errorCode = "user_not_found" as const;
+  constructor(handle: string) {
+    super(`user with handle "${handle}" not found`);
+  }
+}
+
+export class RoomMembershipNotFoundError extends DomainError {
+  readonly httpStatus = 404;
+  readonly errorCode = "membership_not_found" as const;
+  constructor() {
+    super("membership not found");
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Input types
 // ---------------------------------------------------------------------------
@@ -87,6 +131,7 @@ export type UpdateRoomInput = {
 export type RoomServiceDeps = {
   simulations: SimulationRepository;
   memberships: RoomMembershipRepository;
+  handles?: HandleRepository;
 };
 
 export class RoomService {
@@ -181,18 +226,179 @@ export class RoomService {
    */
   async listMemberships(roomId: string): Promise<RoomMembershipDto[]> {
     const memberships = await this.deps.memberships.findByRoom(roomId);
-    return memberships.map((m) => ({
-      id: m.id,
-      roomId: m.roomId,
-      memberKind: m.memberKind,
-      memberId: m.memberId,
-      role: m.role,
-      status: m.status,
-      ...(m.invitedById ? { invitedById: m.invitedById } : {}),
-      ...(m.invitedAt ? { invitedAt: m.invitedAt.toISOString() } : {}),
-      createdAt: m.createdAt.toISOString(),
-      updatedAt: m.updatedAt.toISOString(),
-    }));
+    return memberships.map((m) => toMembershipDto(m));
+  }
+
+  /**
+   * Requests to join a room (issue #169).
+   *
+   * - public rooms: auto-join (active membership immediately)
+   * - open rooms: pending membership (owner approval required)
+   * - closed/private rooms: invitation only — self-initiated join is rejected
+   *
+   * Banned members are always rejected. Already-active members get a 409.
+   * Pending members (already requested) also get a 409.
+   */
+  async join(roomId: string, actor: SimulationActor): Promise<RoomMembershipDto> {
+    const simulation = await this.requireRoom(roomId);
+    assertNotGlobalSimulation(simulation);
+
+    if (simulation.status === "archived") {
+      throw new RoomArchivedError(roomId);
+    }
+
+    // closed/private: invitation only
+    if (simulation.visibility === "closed" || simulation.visibility === "private") {
+      throw new RoomJoinNotAllowedError(roomId);
+    }
+
+    // Check existing membership
+    const existing = await this.deps.memberships.findOne(roomId, "user", actor.id);
+    if (existing) {
+      if (existing.status === "banned") throw new RoomMemberBannedError(roomId);
+      if (existing.status === "active" || existing.status === "pending") {
+        throw new RoomAlreadyMemberError(roomId);
+      }
+      // left/removed: allow re-join by updating status
+      const status = simulation.visibility === "public" ? "active" : "pending";
+      const updated = await this.deps.memberships.updateStatusByMember(
+        roomId,
+        "user",
+        actor.id,
+        status,
+      );
+      if (!updated) throw new RoomNotFoundError(roomId);
+      return toMembershipDto(updated);
+    }
+
+    // No existing membership: create one
+    const status = simulation.visibility === "public" ? "active" : "pending";
+    const membership = await this.deps.memberships.create({
+      roomId,
+      memberKind: "user",
+      memberId: actor.id,
+      role: "member",
+      status,
+    });
+    return toMembershipDto(membership);
+  }
+
+  /**
+   * Invites a user (by handle) to a room (issue #169).
+   *
+   * Only the room owner or an admin may invite. The invited user gets an
+   * active membership immediately (invitation bypasses the pending flow).
+   */
+  async inviteByHandle(
+    roomId: string,
+    handle: string,
+    actor: SimulationActor,
+  ): Promise<RoomMembershipDto> {
+    const simulation = await this.requireRoom(roomId);
+    assertNotGlobalSimulation(simulation);
+    this.assertOwnerOrAdmin(simulation, actor, roomId);
+
+    if (simulation.status === "archived") {
+      throw new RoomArchivedError(roomId);
+    }
+
+    // Resolve the handle to a user id via the shared handle namespace
+    if (!this.deps.handles) {
+      throw new UserNotFoundError(handle);
+    }
+    const owner = await this.deps.handles.findByHandle(handle);
+    if (!owner || owner.ownerType !== "user") throw new UserNotFoundError(handle);
+
+    const userId = owner.ownerId;
+
+    // Check existing membership
+    const existing = await this.deps.memberships.findOne(roomId, "user", userId);
+    if (existing) {
+      if (existing.status === "banned") throw new RoomMemberBannedError(roomId);
+      if (existing.status === "active") throw new RoomAlreadyMemberError(roomId);
+      // pending/left/removed: upgrade to active
+      const updated = await this.deps.memberships.reinviteByMember(
+        roomId,
+        "user",
+        userId,
+        actor.id,
+      );
+      if (!updated) throw new RoomNotFoundError(roomId);
+      return toMembershipDto(updated);
+    }
+
+    const membership = await this.deps.memberships.create({
+      roomId,
+      memberKind: "user",
+      memberId: userId,
+      role: "member",
+      status: "active",
+      invitedById: actor.id,
+    });
+    return toMembershipDto(membership);
+  }
+
+  /**
+   * Approves a pending membership (owner/admin only, issue #169).
+   */
+  async approveMembership(
+    roomId: string,
+    memberId: string,
+    actor: SimulationActor,
+  ): Promise<RoomMembershipDto> {
+    const simulation = await this.requireRoom(roomId);
+    this.assertOwnerOrAdmin(simulation, actor, roomId);
+
+    const updated = await this.deps.memberships.updateStatusByMember(
+      roomId,
+      "user",
+      memberId,
+      "active",
+    );
+    if (!updated) throw new RoomMembershipNotFoundError();
+    return toMembershipDto(updated);
+  }
+
+  /**
+   * Removes a membership (owner/admin only, issue #169).
+   * Sets status to "removed". For banning, use `banMember`.
+   */
+  async removeMembership(
+    roomId: string,
+    memberId: string,
+    actor: SimulationActor,
+  ): Promise<void> {
+    const simulation = await this.requireRoom(roomId);
+    this.assertOwnerOrAdmin(simulation, actor, roomId);
+
+    const updated = await this.deps.memberships.updateStatusByMember(
+      roomId,
+      "user",
+      memberId,
+      "removed",
+    );
+    if (!updated) throw new RoomMembershipNotFoundError();
+  }
+
+  /**
+   * Bans a member from a room (owner/admin only, issue #169).
+   * Banned members cannot re-join.
+   */
+  async banMember(
+    roomId: string,
+    memberId: string,
+    actor: SimulationActor,
+  ): Promise<void> {
+    const simulation = await this.requireRoom(roomId);
+    this.assertOwnerOrAdmin(simulation, actor, roomId);
+
+    const updated = await this.deps.memberships.updateStatusByMember(
+      roomId,
+      "user",
+      memberId,
+      "banned",
+    );
+    if (!updated) throw new RoomMembershipNotFoundError();
   }
 
   // -- helpers ---------------------------------------------------------------
@@ -212,4 +418,25 @@ export class RoomService {
       throw new RoomForbiddenError(id);
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+import type { RoomMembership } from "./room-membership-repository.js";
+
+function toMembershipDto(m: RoomMembership): RoomMembershipDto {
+  return {
+    id: m.id,
+    roomId: m.roomId,
+    memberKind: m.memberKind,
+    memberId: m.memberId,
+    role: m.role,
+    status: m.status,
+    ...(m.invitedById ? { invitedById: m.invitedById } : {}),
+    ...(m.invitedAt ? { invitedAt: m.invitedAt.toISOString() } : {}),
+    createdAt: m.createdAt.toISOString(),
+    updatedAt: m.updatedAt.toISOString(),
+  };
 }

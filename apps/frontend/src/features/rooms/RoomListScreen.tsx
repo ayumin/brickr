@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import type { SimulationSummaryDto } from "@brickr/shared";
+import type { RoomListEntryDto, RoomSummaryDto } from "@brickr/shared";
 
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { Icon } from "../../components/Icon";
@@ -13,17 +13,34 @@ import { api, isAbortError, toErrorMessage } from "../../services/api-client";
 import { RoomNameDialog } from "./RoomNameDialog";
 import { writeSelectedRoomId } from "./selected-room-storage";
 
-type Dialog = { mode: "create" } | { mode: "rename"; room: SimulationSummaryDto };
+type Dialog = { mode: "create" } | { mode: "rename"; room: RoomSummaryDto };
 
-function RoomCard({
+/** Human-readable label for each visibility level. */
+const VISIBILITY_LABEL: Record<string, string> = {
+  public: "公開",
+  open: "オープン",
+  closed: "クローズド",
+  private: "プライベート",
+};
+
+/**
+ * Full room card — shown when the caller has access to the room's full metadata.
+ */
+function FullRoomCard({
   room,
   onOpen,
   onRename,
+  onJoin,
+  joining,
 }: {
-  room: SimulationSummaryDto;
+  room: RoomSummaryDto;
   onOpen: () => void;
   onRename?: () => void;
+  onJoin?: () => void;
+  joining?: boolean;
 }) {
+  const pendingCount = room.pendingCount ?? 0;
+
   return (
     <li className="flex items-center gap-3 border-b border-line px-4 py-3.5 transition hover:bg-surface-hover/60">
       <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left">
@@ -32,6 +49,20 @@ function RoomCard({
           {room.status === "archived" ? (
             <span className="shrink-0 rounded-full bg-surface-raised px-2 py-0.5 text-[11px] text-ink-muted">
               停止中
+            </span>
+          ) : null}
+          {room.visibility !== "public" ? (
+            <span className="shrink-0 rounded-full border border-line px-2 py-0.5 text-[11px] text-ink-muted">
+              {VISIBILITY_LABEL[room.visibility] ?? room.visibility}
+            </span>
+          ) : null}
+          {/* Pending badge — only shown to the room owner (server only sends pendingCount to owners) */}
+          {pendingCount > 0 ? (
+            <span
+              className="shrink-0 rounded-full bg-accent-strong px-2 py-0.5 text-[11px] font-semibold text-white"
+              title={`${pendingCount}件の参加申請があります`}
+            >
+              {pendingCount}
             </span>
           ) : null}
         </p>
@@ -43,17 +74,64 @@ function RoomCard({
         </p>
       </button>
 
-      {onRename ? (
-        <button
-          type="button"
-          title="名前を変更"
-          aria-label={`${room.title ?? "無題のルーム"}の名前を変更`}
-          onClick={onRename}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-ink-muted transition hover:bg-surface-hover hover:text-ink"
-        >
-          <Icon name="pencil" />
-        </button>
-      ) : null}
+      <div className="flex shrink-0 items-center gap-1">
+        {/* Join button — shown for public/open rooms where the caller is not yet a member */}
+        {onJoin ? (
+          <button
+            type="button"
+            disabled={joining}
+            onClick={onJoin}
+            className="rounded-full border border-accent px-3 py-1 text-xs font-semibold text-accent transition hover:bg-accent hover:text-white disabled:opacity-50"
+          >
+            {joining ? (
+              <span className="flex items-center gap-1">
+                <Spinner size="sm" />
+                参加中…
+              </span>
+            ) : room.visibility === "public" ? (
+              "参加する"
+            ) : (
+              "参加申請"
+            )}
+          </button>
+        ) : null}
+
+        {onRename ? (
+          <button
+            type="button"
+            title="名前を変更"
+            aria-label={`${room.title ?? "無題のルーム"}の名前を変更`}
+            onClick={onRename}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-ink-muted transition hover:bg-surface-hover hover:text-ink"
+          >
+            <Icon name="pencil" />
+          </button>
+        ) : null}
+      </div>
+    </li>
+  );
+}
+
+/**
+ * Restricted room card — shown for closed rooms where the caller is not a member.
+ * Only id, title, visibility, and createdAt are available.
+ */
+function RestrictedRoomCard({
+  room,
+}: {
+  room: { id: string; title: string | null; visibility: string; createdAt: string };
+}) {
+  return (
+    <li className="flex items-center gap-3 border-b border-line px-4 py-3.5 opacity-60">
+      <div className="min-w-0 flex-1">
+        <p className="flex min-w-0 items-center gap-2">
+          <span className="truncate font-semibold text-ink">{room.title ?? "無題のルーム"}</span>
+          <span className="shrink-0 rounded-full border border-line px-2 py-0.5 text-[11px] text-ink-muted">
+            {VISIBILITY_LABEL[room.visibility] ?? room.visibility}
+          </span>
+        </p>
+        <p className="mt-0.5 text-xs text-ink-faint">招待制ルーム</p>
+      </div>
     </li>
   );
 }
@@ -62,19 +140,22 @@ function RoomCard({
  * The room list (§5.3, §6.1, §19.1) — signed-in only, ordinary mount/unmount
  * screen (§13.5): unlike Feed/Room it costs nothing to refetch on return.
  *
+ * Uses `GET /api/rooms` (issue #155) for the visibility-aware list with
+ * pendingCount badges for owners and join actions for public/open rooms.
  * Ordering, stopped-room visibility, and `canManage` are all decided by the
- * server (`GET /api/simulations`, §10.3) — this screen only renders what
- * comes back, newest activity first, exactly as received.
+ * server — this screen only renders what comes back, newest activity first.
  */
 export function RoomListScreen() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
-  const [rooms, setRooms] = useState<SimulationSummaryDto[]>([]);
+  const [rooms, setRooms] = useState<RoomListEntryDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
   const [dialog, setDialog] = useState<Dialog | null>(null);
+  // Track which rooms are currently being joined (by room id)
+  const [joiningIds, setJoiningIds] = useState<Set<string>>(new Set());
 
   const load = useCallback(() => setReloadToken((value) => value + 1), []);
 
@@ -90,8 +171,8 @@ export function RoomListScreen() {
     setLoading(true);
     setError(null);
     api
-      .getSimulations(controller.signal)
-      .then(setRooms)
+      .listRooms(controller.signal)
+      .then(({ rooms: fetched }) => setRooms(fetched))
       .catch((cause: unknown) => {
         if (isAbortError(cause)) return;
         setError(toErrorMessage(cause));
@@ -104,6 +185,28 @@ export function RoomListScreen() {
     writeSelectedRoomId(id);
     navigate(roomPath(id));
   };
+
+  const joinRoom = useCallback(
+    async (roomId: string): Promise<void> => {
+      setJoiningIds((prev) => new Set(prev).add(roomId));
+      try {
+        await api.joinRoom(roomId);
+        // Reload the list so the room's membership state is up to date
+        load();
+      } catch {
+        // Errors are surfaced by reloading — the join button will still be
+        // visible if the join failed, and the user can try again.
+        load();
+      } finally {
+        setJoiningIds((prev) => {
+          const next = new Set(prev);
+          next.delete(roomId);
+          return next;
+        });
+      }
+    },
+    [load],
+  );
 
   if (authLoading || !user) {
     return (
@@ -141,14 +244,38 @@ export function RoomListScreen() {
         </p>
       ) : (
         <ul>
-          {rooms.map((room) => (
-            <RoomCard
-              key={room.id}
-              room={room}
-              onOpen={() => openRoom(room.id)}
-              {...(room.canManage ? { onRename: () => setDialog({ mode: "rename", room }) } : {})}
-            />
-          ))}
+          {rooms.map((entry) => {
+            if (entry.restricted) {
+              return <RestrictedRoomCard key={entry.id} room={entry} />;
+            }
+
+            // Full entry: determine whether to show a join button.
+            // The server only sends canManage=true to the owner/admin, and
+            // join is only relevant for public/open rooms where the caller
+            // is not yet a member (canManage implies membership, so we skip
+            // the join button for owners).
+            const canJoin =
+              !entry.canManage &&
+              entry.status === "active" &&
+              (entry.visibility === "public" || entry.visibility === "open");
+
+            return (
+              <FullRoomCard
+                key={entry.id}
+                room={entry}
+                onOpen={() => openRoom(entry.id)}
+                {...(entry.canManage
+                  ? { onRename: () => setDialog({ mode: "rename", room: entry }) }
+                  : {})}
+                {...(canJoin
+                  ? {
+                      onJoin: () => void joinRoom(entry.id),
+                      joining: joiningIds.has(entry.id),
+                    }
+                  : {})}
+              />
+            );
+          })}
         </ul>
       )}
 

@@ -1,5 +1,5 @@
 /**
- * Room lifecycle routes (issues #150, #151, #154, #155, #166).
+ * Room lifecycle routes (issues #150, #151, #154, #155, #166, #169).
  *
  * Issue #150 introduced the `defineRoute` pattern with `GET /api/rooms/:id`.
  * Issue #151 adds the full lifecycle:
@@ -21,6 +21,13 @@
  * Issue #166 adds room analysis snapshots:
  *   GET    /api/rooms/:id/snapshot  — get the current snapshot (active members)
  *   POST   /api/rooms/:id/snapshot  — generate/update the snapshot (owner/admin)
+ * Issue #169 adds join/invite/membership management:
+ *   POST   /api/rooms/:id/join                        — join or request to join
+ *   POST   /api/rooms/:id/invite                      — invite a user by handle (owner/admin)
+ *   GET    /api/rooms/:id/memberships                 — list memberships (owner/admin)
+ *   POST   /api/rooms/:id/memberships/:memberId/approve — approve pending (owner/admin)
+ *   DELETE /api/rooms/:id/memberships/:memberId        — remove/reject (owner/admin)
+ *   POST   /api/rooms/:id/memberships/:memberId/ban    — ban a member (owner/admin)
  *
  * Every route uses `defineRoute` so auth, Zod validation, DomainError mapping,
  * and OpenAPI documentation are all derived from the same definition.
@@ -35,6 +42,7 @@ import {
 } from "@brickr/shared";
 import type { AppServices } from "../services.js";
 import { buildOpenApiOperation, defineRoute } from "./define-route.js";
+import { RoomForbiddenError } from "../simulation/room-service.js";
 
 export const roomIdParams = z.object({
   id: z.string().trim().min(1).max(64).describe("Room ID"),
@@ -155,6 +163,7 @@ const membershipResponseSchema = z.object({ membership: membershipDtoSchema });
 const pendingMembershipsResponseSchema = z.object({
   memberships: z.array(membershipDtoSchema),
 });
+const membershipsResponseSchema = pendingMembershipsResponseSchema;
 
 // ---------------------------------------------------------------------------
 // Request body schemas
@@ -295,6 +304,94 @@ export const updateRoomSnapshotOpenApiMeta = {
   },
 };
 
+export const joinRoomOpenApiMeta = {
+  operationId: "joinRoom",
+  tags: ["Simulations"] as string[],
+  summary: "Join or request to join a room",
+  description:
+    "For public rooms: creates an active membership immediately. " +
+    "For open rooms: creates a pending membership awaiting owner approval. " +
+    "For closed/private rooms: returns 403 (invitation only). " +
+    "Banned members always receive 403. Already-active or pending members receive 409.",
+  successDescription: "The created or updated membership",
+  extraResponses: {
+    "403": { $ref: "#/components/responses/Forbidden" },
+    "404": { $ref: "#/components/responses/NotFound" },
+    "409": { $ref: "#/components/responses/Conflict" },
+  },
+};
+
+export const inviteToRoomOpenApiMeta = {
+  operationId: "inviteToRoom",
+  tags: ["Simulations"] as string[],
+  summary: "Invite a user to a room by handle",
+  description:
+    "Owner/admin only. Creates an active membership for the invited user, " +
+    "bypassing the pending flow. Returns 404 if the handle does not exist.",
+  successDescription: "The created membership",
+  extraResponses: {
+    "403": { $ref: "#/components/responses/Forbidden" },
+    "404": { $ref: "#/components/responses/NotFound" },
+    "409": { $ref: "#/components/responses/Conflict" },
+  },
+};
+
+export const listMembershipsOpenApiMeta = {
+  operationId: "listRoomMemberships",
+  tags: ["Simulations"] as string[],
+  summary: "List memberships for a room",
+  description: "Owner/admin only. Returns all membership records for the room.",
+  successDescription: "The list of memberships",
+  extraResponses: {
+    "403": { $ref: "#/components/responses/Forbidden" },
+    "404": { $ref: "#/components/responses/NotFound" },
+  },
+};
+
+export const approveMembershipOpenApiMeta = {
+  operationId: "approveRoomMembershipByMemberId",
+  tags: ["Simulations"] as string[],
+  summary: "Approve a pending membership",
+  description: "Owner/admin only. Transitions a pending membership to active.",
+  successDescription: "The approved membership",
+  extraResponses: {
+    "403": { $ref: "#/components/responses/Forbidden" },
+    "404": { $ref: "#/components/responses/NotFound" },
+  },
+};
+
+export const removeMembershipOpenApiMeta = {
+  operationId: "removeRoomMembership",
+  tags: ["Simulations"] as string[],
+  summary: "Remove or reject a membership",
+  description: "Owner/admin only. Sets the membership status to removed.",
+  successDescription: "Membership removed",
+  extraResponses: {
+    "403": { $ref: "#/components/responses/Forbidden" },
+    "404": { $ref: "#/components/responses/NotFound" },
+  },
+};
+
+export const banMemberOpenApiMeta = {
+  operationId: "banRoomMemberByMemberId",
+  tags: ["Simulations"] as string[],
+  summary: "Ban a member from a room",
+  description: "Owner/admin only. Sets the membership status to banned. Banned members cannot re-join.",
+  successDescription: "Member banned",
+  extraResponses: {
+    "403": { $ref: "#/components/responses/Forbidden" },
+    "404": { $ref: "#/components/responses/NotFound" },
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Params schemas
+// ---------------------------------------------------------------------------
+
+const memberIdParams = z.object({
+  id: z.string().trim().min(1).max(64).describe("Room ID"),
+  memberId: z.string().trim().min(1).max(64).describe("Member user ID"),
+});
 // ---------------------------------------------------------------------------
 // Membership route OpenAPI metadata
 // ---------------------------------------------------------------------------
@@ -483,6 +580,29 @@ buildOpenApiOperation(
 
 buildOpenApiOperation(
   {
+    method: "POST",
+    path: "/api/rooms/:id/join",
+    auth: "required",
+    params: roomIdParams,
+    response: membershipResponseSchema,
+  },
+  joinRoomOpenApiMeta,
+);
+
+buildOpenApiOperation(
+  {
+    method: "POST",
+    path: "/api/rooms/:id/invite",
+    auth: "required",
+    params: roomIdParams,
+    body: z.object({ handle: z.string().trim().min(1).max(64) }),
+    response: membershipResponseSchema,
+  },
+  inviteToRoomOpenApiMeta,
+);
+
+buildOpenApiOperation(
+  {
     method: "GET",
     path: "/api/rooms/:id/members/pending",
     auth: "required",
@@ -490,6 +610,28 @@ buildOpenApiOperation(
     response: pendingMembershipsResponseSchema,
   },
   listPendingMembershipsOpenApiMeta,
+);
+
+buildOpenApiOperation(
+  {
+    method: "GET",
+    path: "/api/rooms/:id/memberships",
+    auth: "required",
+    params: roomIdParams,
+    response: membershipsResponseSchema,
+  },
+  listMembershipsOpenApiMeta,
+);
+
+buildOpenApiOperation(
+  {
+    method: "POST",
+    path: "/api/rooms/:id/memberships/:memberId/approve",
+    auth: "required",
+    params: memberIdParams,
+    response: membershipResponseSchema,
+  },
+  approveMembershipOpenApiMeta,
 );
 
 buildOpenApiOperation(
@@ -567,6 +709,28 @@ buildOpenApiOperation(
     response: updateSnapshotResponseSchema,
   },
   updateRoomSnapshotOpenApiMeta,
+);
+
+buildOpenApiOperation(
+  {
+    method: "DELETE",
+    path: "/api/rooms/:id/memberships/:memberId",
+    auth: "required",
+    params: memberIdParams,
+    response: z.object({}),
+  },
+  removeMembershipOpenApiMeta,
+);
+
+buildOpenApiOperation(
+  {
+    method: "POST",
+    path: "/api/rooms/:id/memberships/:memberId/ban",
+    auth: "required",
+    params: memberIdParams,
+    response: z.object({}),
+  },
+  banMemberOpenApiMeta,
 );
 
 // ---------------------------------------------------------------------------
@@ -682,6 +846,19 @@ export function registerRoomsRoutes(app: FastifyInstance, services: AppServices)
     },
   }).register(app);
 
+  // POST /api/rooms/:id/join — join or request to join a room (issue #169)
+  defineRoute({
+    method: "POST",
+    path: "/api/rooms/:id/join",
+    auth: "required",
+    params: roomIdParams,
+    response: membershipResponseSchema,
+    handler: async ({ user, params }) => {
+      const membership = await services.rooms.join(params.id, user);
+      return { membership };
+    },
+  }).register(app);
+
   // GET /api/rooms/:id/members/pending — list pending memberships (owner/admin)
   defineRoute({
     method: "GET",
@@ -691,6 +868,38 @@ export function registerRoomsRoutes(app: FastifyInstance, services: AppServices)
     response: pendingMembershipsResponseSchema,
     handler: async ({ user, params }) => {
       const memberships = await services.roomMemberships.listPending(params.id, user);
+      return { memberships };
+    },
+  }).register(app);
+
+  // POST /api/rooms/:id/invite — invite a user by handle (owner/admin, issue #169)
+  defineRoute({
+    method: "POST",
+    path: "/api/rooms/:id/invite",
+    auth: "required",
+    params: roomIdParams,
+    body: z.object({ handle: z.string().trim().min(1).max(64) }),
+    response: membershipResponseSchema,
+    handler: async ({ user, params, body }) => {
+      const membership = await services.rooms.inviteByHandle(params.id, body.handle, user);
+      return { membership };
+    },
+  }).register(app);
+
+  // GET /api/rooms/:id/memberships — list memberships (owner/admin, issue #169)
+  defineRoute({
+    method: "GET",
+    path: "/api/rooms/:id/memberships",
+    auth: "required",
+    params: roomIdParams,
+    response: membershipsResponseSchema,
+    handler: async ({ user, params }) => {
+      // Only owner/admin may list memberships — enforced by canManage from the service
+      const simulation = await services.simulations.get(params.id, user);
+      if (!simulation.simulation.canManage) {
+        throw new RoomForbiddenError(params.id);
+      }
+      const memberships = await services.rooms.listMemberships(params.id);
       return { memberships };
     },
   }).register(app);
@@ -781,6 +990,45 @@ export function registerRoomsRoutes(app: FastifyInstance, services: AppServices)
     response: updateSnapshotResponseSchema,
     handler: async ({ user, params }) => {
       return services.roomAnalysisSnapshot.update(params.id, user);
+    },
+  }).register(app);
+
+  // POST /api/rooms/:id/memberships/:memberId/approve — approve pending (owner/admin, issue #169)
+  defineRoute({
+    method: "POST",
+    path: "/api/rooms/:id/memberships/:memberId/approve",
+    auth: "required",
+    params: memberIdParams,
+    response: membershipResponseSchema,
+    handler: async ({ user, params }) => {
+      const membership = await services.rooms.approveMembership(params.id, params.memberId, user);
+      return { membership };
+    },
+  }).register(app);
+
+  // DELETE /api/rooms/:id/memberships/:memberId — remove/reject (owner/admin, issue #169)
+  defineRoute({
+    method: "DELETE",
+    path: "/api/rooms/:id/memberships/:memberId",
+    auth: "required",
+    params: memberIdParams,
+    response: z.object({}),
+    handler: async ({ user, params, reply }) => {
+      await services.rooms.removeMembership(params.id, params.memberId, user);
+      return reply.status(204).send();
+    },
+  }).register(app);
+
+  // POST /api/rooms/:id/memberships/:memberId/ban — ban a member (owner/admin, issue #169)
+  defineRoute({
+    method: "POST",
+    path: "/api/rooms/:id/memberships/:memberId/ban",
+    auth: "required",
+    params: memberIdParams,
+    response: z.object({}),
+    handler: async ({ user, params, reply }) => {
+      await services.rooms.banMember(params.id, params.memberId, user);
+      return reply.status(204).send();
     },
   }).register(app);
 }
