@@ -109,6 +109,7 @@
 .staging-image:
   extends: .gcp-staging-auth
   stage: container
+  interruptible: false
   services:
     - name: docker:27.5.1-dind
       alias: docker
