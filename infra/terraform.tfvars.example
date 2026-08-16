@@ -1,0 +1,42 @@
+project_id   = "your-staging-project"
+region       = "asia-northeast1"
+environment  = "staging"
+domain_name = "staging.example.com"
+
+# Set this when the domain is hosted in Cloud DNS. Otherwise create the A
+# record manually from the load_balancer_ip output.
+dns_managed_zone = null
+
+# The first apply creates Artifact Registry and the data layer. Push both
+# images, then change this to true and apply again.
+deploy_services = false
+
+# Optional: enable keyless deployments from this GitLab.com project. Use the
+# immutable numeric IDs shown in GitLab, not the group/project names.
+# gitlab_namespace_id = "12345678"
+# gitlab_project_id   = "87654321"
+
+# Smallest shared-core Cloud SQL tier for this disposable staging environment.
+database_tier = "db-f1-micro"
+
+admin_email        = "admin@example.com"
+admin_handle       = "admin"
+admin_display_name = "Staging Admin"
+
+# Terraform generates a 32-character password by default. Set this only when
+# an existing password must be used.
+# admin_password = "replace-with-a-long-random-password"
+
+# Keep mock responses enabled until a real provider key is supplied.
+use_mock_llm = true
+# openai_api_key    = "..."
+# anthropic_api_key = "..."
+# gemini_api_key    = "..."
+
+# Staging is used only for interactive testing, so both services scale to zero
+# when idle. In-flight background generation may be interrupted after requests
+# finish; this tradeoff is accepted for staging.
+backend_min_instances = 0
+backend_max_instances = 1
+frontend_min_instances = 0
+frontend_max_instances = 1

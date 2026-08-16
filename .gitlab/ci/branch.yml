@@ -1,0 +1,82 @@
+# A branch push is intentionally lightweight. Once an MR exists, workflow
+# rules suppress this pipeline in favor of the MR pipeline.
+"branch:scope":
+  stage: validate
+  image: alpine:3.23
+  before_script: []
+  needs: []
+  script:
+    - echo "Selected lightweight checks for $CI_COMMIT_REF_NAME"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
+
+.branch-frontend-rules:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
+      changes:
+        - .gitlab-ci.yml
+        - .gitlab/ci/common.yml
+        - .gitlab/ci/branch.yml
+        - apps/frontend/**/*
+        - packages/shared/**/*
+        - package.json
+        - pnpm-lock.yaml
+        - pnpm-workspace.yaml
+        - eslint.config.mjs
+
+.branch-backend-rules:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
+      changes:
+        - .gitlab-ci.yml
+        - .gitlab/ci/common.yml
+        - .gitlab/ci/branch.yml
+        - apps/backend/**/*
+        - packages/shared/**/*
+        - package.json
+        - pnpm-lock.yaml
+        - pnpm-workspace.yaml
+        - eslint.config.mjs
+
+.branch-shared-rules:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
+      changes:
+        - .gitlab-ci.yml
+        - .gitlab/ci/common.yml
+        - .gitlab/ci/branch.yml
+        - packages/shared/**/*
+        - package.json
+        - pnpm-lock.yaml
+        - pnpm-workspace.yaml
+        - eslint.config.mjs
+
+"branch:frontend:lint":
+  extends:
+    - .frontend-lint
+    - .branch-frontend-rules
+
+"branch:frontend:typecheck":
+  extends:
+    - .frontend-typecheck
+    - .branch-frontend-rules
+
+"branch:backend:lint":
+  extends:
+    - .backend-lint
+    - .branch-backend-rules
+
+"branch:backend:typecheck":
+  extends:
+    - .backend-typecheck
+    - .branch-backend-rules
+
+"branch:shared:lint":
+  extends:
+    - .shared-lint
+    - .branch-shared-rules
+
+"branch:shared:typecheck":
+  extends:
+    - .shared-typecheck
+    - .branch-shared-rules

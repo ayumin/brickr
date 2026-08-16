@@ -1,0 +1,31 @@
+# Tag pipelines preserve the existing distributable artifacts without touching
+# the staging environment.
+"release:frontend:build":
+  extends: .frontend-build
+  rules:
+    - if: $CI_COMMIT_TAG
+  artifacts:
+    name: "brickr-frontend-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - apps/frontend/dist/
+    expire_in: 1 week
+
+"release:backend:build":
+  extends: .backend-build
+  rules:
+    - if: $CI_COMMIT_TAG
+  artifacts:
+    name: "brickr-backend-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - apps/backend/dist/
+    expire_in: 1 week
+
+"release:shared:build":
+  extends: .shared-build
+  rules:
+    - if: $CI_COMMIT_TAG
+  artifacts:
+    name: "brickr-shared-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - packages/shared/dist/
+    expire_in: 1 week
