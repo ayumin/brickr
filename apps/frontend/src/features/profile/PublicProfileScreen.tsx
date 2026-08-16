@@ -129,24 +129,28 @@ export function PublicProfileScreen({ handle }: { handle: string }) {
 
   return (
     <div className="mx-auto w-full max-w-2xl">
-      <CharacterProfile
-        displayName={profile.displayName}
-        handle={profile.handle}
-        avatarUrl={profile.avatarUrl}
-        description={profile.description ?? null}
-        postCount={profile.postCount}
-        {...(profile.canEdit
-          ? {
-              onEdit: () => {
-                if (isSelf) {
-                  navigate(settingsPath("profile"), { state: { returnTo: `/${profile.handle}` } });
-                } else {
-                  setEditingCharacterId(profile.id);
-                }
-              },
-            }
-          : {})}
-      />
+      {/* Sticks to the viewport top (CLAUDE.md §48: "Profile領域はアプリヘッダー
+          直下にsticky表示"); only the post list beneath scrolls. */}
+      <div className="sticky top-0 z-10 bg-canvas/95 backdrop-blur">
+        <CharacterProfile
+          displayName={profile.displayName}
+          handle={profile.handle}
+          avatarUrl={profile.avatarUrl}
+          description={profile.description ?? null}
+          postCount={profile.postCount}
+          {...(profile.canEdit
+            ? {
+                onEdit: () => {
+                  if (isSelf) {
+                    navigate(settingsPath("profile"), { state: { returnTo: `/${profile.handle}` } });
+                  } else {
+                    setEditingCharacterId(profile.id);
+                  }
+                },
+              }
+            : {})}
+        />
+      </div>
 
       {postsState.status === "loading" ? (
         <div className="flex justify-center py-8">

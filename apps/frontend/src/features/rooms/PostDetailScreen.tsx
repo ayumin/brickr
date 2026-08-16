@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import type { PostDto } from "@brickr/shared";
 
 import { ErrorBanner } from "../../components/ErrorBanner";
+import { Icon } from "../../components/Icon";
 import { Spinner } from "../../components/Spinner";
 import { handlePath, postPath } from "../../routes";
 import {
@@ -143,6 +144,32 @@ export function PostDetailScreen({ postId }: { postId: string }) {
 
   return (
     <div className="mx-auto w-full max-w-2xl">
+      <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-line bg-canvas/95 px-4 py-3 backdrop-blur">
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          aria-label="戻る"
+          title="戻る"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-ink-muted transition hover:bg-surface-hover hover:text-ink"
+        >
+          <Icon name="arrow-left" />
+        </button>
+        <h1 className="truncate font-display text-lg font-bold text-ink">投稿</h1>
+      </div>
+
+      {/* The replies/reposts this screen exists to show come from the room's
+          full post list (`useSimulationEvents`); surface a failure there
+          rather than silently rendering the post with none of its reactions. */}
+      {events.error ? (
+        <div className="px-4 pt-3">
+          <ErrorBanner
+            message="この投稿への反応を取得できませんでした"
+            detail={events.error}
+            onRetry={events.reload}
+          />
+        </div>
+      ) : null}
+
       <PostDetail
         post={post}
         allPosts={events.posts}

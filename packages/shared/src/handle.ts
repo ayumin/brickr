@@ -23,7 +23,12 @@ export const RESERVED_HANDLES: readonly string[] = [
   // Routes the app serves today. `rooms` and `cast` are the refreshed names for
   // the room list and character management (§6.1); `characters` and `simulations`
   // stay reserved because the old URLs keep redirecting during phase 1 (§6.2).
-  "login", "signup", "logout", "admin", "settings",
+  //
+  // `admin` is deliberately absent: there is no `/admin` route in §6.1 (admin
+  // screens live under `/settings/*`), and `ADMIN_HANDLE` defaults to exactly
+  // this word (CLAUDE.md §66.9) - reserving it made the bootstrap admin's own
+  // `/:handle` profile permanently unreachable for no corresponding route.
+  "login", "signup", "logout", "settings",
   "characters", "simulations", "posts", "rooms", "cast",
   // Settings sections (§6.3, §22). They live under the already-reserved
   // `settings` prefix, so none of them can collide today — they are listed for

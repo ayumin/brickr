@@ -143,46 +143,50 @@ export function RoomScreen({ roomId }: { roomId: string }) {
   return (
     <div className="flex w-full">
       <div className="mx-auto flex w-full min-w-0 max-w-2xl flex-1 flex-col">
-        <RoomHeader
-          title={simulation.title ?? "無題のルーム"}
-          isStopped={isStopped}
-          activeResponseCount={feed.activeResponseCount}
-          connection={feed.connection}
-          onToggleConnection={() => setStreamEnabled((enabled) => !enabled)}
-          filter={filter}
-          onFilterChange={handleFilterChange}
-          onOpenInfo={() => setInfoSheetOpen(true)}
-        />
+        {/* Sticks to the viewport top through the compose trigger; only the
+            thread list beneath scrolls. */}
+        <div className="sticky top-0 z-10 bg-canvas/95 backdrop-blur">
+          <RoomHeader
+            title={simulation.title ?? "無題のルーム"}
+            isStopped={isStopped}
+            activeResponseCount={feed.activeResponseCount}
+            connection={feed.connection}
+            onToggleConnection={() => setStreamEnabled((enabled) => !enabled)}
+            filter={filter}
+            onFilterChange={handleFilterChange}
+            onOpenInfo={() => setInfoSheetOpen(true)}
+          />
 
-        {/* Compose trigger (§17, §19.3): hidden entirely when stopped, the same
-            as reply/quote (already capabilities-driven) - not merely disabled,
-            since a stopped room accepts no writes from anyone. */}
-        {!isStopped ? (
-          <div className="flex items-center gap-3 border-b border-line px-4 py-3">
-            <Avatar
-              handle={userProfile.profile.handle}
-              displayName={userProfile.profile.displayName}
-              avatarUrl={userProfile.profile.avatarUrl}
-              size="md"
-            />
-            <button
-              type="button"
-              onClick={() => {
-                composeController.request({
-                  context: {
-                    mode: "new",
-                    simulationId: simulation.id,
-                    roomLabel: simulation.title ?? "無題のルーム",
-                  },
-                  onPosted: (_post, thread) => feed.upsertThread(thread),
-                });
-              }}
-              className="min-w-0 flex-1 rounded-full border border-line bg-surface px-4 py-2.5 text-left text-sm text-ink-faint transition hover:border-accent/50"
-            >
-              {"いま何が起きてる？　@ でキャストを指名"}
-            </button>
-          </div>
-        ) : null}
+          {/* Compose trigger (§17, §19.3): hidden entirely when stopped, the same
+              as reply/quote (already capabilities-driven) - not merely disabled,
+              since a stopped room accepts no writes from anyone. */}
+          {!isStopped ? (
+            <div className="flex items-center gap-3 border-b border-line px-4 py-3">
+              <Avatar
+                handle={userProfile.profile.handle}
+                displayName={userProfile.profile.displayName}
+                avatarUrl={userProfile.profile.avatarUrl}
+                size="md"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  composeController.request({
+                    context: {
+                      mode: "new",
+                      simulationId: simulation.id,
+                      roomLabel: simulation.title ?? "無題のルーム",
+                    },
+                    onPosted: (_post, thread) => feed.upsertThread(thread),
+                  });
+                }}
+                className="min-w-0 flex-1 rounded-full border border-line bg-surface px-4 py-2.5 text-left text-sm text-ink-faint transition hover:border-accent/50"
+              >
+                {"いま何が起きてる？　@ でキャストを指名"}
+              </button>
+            </div>
+          ) : null}
+        </div>
 
         {userProfile.error ? (
           <div className="px-4 pt-3">

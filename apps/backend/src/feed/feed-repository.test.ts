@@ -157,7 +157,7 @@ describe("FeedRepository.findThreadPage (§10.1)", () => {
 });
 
 describe("FeedRepository mine filter (§12.3)", () => {
-  it("collects the threads that concern the reader in two queries, not one per thread", async () => {
+  it("collects the threads that concern the reader in three queries, not one per thread", async () => {
     const { db, calls, spies } = makeDb({ threadIds: ["root-7", "root-8"] });
 
     await new FeedRepository(db).findThreadPage({
@@ -166,23 +166,26 @@ describe("FeedRepository mine filter (§12.3)", () => {
     });
 
     const lookups = calls.filter((call) => call.distinct !== undefined);
-    expect(lookups).toHaveLength(2);
-    // A reply whose parent I wrote, and any post that mentions me.
+    expect(lookups).toHaveLength(3);
+    // A reply whose parent I wrote, any post that mentions me, and a quote
+    // repost of a post of mine.
     expect(lookups[0]?.where).toMatchObject({ replyToPost: { authorId: "reader-1" } });
     expect(lookups[1]?.where).toMatchObject({ mentions: { has: "hanako" } });
-    // The unified feed spans every simulation, so neither lookup is narrowed.
+    expect(lookups[2]?.where).toMatchObject({ quoteOfPost: { authorId: "reader-1" } });
+    // The unified feed spans every simulation, so none of the lookups are narrowed.
     expect(lookups[0]?.where).not.toHaveProperty("simulationId");
     expect(lookups[1]?.where).not.toHaveProperty("simulationId");
-    // Three queries in total, whatever the page holds.
-    expect(spies.post.findMany).toHaveBeenCalledTimes(3);
+    expect(lookups[2]?.where).not.toHaveProperty("simulationId");
+    // Four queries in total, whatever the page holds.
+    expect(spies.post.findMany).toHaveBeenCalledTimes(4);
   });
 
   /**
    * A thread never spans simulations (§10.5), so narrowing the lookups changes no
-   * result. It stops one room's filter from reading every reply and every mention
+   * result. It stops one room's filter from reading every reply, mention, and quote
    * in the database to build a list the outer query would discard anyway (§26).
    */
-  it("narrows both lookups to the room when the caller asked for one", async () => {
+  it("narrows every lookup to the room when the caller asked for one", async () => {
     const { db, calls } = makeDb({ threadIds: ["root-7"] });
 
     await new FeedRepository(db).findThreadPage({
@@ -199,6 +202,10 @@ describe("FeedRepository mine filter (§12.3)", () => {
     expect(lookups[1]?.where).toMatchObject({
       simulationId: "room-1",
       mentions: { has: "hanako" },
+    });
+    expect(lookups[2]?.where).toMatchObject({
+      simulationId: "room-1",
+      quoteOfPost: { authorId: "reader-1" },
     });
     // The roots keep both of their own conditions.
     const roots = calls.find((call) => call.include !== undefined);
@@ -284,6 +291,41 @@ describe("FeedRepository reply reads (§10.1, §12.2)", () => {
     expect(await repository.countRepliesByThread([])).toEqual(new Map());
     expect(await repository.findLatestRepliesByThread([], 2)).toEqual([]);
     expect(spies.post.groupBy).not.toHaveBeenCalled();
+    expect(spies.$queryRaw).not.toHaveBeenCalled();
+  });
+
+  it("finds the single newest reply per thread that concerns the reader (§12.3)", async () => {
+    const { db, spies } = makeDb();
+    spies.$queryRaw.mockResolvedValueOnce([postRow({ id: "reply-2", replyTo: "root-1" })]);
+
+    const byThread = await new FeedRepository(db).findConcerningReplyByThread(
+      ["root-1", "root-2"],
+      { userId: "reader-1", handle: "hanako" },
+    );
+
+    expect(spies.$queryRaw).toHaveBeenCalledTimes(1);
+    const statement = spies.$queryRaw.mock.calls[0]?.[0] as { sql: string; values: unknown[] };
+    // Ranked by "concerns the reader", not plain recency, and joined to the
+    // parent so "a reply whose parent I wrote" can be evaluated per row.
+    expect(statement.sql).toContain("row_number()");
+    expect(statement.sql).toContain("PARTITION BY p.thread_root_id");
+    expect(statement.sql).toContain("LEFT JOIN posts parent");
+    expect(statement.values).toEqual(["root-1", "root-2", "reader-1", "hanako"]);
+    // One reply per thread at most, keyed by thread.
+    expect(byThread.size).toBe(1);
+    expect(byThread.get("root-1")).toMatchObject({ id: "reply-2" });
+    expect(byThread.get("root-2")).toBeUndefined();
+  });
+
+  it("asks nothing for an empty set of threads", async () => {
+    const { db, spies } = makeDb();
+
+    const byThread = await new FeedRepository(db).findConcerningReplyByThread([], {
+      userId: "reader-1",
+      handle: "hanako",
+    });
+
+    expect(byThread).toEqual(new Map());
     expect(spies.$queryRaw).not.toHaveBeenCalled();
   });
 

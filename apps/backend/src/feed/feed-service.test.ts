@@ -120,6 +120,21 @@ function makeHarness(input: { posts: Post[]; rooms?: FeedRoom[] }) {
           .slice(0, limit),
       ),
     ),
+    findConcerningReplyByThread: vi.fn((rootIds: string[], mine: { userId: string; handle: string }) => {
+      const byThread = new Map<string, Post>();
+      for (const rootId of rootIds) {
+        const concerning = replies
+          .filter((entry) => entry.threadRootId === rootId)
+          .filter(
+            (entry) =>
+              entry.mentions.includes(mine.handle) ||
+              input.posts.find((parent) => parent.id === entry.replyTo)?.authorId === mine.userId,
+          )
+          .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())[0];
+        if (concerning) byThread.set(rootId, concerning);
+      }
+      return Promise.resolve(byThread);
+    }),
   };
 
   const posts = {
@@ -177,10 +192,16 @@ function isAfterCursor(root: Post, cursor: { activityAt: Date; id: string }): bo
   return activity < boundary || (activity === boundary && root.id < cursor.id);
 }
 
-/** Mirrors §12.3: root is mine, a reply answers a post of mine, or I am mentioned. */
+/**
+ * Mirrors §12.3: root is mine, a reply answers a post of mine, I am mentioned,
+ * or the root quotes a post of mine.
+ */
 function concernsUser(root: Post, mine: { userId: string; handle: string }, all: Post[]): boolean {
   if (root.authorId === mine.userId) return true;
   if (root.mentions.includes(mine.handle)) return true;
+  if (root.quoteOf !== null && all.find((entry) => entry.id === root.quoteOf)?.authorId === mine.userId) {
+    return true;
+  }
 
   const thread = all.filter((entry) => entry.threadRootId === root.id);
   return thread.some(
@@ -468,6 +489,74 @@ describe("FeedService mine filter (§12.3)", () => {
     expect(spies.findThreadPage).toHaveBeenCalledWith(
       expect.not.objectContaining({ mine: expect.anything() }),
     );
+  });
+
+  it("includes a root that quotes a post of mine, since a quote repost is always its own root (§8.3, §12.1)", async () => {
+    const quotedRoot = post({ id: "root-quoted-by-someone", authorId: mine.id, createdAt: at(9) });
+    const quoteOfMine = post({
+      id: "root-quote-repost",
+      authorId: "someone",
+      quoteOf: "root-quoted-by-someone",
+      createdAt: at(10),
+    });
+    const { service } = makeHarness({ posts: [...fixture, quotedRoot, quoteOfMine] });
+
+    const page = await service.getUnifiedFeed({ reader: mine, filter: "mine" });
+
+    expect(page.threads.map((thread) => thread.root.id)).toContain("root-quote-repost");
+  });
+
+  it("backfills a reply that concerns me when newer, unrelated replies would otherwise push it out of the preview", async () => {
+    const root = post({ id: "root-mixed", authorId: "someone", createdAt: at(9) });
+    const oldReplyToMe = reply({
+      id: "reply-old-concerning",
+      replyTo: "root-mixed",
+      threadRootId: "root-mixed",
+      authorId: mine.id,
+      createdAt: at(10),
+    });
+    const answerToOldReply = reply({
+      id: "reply-answers-me",
+      replyTo: "reply-old-concerning",
+      threadRootId: "root-mixed",
+      authorId: "someone",
+      createdAt: at(11),
+    });
+    const unrelated1 = reply({
+      id: "reply-unrelated-1",
+      replyTo: "root-mixed",
+      threadRootId: "root-mixed",
+      authorId: "someone",
+      createdAt: at(12),
+    });
+    const unrelated2 = reply({
+      id: "reply-unrelated-2",
+      replyTo: "root-mixed",
+      threadRootId: "root-mixed",
+      authorId: "someone",
+      createdAt: at(13),
+    });
+    const { service } = makeHarness({
+      posts: [...fixture, root, oldReplyToMe, answerToOldReply, unrelated1, unrelated2],
+    });
+
+    const minePage = await service.getUnifiedFeed({ reader: mine, filter: "mine" });
+    const mixedThread = minePage.threads.find((thread) => thread.root.id === "root-mixed");
+
+    // Without the backfill, the top-2-by-recency preview would be
+    // [reply-unrelated-1, reply-unrelated-2] - the concerning reply that
+    // answered me would be invisible without expanding the thread.
+    expect(mixedThread?.latestReplies.map((entry) => entry.id)).toEqual([
+      "reply-answers-me",
+      "reply-unrelated-2",
+    ]);
+    // The `all` filter is unaffected: same thread, ordinary top-2 preview.
+    const allPage = await service.getUnifiedFeed({ reader: mine, filter: "all" });
+    const mixedThreadAll = allPage.threads.find((thread) => thread.root.id === "root-mixed");
+    expect(mixedThreadAll?.latestReplies.map((entry) => entry.id)).toEqual([
+      "reply-unrelated-1",
+      "reply-unrelated-2",
+    ]);
   });
 });
 

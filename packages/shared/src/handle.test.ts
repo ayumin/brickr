@@ -30,18 +30,22 @@ describe("RESERVED_HANDLES", () => {
 describe("isReservedHandle", () => {
   it("matches a reserved word exactly", () => {
     expect(isReservedHandle("login")).toBe(true);
-    expect(isReservedHandle("admin")).toBe(true);
+    expect(isReservedHandle("settings")).toBe(true);
   });
 
   it("is case-insensitive and trims surrounding whitespace", () => {
     expect(isReservedHandle("LOGIN")).toBe(true);
-    expect(isReservedHandle("  admin  ")).toBe(true);
+    expect(isReservedHandle("  settings  ")).toBe(true);
   });
 
   it("reserves the routes this MR adds above the /:handle catch-all", () => {
     expect(isReservedHandle("characters")).toBe(true);
     expect(isReservedHandle("simulations")).toBe(true);
     expect(isReservedHandle("posts")).toBe(true);
+  });
+
+  it("does not reserve 'admin': there is no /admin route (§6.1), and ADMIN_HANDLE defaults to exactly this word (CLAUDE.md §66.9)", () => {
+    expect(isReservedHandle("admin")).toBe(false);
   });
 
   it("does not flag an ordinary handle", () => {

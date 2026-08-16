@@ -407,13 +407,28 @@ describe("access matrix (§24.2)", () => {
       expect(asStranger.simulation.canManage).toBe(false);
     });
 
-    it("applies the same rule to the room's post list", async () => {
+    it("applies the same stopped-room rule to the room's post list", async () => {
       await expect(
         get(NORMAL_USER, `/api/simulations/${STOPPED_ROOM.id}/posts`).then((r) => r.statusCode),
       ).resolves.toBe(404);
       await expect(
         get(ROOM_OWNER, `/api/simulations/${STOPPED_ROOM.id}/posts`).then((r) => r.statusCode),
       ).resolves.toBe(200);
+    });
+
+    /**
+     * Unlike `GET /api/simulations/:id` (refused above "even to an admin"),
+     * the post list's job is reconstructing a thread for post detail (§10.8),
+     * which must work the same way whether that thread lives in a room or the
+     * global feed - so this route does not apply the "not a room" rule.
+     */
+    it("does not refuse the global feed row for the post list, unlike the room detail", async () => {
+      const { statusCode, body } = (await get(
+        NORMAL_USER,
+        `/api/simulations/${GLOBAL_SIMULATION_ID}/posts`,
+      )) as { statusCode: number; body: { posts: Array<{ id: string }> } };
+      expect(statusCode).toBe(200);
+      expect(body.posts.map((entry) => entry.id)).toContain(POST_IN_FEED.id);
     });
   });
 

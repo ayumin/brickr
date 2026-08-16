@@ -208,12 +208,33 @@ export class SimulationService {
   /**
    * The room behind a room-scoped request, or a 404 (§10.4).
    *
-   * Public so the routes that still serve a whole room — its post list — apply
-   * exactly the same rule as the room detail itself.
+   * Public so every route that treats this simulation *as a room* — the room
+   * detail, the room feed — applies exactly the same rule. Do not reach for
+   * this to gate "give me this simulation's posts" in general: `requireReadableSimulation`
+   * below is that rule, and it deliberately does not refuse the global row.
    */
   async requireReadableRoom(id: string, actor: SimulationActor): Promise<Simulation> {
     const simulation = await this.requireSimulation(id);
     assertRoomReadable(simulation, actor);
+    return simulation;
+  }
+
+  /**
+   * The simulation behind a request for its posts in full (§10.8), or a 404.
+   *
+   * Deliberately weaker than `requireReadableRoom`: a stopped room still stays
+   * hidden from anyone but its creator or an administrator, but the global feed
+   * row is not refused here. `assertRoomReadable`'s "not a room" rule exists to
+   * stop the global feed from getting a second, room-shaped surface through
+   * `GET /api/simulations/:id`/`GET /api/simulations/:id/feed` — it was never
+   * about whether a post's own thread (post detail, §10.8) can be reconstructed,
+   * which must work the same way regardless of which simulation a post lives in.
+   */
+  async requireReadableSimulation(id: string, actor: SimulationActor): Promise<Simulation> {
+    const simulation = await this.requireSimulation(id);
+    if (simulation.status === "stopped" && !isSimulationOwnerOrAdmin(simulation, actor)) {
+      throw new SimulationNotFoundError(simulation.id);
+    }
     return simulation;
   }
 

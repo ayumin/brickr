@@ -34,9 +34,20 @@ function measureThreadTops(container: HTMLElement): Map<string, number> {
  * Also owns the scroll-position correction across a reorder (§12.4, ★重要):
  * a reply landing on some other thread moves it to the top of the list,
  * which would otherwise push whatever the reader is currently looking at
- * down the page mid-read. Every commit re-measures and corrects rather than
- * only reacting to a `threads` prop change, so the fix applies uniformly
- * regardless of why the list re-rendered.
+ * down the page mid-read.
+ *
+ * The effect still runs on every commit (no dependency array), but only
+ * *corrects* when `threads` itself changed since the last run - it always
+ * refreshes `anchorRef` either way. A commit triggered by something else
+ * (e.g. `loadingMore` flipping true the instant "さらに読み込む" is clicked,
+ * before the next page has even arrived) must not scroll against whatever
+ * position the anchor was captured at several renders ago: if the reader
+ * scrolled manually since then with no re-render in between, that anchor is
+ * stale, and correcting against it snaps the page back to that old spot.
+ * `threads` itself is reference-stable across a `loadingMore`-only state
+ * change (`useFeed`'s `useMemo` only depends on `state.orderedIds`/`byId`,
+ * neither of which that action touches), so comparing it here is a reliable
+ * "did the rendered content actually change" check.
  */
 export function FeedThreadList({
   threads,
@@ -50,6 +61,7 @@ export function FeedThreadList({
 }: FeedThreadListProps) {
   const containerRef = useRef<HTMLUListElement | null>(null);
   const anchorRef = useRef<ScrollAnchor | null>(null);
+  const previousThreadsRef = useRef<FeedThreadDto[] | null>(null);
 
   useLayoutEffect(() => {
     const container = containerRef.current;
@@ -58,6 +70,15 @@ export function FeedThreadList({
     }
 
     const topAfterByThreadId = measureThreadTops(container);
+    const threadsChanged = previousThreadsRef.current !== threads;
+    previousThreadsRef.current = threads;
+
+    if (!threadsChanged) {
+      anchorRef.current = captureScrollAnchor(
+        [...topAfterByThreadId.entries()].map(([threadId, top]) => ({ threadId, top })),
+      );
+      return;
+    }
 
     const delta = computeScrollCorrection({
       anchor: anchorRef.current,
