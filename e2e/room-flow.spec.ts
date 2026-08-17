@@ -3,11 +3,12 @@ import { expect, test } from "@playwright/test";
 const adminEmail = process.env.ADMIN_EMAIL ?? "admin@example.com";
 const adminPassword = process.env.ADMIN_PASSWORD ?? "brickr-e2e-password";
 
-test("signed-out feed remains read-only", async ({ page }) => {
+test("signed-out feed prompts for login before composing", async ({ page }) => {
   await page.goto("/");
 
   await expect(page.getByRole("heading", { name: "フィード" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "投稿する" })).toHaveCount(0);
+  await page.getByRole("button", { name: "ログインして投稿する", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "ログイン" })).toBeVisible();
 });
 
 test("admin can sign in, create a room, and publish a post", async ({ page }) => {
