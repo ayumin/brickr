@@ -97,9 +97,38 @@ EOF
 )"
 ```
 
-For descriptions on `glab issue create` / `glab mr create` / `glab mr update`,
-inline a quoted heredoc into `--description`, or for very large or reusable
-bodies write to a file and use `--description "$(cat /tmp/desc.md)"`.
+### Descriptions on `create` / `update` — always go through a file
+
+`glab issue create`, `glab mr create`, and `glab mr update` take the body via
+`--description`. **Write the body to a file first and pass it with
+`--description "$(cat /tmp/desc.md)"`.** Do not assemble the string inline.
+
+Text inside double quotes is still shell-expanded, so a Markdown body
+containing backticks or `$` breaks in a way that is easy to miss: the
+shell runs the backticked text as a command, emits errors such as
+`/bin/sh: 1: some-file.test.ts: not found`, and substitutes the empty result
+into the description. `glab` still exits 0 and still creates the merge request,
+so the only symptom is a silently mangled description.
+
+```shell
+# Correct - build the body in a file, then point --description at it
+cat > /tmp/desc.md << 'EOF'
+## Summary
+
+Renamed `handleSubmit` and fixed `$PATH` handling.
+EOF
+glab mr create --title "fix: rename handleSubmit" \
+  --description "$(cat /tmp/desc.md)" --push
+
+# Wrong - the backticks and $ inside the double-quoted string are expanded
+glab mr create --title "fix: rename handleSubmit" --description "## Summary
+
+Renamed `handleSubmit` and fixed `$PATH` handling."
+```
+
+Inlining a quoted heredoc as `--description "$(cat << 'EOF' ... EOF)"` is also
+safe, but the file is preferred: it is reusable, can be inspected before
+sending, and behaves identically across `create` and `update`.
 
 ### Threaded replies on merge requests
 
@@ -222,5 +251,10 @@ glab api projects/:id/issues/:iid/notes \
   may not exist and MR creation fails.
 - **No `--state` on `mr list`** — use `--all`, `--merged`, or `--closed`.
 - **No `--body` flag** — `--body` is a `gh` flag. `glab` uses `--description`.
+- **Never assemble a Markdown body inline for `--description`** — backticks and
+  `$` inside the double-quoted string are shell-expanded, silently mangling the
+  description while `glab` still exits 0 and creates the merge request. Write
+  the body to a file and pass `--description "$(cat /tmp/desc.md)"`. See
+  [Descriptions on `create` / `update`](#descriptions-on-create--update--always-go-through-a-file).
 - **Labels** — `--label` to add, `--unlabel` to remove. Scoped labels like
   `status::doing` auto-replace within their scope.
