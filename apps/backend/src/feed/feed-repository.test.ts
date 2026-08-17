@@ -188,19 +188,16 @@ describe("FeedRepository.findThreadPage (§10.1)", () => {
 });
 
 describe("FeedRepository.findVisibleRoomIds (§10.1)", () => {
-  it("queries public and open rooms plus the global row for any reader", async () => {
+  it("queries public and open rooms for any reader", async () => {
     const { db, spies } = makeDb({ visibleRooms: [{ id: "room-1" }, { id: "room-global" }] });
 
     const ids = await new FeedRepository(db).findVisibleRoomIds(null);
 
     expect(spies.room.findMany).toHaveBeenCalledTimes(1);
     const call = spies.room.findMany.mock.calls[0] as unknown as [{ where: Record<string, unknown> }];
-    // public/open rooms and the global row are always included.
+    // Public and open rooms are always included.
     expect(call[0].where).toMatchObject({
-      OR: expect.arrayContaining([
-        { visibility: { in: ["public", "open"] } },
-        { scope: "global" },
-      ]),
+      OR: expect.arrayContaining([{ visibility: { in: ["public", "open"] } }]),
     });
     expect(ids).toEqual(["room-1", "room-global"]);
   });
@@ -234,8 +231,8 @@ describe("FeedRepository.findVisibleRoomIds (§10.1)", () => {
     await new FeedRepository(db).findVisibleRoomIds(null);
 
     const call = spies.room.findMany.mock.calls[0] as unknown as [{ where: { OR: unknown[] } }];
-    // Only two arms: public/open and global. No membership arm for anonymous.
-    expect(call[0].where.OR).toHaveLength(2);
+    // Only the public/open arm remains. There is no membership arm for anonymous readers.
+    expect(call[0].where.OR).toHaveLength(1);
   });
 
   it("returns the room ids from the query result", async () => {

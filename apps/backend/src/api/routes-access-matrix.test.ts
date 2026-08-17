@@ -1,4 +1,3 @@
-import { GLOBAL_SIMULATION_ID } from "@brickr/shared";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it } from "vitest";
 import type { UserAccount } from "../auth/user-account.js";
@@ -82,19 +81,7 @@ const ACTIVE_ROOM = room("room-active");
 const STOPPED_ROOM = room("room-stopped", { status: "archived" });
 const OTHER_ROOM = room("room-other", { createdByUserId: OTHER_ROOM_OWNER.id });
 
-/** The reserved global row: the feed itself, and the one simulation with no owner. */
-const FEED_ROOM: Simulation = {
-  id: GLOBAL_SIMULATION_ID,
-  title: "フィード",
-  status: "active",
-  scope: "global",
-  visibility: "public",
-  tags: [],
-  createdAt: NOW,
-  lastActivityAt: NOW,
-};
-
-const ROOMS = [ACTIVE_ROOM, STOPPED_ROOM, OTHER_ROOM, FEED_ROOM];
+const ROOMS = [ACTIVE_ROOM, STOPPED_ROOM, OTHER_ROOM];
 
 function post(id: string, roomId: string, authorId: string): Post {
   return {
@@ -113,8 +100,7 @@ function post(id: string, roomId: string, authorId: string): Post {
 
 const POST_IN_ACTIVE = post("post-active", ACTIVE_ROOM.id, "cast-owned");
 const POST_IN_STOPPED = post("post-stopped", STOPPED_ROOM.id, "cast-owned");
-const POST_IN_FEED = post("post-feed", FEED_ROOM.id, NORMAL_USER.id);
-const POSTS = [POST_IN_ACTIVE, POST_IN_STOPPED, POST_IN_FEED];
+const POSTS = [POST_IN_ACTIVE, POST_IN_STOPPED];
 
 function castMember(id: string, handle: string, createdByUserId?: string): Character {
   return {
@@ -143,10 +129,9 @@ const CAST = [OWNED_CAST, SYSTEM_CAST];
 function visibleRooms(actor: { id: string; isAdmin: boolean }): Simulation[] {
   return ROOMS.filter(
     (candidate) =>
-      candidate.scope === "room" &&
-      (actor.isAdmin ||
-        candidate.status === "active" ||
-        candidate.createdByUserId === actor.id),
+      actor.isAdmin ||
+      candidate.status === "active" ||
+      candidate.createdByUserId === actor.id,
   );
 }
 
@@ -315,18 +300,18 @@ describe("access matrix (§24.2)", () => {
       ["normal user", NORMAL_USER, 200],
       ["room owner", ROOM_OWNER, 200],
       ["admin", ADMIN, 200],
-    ])("GET /api/simulations for %s answers %i", async (_name, actor, expected) => {
-      const { statusCode } = await get(actor, "/api/simulations");
+    ])("GET /api/rooms for %s answers %i", async (_name, actor, expected) => {
+      const { statusCode } = await get(actor, "/api/rooms");
       expect(statusCode).toBe(expected);
     });
 
     it("scopes the room list per caller instead of filtering after the fact", async () => {
-      const { body, listedFor } = await get(NORMAL_USER, "/api/simulations");
+      const { body, listedFor } = await get(NORMAL_USER, "/api/rooms");
 
       // The service passes the caller straight to the query (§10.3); the `where`
       // clause itself is pinned in simulation-repository.test.ts.
       expect(listedFor).toEqual([NORMAL_USER.id]);
-      expect((body as { simulations: Array<{ id: string }> }).simulations.map((s) => s.id)).toEqual([
+      expect((body as { rooms: Array<{ id: string }> }).rooms.map((s) => s.id)).toEqual([
         ACTIVE_ROOM.id,
         OTHER_ROOM.id,
       ]);
@@ -334,8 +319,8 @@ describe("access matrix (§24.2)", () => {
 
     it("hides a stopped room from everyone but its creator and an admin", async () => {
       const ids = async (actor: UserAccount) =>
-        ((await get(actor, "/api/simulations")).body as { simulations: Array<{ id: string }> })
-          .simulations.map((s) => s.id);
+        ((await get(actor, "/api/rooms")).body as { rooms: Array<{ id: string }> })
+          .rooms.map((s) => s.id);
 
       expect(await ids(NORMAL_USER)).not.toContain(STOPPED_ROOM.id);
       expect(await ids(OTHER_ROOM_OWNER)).not.toContain(STOPPED_ROOM.id);
@@ -343,19 +328,11 @@ describe("access matrix (§24.2)", () => {
       expect(await ids(ADMIN)).toContain(STOPPED_ROOM.id);
     });
 
-    it("never lists the global feed row as a room", async () => {
-      const { body } = await get(ADMIN, "/api/simulations");
-
-      expect(
-        (body as { simulations: Array<{ id: string }> }).simulations.map((s) => s.id),
-      ).not.toContain(GLOBAL_SIMULATION_ID);
-    });
-
     it("tells everyone what they may manage, and nobody otherwise", async () => {
       const canManage = async (actor: UserAccount) => {
-        const { body } = await get(actor, "/api/simulations");
-        const found = (body as { simulations: Array<{ id: string; canManage: boolean }> })
-          .simulations.find((s) => s.id === ACTIVE_ROOM.id);
+        const { body } = await get(actor, "/api/rooms");
+        const found = (body as { rooms: Array<{ id: string; canManage: boolean }> })
+          .rooms.find((s) => s.id === ACTIVE_ROOM.id);
         return found?.canManage;
       };
 
@@ -372,7 +349,7 @@ describe("access matrix (§24.2)", () => {
       ["normal user", NORMAL_USER, 200],
       ["admin", ADMIN, 200],
     ])("an active room answers %i for %s", async (_name, actor, expected) => {
-      const { statusCode } = await get(actor, `/api/simulations/${ACTIVE_ROOM.id}`);
+      const { statusCode } = await get(actor, `/api/rooms/${ACTIVE_ROOM.id}`);
       expect(statusCode).toBe(expected);
     });
 
@@ -382,57 +359,28 @@ describe("access matrix (§24.2)", () => {
       ["room owner", ROOM_OWNER, 200],
       ["admin", ADMIN, 200],
     ])("a stopped room answers %i for %s", async (_name, actor, expected) => {
-      const { statusCode } = await get(actor, `/api/simulations/${STOPPED_ROOM.id}`);
+      const { statusCode } = await get(actor, `/api/rooms/${STOPPED_ROOM.id}`);
       // 404 rather than 403: a 403 would confirm the room exists (§10.4).
       expect(statusCode).toBe(expected);
     });
 
-    it("refuses to serve the global feed row as a room, even to an admin", async () => {
-      const { statusCode } = await get(ADMIN, `/api/simulations/${GLOBAL_SIMULATION_ID}`);
-      expect(statusCode).toBe(404);
-    });
-
     it("no longer ships the room's posts with its basics", async () => {
-      const { body } = await get(NORMAL_USER, `/api/simulations/${ACTIVE_ROOM.id}`);
+      const { body } = await get(NORMAL_USER, `/api/rooms/${ACTIVE_ROOM.id}`);
       expect(body).not.toHaveProperty("posts");
     });
 
     it("is summary-shaped, same as a room list entry, for the room info panel (§19.2)", async () => {
-      const { body } = (await get(ROOM_OWNER, `/api/simulations/${ACTIVE_ROOM.id}`)) as {
+      const { body } = (await get(ROOM_OWNER, `/api/rooms/${ACTIVE_ROOM.id}`)) as {
         body: { simulation: { postCount: number; creator: unknown; canManage: boolean } };
       };
       expect(body.simulation).toHaveProperty("postCount");
       expect(body.simulation).toHaveProperty("creator");
       expect(body.simulation.canManage).toBe(true);
 
-      const { body: asStranger } = (await get(NORMAL_USER, `/api/simulations/${ACTIVE_ROOM.id}`)) as {
+      const { body: asStranger } = (await get(NORMAL_USER, `/api/rooms/${ACTIVE_ROOM.id}`)) as {
         body: { simulation: { canManage: boolean } };
       };
       expect(asStranger.simulation.canManage).toBe(false);
-    });
-
-    it("applies the same stopped-room rule to the room's post list", async () => {
-      await expect(
-        get(NORMAL_USER, `/api/simulations/${STOPPED_ROOM.id}/posts`).then((r) => r.statusCode),
-      ).resolves.toBe(404);
-      await expect(
-        get(ROOM_OWNER, `/api/simulations/${STOPPED_ROOM.id}/posts`).then((r) => r.statusCode),
-      ).resolves.toBe(200);
-    });
-
-    /**
-     * Unlike `GET /api/simulations/:id` (refused above "even to an admin"),
-     * the post list's job is reconstructing a thread for post detail (§10.8),
-     * which must work the same way whether that thread lives in a room or the
-     * global feed - so this route does not apply the "not a room" rule.
-     */
-    it("does not refuse the global feed row for the post list, unlike the room detail", async () => {
-      const { statusCode, body } = (await get(
-        NORMAL_USER,
-        `/api/simulations/${GLOBAL_SIMULATION_ID}/posts`,
-      )) as { statusCode: number; body: { posts: Array<{ id: string }> } };
-      expect(statusCode).toBe(200);
-      expect(body.posts.map((entry) => entry.id)).toContain(POST_IN_FEED.id);
     });
   });
 
@@ -444,11 +392,6 @@ describe("access matrix (§24.2)", () => {
     ])("a post in an active room answers %i for %s", async (_name, actor, expected) => {
       const { statusCode } = await get(actor, `/api/posts/${POST_IN_ACTIVE.id}`);
       expect(statusCode).toBe(expected);
-    });
-
-    it("keeps the global feed's own posts open to every signed-in caller", async () => {
-      const { statusCode } = await get(NORMAL_USER, `/api/posts/${POST_IN_FEED.id}`);
-      expect(statusCode).toBe(200);
     });
 
     it.each([

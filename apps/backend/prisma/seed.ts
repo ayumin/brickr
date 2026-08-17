@@ -1,4 +1,3 @@
-import { GLOBAL_SIMULATION_ID } from "@brickr/shared";
 import { CHARACTER_SEEDS } from "../src/characters/character-seeds.js";
 import { MODEL_PROFILE_SEEDS } from "../src/model-profiles/model-profile-seeds.js";
 import { prisma, type DbTransaction } from "../src/persistence/prisma.js";
@@ -6,15 +5,6 @@ import { demoAvatarDataUrl } from "../src/characters/demo-avatar.js";
 import { bootstrapAdmin, describeAdminBootstrap } from "../src/auth/admin-bootstrap.js";
 import { UserAccountRepository } from "../src/auth/user-account-repository.js";
 import { env } from "../src/config/env.js";
-
-/**
- * The fixed UUID for the room that backs the unified feed (§8.2).
- *
- * Imported from @brickr/shared so the seed always uses the same value as the
- * rest of the application, preventing silent drift between the seeded row and
- * the id the unified feed actually queries.
- */
-const FEED_ROOM_ID = GLOBAL_SIMULATION_ID;
 
 /**
  * Fixed UUIDs for the demo rooms seeded for development.
@@ -92,30 +82,6 @@ async function main(): Promise<void> {
     displayName: env.admin.displayName,
   });
   console.log(describeAdminBootstrap(outcome));
-
-  // --- Feed room (scope: "global") ------------------------------------------
-  //
-  // The one room that backs the unified feed. `update` deliberately restores
-  // title and scope so a stray rename cannot leave the feed broken.
-  // This room is never listed as an ordinary room (§8.2).
-
-  await prisma.room.upsert({
-    where: { id: FEED_ROOM_ID },
-    create: {
-      id: FEED_ROOM_ID,
-      title: "フィード",
-      status: "active",
-      scope: "global",
-      createdByUserId: null,
-    },
-    update: {
-      title: "フィード",
-      status: "active",
-      scope: "global",
-      createdByUserId: null,
-    },
-  });
-  console.log("seeded the feed room");
 
   // --- Demo rooms (scope: "room") -------------------------------------------
   //

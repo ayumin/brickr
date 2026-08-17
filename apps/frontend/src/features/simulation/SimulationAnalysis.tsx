@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { SimulationAnalysisDto } from "@brickr/shared";
+import type { RoomAnalysisDto } from "@brickr/shared";
 
 import { Avatar } from "../../components/Avatar";
 import { ErrorBanner } from "../../components/ErrorBanner";
@@ -8,7 +8,7 @@ import { Spinner } from "../../components/Spinner";
 import { api, isAbortError, isForbiddenError, toErrorMessage } from "../../services/api-client";
 
 export function SimulationAnalysis({ simulationId }: { simulationId: string }) {
-  const [analysis, setAnalysis] = useState<SimulationAnalysisDto | null>(null);
+  const [analysis, setAnalysis] = useState<RoomAnalysisDto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [forbidden, setForbidden] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);

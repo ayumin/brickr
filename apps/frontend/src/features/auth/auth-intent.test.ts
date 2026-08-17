@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { GLOBAL_SIMULATION_ID } from "@brickr/shared";
+import { GLOBAL_ROOM_ID } from "@brickr/shared";
 import { composerContextLandingPath } from "./auth-intent";
 
 describe("composerContextLandingPath", () => {
   it("lands on the feed for the global simulation", () => {
     expect(
-      composerContextLandingPath({ mode: "new", simulationId: GLOBAL_SIMULATION_ID, roomLabel: "フィード" }),
+      composerContextLandingPath({ mode: "new", simulationId: GLOBAL_ROOM_ID, roomLabel: "フィード" }),
     ).toBe("/");
   });
 

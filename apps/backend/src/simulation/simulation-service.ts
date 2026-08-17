@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
 import type {
   ResponseOutcome,
+  RoomDto,
   RoomListEntryDto,
-  SimulationDto,
-  SimulationResponse,
-  SimulationSummaryDto,
+  RoomResponse,
+  RoomSummaryDto,
 } from "@brickr/shared";
 import type { AgentService, GeneratedPost } from "../agents/agent-service.js";
 import type { CharacterRepository } from "../characters/character-repository.js";
@@ -26,7 +26,6 @@ import { selectCascadeResponders, selectResponders } from "./responder-selector.
 import type { UserProfile } from "../user-profile/user-profile.js";
 import type { SimulationRepository } from "./simulation-repository.js";
 import {
-  isGlobalSimulation,
   type Simulation,
   type SimulationActor,
   type SimulationSummary,
@@ -119,29 +118,6 @@ export class PostNotFoundError extends DomainError {
 }
 
 /**
- * The reserved global simulation is the feed itself (§8.2), so renaming,
- * stopping, resuming or analysing it would break every screen at once.
- *
- * Refused here rather than only in the UI, because a UI guard is bypassed by
- * calling the API directly.
- */
-export class GlobalSimulationMutationError extends DomainError {
-  readonly httpStatus = 403;
-  readonly errorCode = "forbidden" as const;
-  constructor(id: string) {
-    super(`simulation "${id}" is the global feed and cannot be managed as a room`);
-  }
-}
-
-export function assertNotGlobalSimulation(
-  simulation: Pick<Simulation, "id" | "scope">,
-): void {
-  if (isGlobalSimulation(simulation)) {
-    throw new GlobalSimulationMutationError(simulation.id);
-  }
-}
-
-/**
  * Whether this actor may read one simulation *as a room* (§10.2, §10.4).
  *
  * Both refusals are 404 rather than 403 on purpose: 403 confirms that something
@@ -165,8 +141,6 @@ export function assertRoomReadable(
   simulation: Pick<Simulation, "id" | "scope" | "status" | "visibility" | "createdByUserId">,
   actor: SimulationActor,
 ): void {
-  if (isGlobalSimulation(simulation)) throw new SimulationNotFoundError(simulation.id);
-
   // Until #153 supplies real membership snapshots, retain the existing access
   // behaviour for active rooms. Otherwise every non-owner member of a closed or
   // private room would be represented as a non-member and receive a false 404.
@@ -200,7 +174,7 @@ export class SimulationService {
 
   constructor(private readonly deps: SimulationServiceDeps) {}
 
-  async create(title: string | null, createdByUserId: string): Promise<SimulationDto> {
+  async create(title: string | null, createdByUserId: string): Promise<RoomDto> {
     const simulation = await this.deps.simulations.create(title, createdByUserId);
     this.stopped.delete(simulation.id);
     return toSimulationDto(simulation);
@@ -213,7 +187,7 @@ export class SimulationService {
    * decides whether `rename`/`stop`/`resume` will be accepted, so deriving it
    * twice is how a button appears for an action the server then refuses.
    */
-  async list(actor: SimulationActor): Promise<SimulationSummaryDto[]> {
+  async list(actor: SimulationActor): Promise<RoomSummaryDto[]> {
     const simulations = await this.deps.simulations.findAllVisibleTo(actor);
     return simulations.map((simulation) => toSimulationSummaryDto(simulation, actor));
   }
@@ -240,7 +214,7 @@ export class SimulationService {
    * on the leaner `requireReadableRoom` path below) because the room info
    * panel is this method's only reason to exist as a summary.
    */
-  async get(id: string, actor: SimulationActor): Promise<SimulationResponse> {
+  async get(id: string, actor: SimulationActor): Promise<RoomResponse> {
     const simulation = await this.requireSimulationSummary(id);
     assertRoomReadable(simulation, actor);
     return { simulation: toSimulationSummaryDto(simulation, actor) };
@@ -267,7 +241,7 @@ export class SimulationService {
    * hidden from anyone but its creator or an administrator, but the global feed
    * row is not refused here. `assertRoomReadable`'s "not a room" rule exists to
    * stop the global feed from getting a second, room-shaped surface through
-   * `GET /api/simulations/:id`/`GET /api/simulations/:id/feed` — it was never
+   * `GET /api/rooms/:id` — it was never
    * about whether a post's own thread (post detail, §10.8) can be reconstructed,
    * which must work the same way regardless of which simulation a post lives in.
    *
@@ -277,8 +251,6 @@ export class SimulationService {
   async requireReadableSimulation(id: string, actor: SimulationActor): Promise<Simulation> {
     const simulation = await this.requireSimulation(id);
     if (simulation.status !== "archived") return simulation;
-    // The global row is allowed through here (unlike assertRoomReadable), but
-    // the archived-room ownership check still applies.
     const roomActor: RoomActor = toRoomActor(actor, simulation.createdByUserId);
     const caps = computeRoomCapabilities(
       { visibility: simulation.visibility, status: simulation.status },
@@ -296,27 +268,22 @@ export class SimulationService {
     return simulation;
   }
 
-  async rename(id: string, title: string, actor: SimulationActor): Promise<SimulationDto> {
+  async rename(id: string, title: string, actor: SimulationActor): Promise<RoomDto> {
     const simulation = await this.requireSimulation(id);
-    // Before the ownership check: the global row has no creator, so an admin
-    // would otherwise be allowed through (§8.2).
-    assertNotGlobalSimulation(simulation);
     assertSimulationOwnerOrAdmin(simulation, actor);
     return toSimulationDto(await this.deps.simulations.updateTitle(id, title));
   }
 
-  async stop(id: string, actor: SimulationActor): Promise<SimulationDto> {
+  async stop(id: string, actor: SimulationActor): Promise<RoomDto> {
     const simulation = await this.requireSimulation(id);
-    assertNotGlobalSimulation(simulation);
     assertSimulationOwnerOrAdmin(simulation, actor);
     this.stopped.add(id);
     const stoppedSimulation = await this.deps.simulations.updateStatus(id, "archived");
     return toSimulationDto(stoppedSimulation);
   }
 
-  async resume(id: string, actor: SimulationActor): Promise<SimulationDto> {
+  async resume(id: string, actor: SimulationActor): Promise<RoomDto> {
     const simulation = await this.requireSimulation(id);
-    assertNotGlobalSimulation(simulation);
     assertSimulationOwnerOrAdmin(simulation, actor);
     this.stopped.delete(id);
     const resumedSimulation = await this.deps.simulations.updateStatus(id, "active");
@@ -713,7 +680,7 @@ export class SimulationService {
   }
 }
 
-export function toSimulationDto(simulation: Simulation): SimulationDto {
+export function toSimulationDto(simulation: Simulation): RoomDto {
   return {
     id: simulation.id,
     title: simulation.title,
@@ -737,7 +704,7 @@ export function toSimulationDto(simulation: Simulation): SimulationDto {
 export function toSimulationSummaryDto(
   simulation: SimulationSummary,
   actor: SimulationActor,
-): SimulationSummaryDto {
+): RoomSummaryDto {
   const isOwner = isSimulationOwnerOrAdmin(simulation, actor);
   return {
     ...toSimulationDto(simulation),

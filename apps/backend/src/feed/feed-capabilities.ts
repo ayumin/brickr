@@ -4,8 +4,6 @@ import type { FeedCapabilitiesDto } from "@brickr/shared";
 export type FeedCapabilityInput = {
   /** Absent for an anonymous reader: the feed itself is public (§10.1). */
   isSignedIn: boolean;
-  /** The reserved global row, shown as the feed rather than as a room (§8.2). */
-  isFeedRoom: boolean;
   isStoppedRoom: boolean;
   /** Creator or administrator of the room this thread lives in (§66.6). */
   isRoomOwnerOrAdmin: boolean;
@@ -36,8 +34,6 @@ const NOTHING: FeedCapabilitiesDto = {
  *   creator and an administrator reach a stopped room from the room list (§10.1).
  * - The thread detail is the one exception: it stays open to the creator and an
  *   administrator, since they are allowed to read a stopped room in full (§16.3).
- * - The global row has no room screen at all — `/api/simulations/:id/feed`
- *   refuses `scope=global` (§10.2) — so opening it as a room is never offered.
  * - "Show the remaining replies" is gated the same way as the thread detail,
  *   because it is served by the same reply endpoint (§10.8).
  */
@@ -49,7 +45,7 @@ export function toFeedCapabilities(input: FeedCapabilityInput): FeedCapabilities
 
   return {
     canOpenAuthor: true,
-    canOpenRoom: !input.isFeedRoom && canWrite,
+    canOpenRoom: canWrite,
     canOpenThread: canRead,
     canReply: canWrite,
     canQuote: canWrite,

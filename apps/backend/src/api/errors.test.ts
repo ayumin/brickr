@@ -27,7 +27,6 @@ import { ThreadRootNotFoundError } from "../feed/feed-service.js";
 import { LLMError, LLMTimeoutError } from "../llm/provider.js";
 import { ReplyTargetNotFoundError } from "../posts/post-repository.js";
 import {
-  GlobalSimulationMutationError,
   PostNotFoundError,
   SimulationForbiddenError,
   SimulationNotFoundError,
@@ -71,7 +70,6 @@ const CASES: Array<{ error: Error; status: number; code: string }> = [
   { error: new SimulationForbiddenError("sim-1"), status: 403, code: "forbidden" },
   { error: new PostNotFoundError("post-1"), status: 404, code: "not_found" },
   { error: new ThreadRootNotFoundError("post-1"), status: 404, code: "not_found" },
-  { error: new GlobalSimulationMutationError("sim-1"), status: 403, code: "forbidden" },
   { error: new ReplyTargetNotFoundError("post-1"), status: 404, code: "not_found" },
   { error: new FeedCursorInvalidError(), status: 400, code: "invalid_cursor" },
   { error: new InvalidApplicationSettingError("bad value"), status: 400, code: "invalid_setting" },

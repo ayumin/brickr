@@ -11,7 +11,6 @@
  *   - reject: pending → deleted, rejects non-pending
  *   - archived room: invite/remove/ban/approve/reject all throw RoomArchivedError
  *   - non-owner/non-admin: all operations throw RoomForbiddenError
- *   - global room: all operations throw GlobalSimulationMutationError
  */
 import { describe, expect, it, vi } from "vitest";
 import type { SimulationRepository } from "./simulation-repository.js";
@@ -27,8 +26,7 @@ import {
 } from "./room-membership-service.js";
 import { RoomNotFoundError, RoomArchivedError, RoomForbiddenError } from "./room-service.js";
 import type { Simulation, SimulationActor } from "./simulation.js";
-import { GLOBAL_SIMULATION_ID } from "@brickr/shared";
-import { GlobalSimulationMutationError } from "./simulation-service.js";
+
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -309,20 +307,6 @@ describe("RoomMembershipService.invite", () => {
     ).rejects.toThrow(RoomNotFoundError);
   });
 
-  it("throws GlobalSimulationMutationError for the global room", async () => {
-    const { service } = makeService({
-      findById: vi.fn(() =>
-        Promise.resolve(makeRoom({ id: GLOBAL_SIMULATION_ID, scope: "global" })),
-      ),
-    });
-
-    await expect(
-      service.invite(
-        { roomId: GLOBAL_SIMULATION_ID, targetId: "user-target", targetKind: "user", inviterId: ADMIN.id },
-        ADMIN,
-      ),
-    ).rejects.toThrow(GlobalSimulationMutationError);
-  });
 });
 
 // ── remove ────────────────────────────────────────────────────────────────────

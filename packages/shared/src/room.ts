@@ -176,7 +176,7 @@ export type RoomAnalysisResponse = {
  *
  * The posts used to ride along here, which meant opening a room downloaded its
  * entire history. Reading a room is the feed's job now
- * (`GET /api/simulations/:id/feed`), which pages instead.
+ * (`GET /api/rooms/:id/feed`), which pages instead.
  *
  * Summary-shaped (postCount/creator/canManage), same as the list endpoint's
  * entries: the room info panel (§19.2) needs exactly these fields for one
@@ -244,64 +244,3 @@ export type RoomMembershipDto = {
   updatedAt: string;
 };
 
-// ---------------------------------------------------------------------------
-// Backward-compatible aliases so existing consumers can migrate incrementally.
-// These will be removed once all callers have been updated.
-// ---------------------------------------------------------------------------
-
-/** @deprecated Use `RoomStatus` instead. */
-export type SimulationStatus = RoomStatus;
-
-/** @deprecated Use `RoomScope` instead. */
-export type SimulationScope = RoomScope;
-
-/** @deprecated Use `GLOBAL_ROOM_ID` instead. */
-export const GLOBAL_SIMULATION_ID = GLOBAL_ROOM_ID;
-
-/** @deprecated Use `GLOBAL_ROOM_TITLE` instead. */
-export const GLOBAL_SIMULATION_TITLE = GLOBAL_ROOM_TITLE;
-
-/** @deprecated Use `RoomDto` instead. */
-export type SimulationDto = RoomDto;
-
-/** @deprecated Use `RoomCreatorDto` instead. */
-export type SimulationCreatorDto = RoomCreatorDto;
-
-/** @deprecated Use `RoomSummaryDto` instead. */
-export type SimulationSummaryDto = RoomSummaryDto;
-
-/** @deprecated Use `RoomsResponse` instead. */
-export type SimulationsResponse = RoomsResponse;
-
-/** @deprecated Use `CreateRoomRequest` instead. */
-export type CreateSimulationRequest = CreateRoomRequest;
-
-/** @deprecated Use `CreateRoomResponse` instead. */
-export type CreateSimulationResponse = CreateRoomResponse;
-
-/** @deprecated Use `UpdateRoomRequest` instead. */
-export type UpdateSimulationRequest = UpdateRoomRequest;
-
-/** @deprecated Use `RoomPostRankingDto` instead. */
-export type SimulationPostRankingDto = RoomPostRankingDto;
-
-/** @deprecated Use `RoomAuthorRankingDto` instead. */
-export type SimulationAuthorRankingDto = RoomAuthorRankingDto;
-
-/** @deprecated Use `RoomContentSummaryDto` instead. */
-export type SimulationContentSummaryDto = RoomContentSummaryDto;
-
-/** @deprecated Use `RoomAnalysisDto` instead. */
-export type SimulationAnalysisDto = RoomAnalysisDto;
-
-/** @deprecated Use `RoomAnalysisResponse` instead. */
-export type SimulationAnalysisResponse = RoomAnalysisResponse;
-
-/** @deprecated Use `RoomResponse` instead. */
-export type SimulationResponse = RoomResponse;
-
-/** @deprecated Use `ROOM_STATUSES` instead. */
-export const SIMULATION_STATUSES = ROOM_STATUSES;
-
-/** @deprecated Use `ROOM_SCOPES` instead. */
-export const SIMULATION_SCOPES = ROOM_SCOPES;

@@ -1,4 +1,4 @@
-import type { SimulationDto } from "@brickr/shared";
+import type { RoomDto } from "@brickr/shared";
 
 /**
  * Every denial in the access matrix (§6.3) redirects to the feed - never a
@@ -19,7 +19,7 @@ const DENIED: AccessDecision = { allowed: false, redirectTo: "/" };
  * function does not talk to the network itself.
  */
 export function checkRoomAccess(
-  room: Pick<SimulationDto, "status" | "createdByUserId"> | null,
+  room: Pick<RoomDto, "status" | "createdByUserId"> | null,
   currentUser: { id: string; isAdmin: boolean } | null,
 ): AccessDecision {
   if (currentUser === null) return DENIED;

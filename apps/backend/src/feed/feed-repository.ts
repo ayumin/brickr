@@ -1,4 +1,4 @@
-import type { RoomVisibility, SimulationScope, SimulationStatus } from "@brickr/shared";
+import type { RoomVisibility, RoomScope, RoomStatus } from "@brickr/shared";
 import { Prisma, type Db } from "../persistence/prisma.js";
 import { optionalField } from "../persistence/repository-mapping.js";
 import { toPost, type PostRow } from "../posts/post-repository.js";
@@ -15,8 +15,8 @@ import type { FeedCursor } from "./feed-cursor.js";
 export type FeedRoom = {
   id: string;
   title: string | null;
-  status: SimulationStatus;
-  scope: SimulationScope;
+  status: RoomStatus;
+  scope: RoomScope;
   visibility: RoomVisibility;
   createdByUserId?: string;
 };
@@ -234,9 +234,6 @@ export class FeedRepository {
    *   global feed: stopping a room means "readable, not writable", so its
    *   history stays in the feed for everyone who could see it before (§10.1).
    *
-   * The global simulation row itself is always included — it is the feed, and
-   * its posts are visible to everyone.
-   *
    * One query regardless of how many rooms exist: the database filters by
    * visibility and membership in a single pass.
    */
@@ -267,8 +264,6 @@ export class FeedRepository {
         OR: [
           // public and open rooms are visible to everyone.
           { visibility: { in: ["public", "open"] } },
-          // The global simulation row is always visible.
-          { scope: "global" },
           // closed and private rooms: only active members (including the owner,
           // who always holds an active owner membership).
           ...memberOnlyRooms,

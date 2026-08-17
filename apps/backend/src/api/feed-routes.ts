@@ -31,8 +31,8 @@ export function registerFeedRoutes(app: FastifyInstance, services: AppServices):
     );
   });
 
-  /** Login required, and a room the caller may not read answers 404 (§10.2, §10.4). */
-  app.get("/api/simulations/:id/feed", async (request, reply) => {
+  /** Login required, and a room the caller may not read answers 404. */
+  app.get("/api/rooms/:id/feed", async (request, reply) => {
     const user = requireUser(request, reply);
     if (!user) return reply;
 

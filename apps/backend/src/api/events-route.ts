@@ -127,7 +127,7 @@ function streamEvents(
  */
 export function registerEventsRoute(app: FastifyInstance, services: AppServices): void {
   /**
-   * Every simulation's public events, for the unified feed.
+   * Every room's public events, for the unified feed.
    *
    * Authentication is optional, like the feed it belongs to: an anonymous reader
    * watches the same threads appear and receives capabilities that permit nothing.
@@ -151,20 +151,17 @@ export function registerEventsRoute(app: FastifyInstance, services: AppServices)
    * subscriber's membership is revoked, the EventHub calls `onClose` to
    * terminate the stream. The client reconnects and receives a 404.
    */
-  app.get("/api/simulations/:id/events", async (request, reply) => {
+  app.get("/api/rooms/:id/events", async (request, reply) => {
     const user = requireUser(request, reply);
     if (!user) return reply;
 
     const params = idParams.safeParse(request.params);
-    if (!params.success) {
-      return sendError(reply, 400, "invalid_params", "simulation id is invalid");
-    }
+    if (!params.success) return sendError(reply, 400, "invalid_params", "room id is invalid");
 
-    const reader = toFeedReader(user);
-    const simulationId = params.data.id;
+    const roomId = params.data.id;
 
     try {
-      await services.feed.assertRoomFeedReadable(simulationId, reader);
+      await services.feed.assertRoomFeedReadable(roomId, toFeedReader(user));
     } catch (error) {
       if (error instanceof SimulationNotFoundError) {
         return sendError(reply, 404, "not_found", error.message);
@@ -174,7 +171,7 @@ export function registerEventsRoute(app: FastifyInstance, services: AppServices)
 
     return streamEvents(request, reply, (listener, onClose) => {
       const { unsubscribe } = services.events.subscribe(
-        simulationId,
+        roomId,
         listener,
         onClose,
         user.id,

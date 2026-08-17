@@ -10,7 +10,6 @@ import { registerFeedRoutes } from "./feed-routes.js";
 import { registerPostRoutes } from "./post-routes.js";
 import { registerProfileRoutes } from "./profile-routes.js";
 import { registerRoomsRoutes } from "./rooms-routes.js";
-import { registerSimulationRoutes } from "./simulation-routes.js";
 import { registerUserAdminRoutes } from "./user-admin-routes.js";
 import { registerUserProfileRoutes } from "./user-profile-routes.js";
 
@@ -60,7 +59,6 @@ export async function registerRoutes(
   });
 
   registerUserProfileRoutes(app, services);
-  registerSimulationRoutes(app, services);
   registerRoomsRoutes(app, services);
   registerFeedRoutes(app, services);
   registerPostRoutes(app, services);

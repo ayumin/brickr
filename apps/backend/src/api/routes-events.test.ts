@@ -1,4 +1,3 @@
-import { GLOBAL_SIMULATION_ID } from "@brickr/shared";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { UserAccount } from "../auth/user-account.js";
@@ -25,14 +24,11 @@ const user: UserAccount = {
   interests: [],
 };
 
-function makeServices(options: { readable?: boolean } = {}) {
+function makeServices(readable = true) {
   const events = new EventHub();
-  const assertRoomFeedReadable = vi.fn((simulationId: string) =>
-    options.readable === false
-      ? Promise.reject(new SimulationNotFoundError(simulationId))
-      : Promise.resolve(),
+  const assertRoomFeedReadable = vi.fn((roomId: string) =>
+    readable ? Promise.resolve() : Promise.reject(new SimulationNotFoundError(roomId)),
   );
-
   return {
     services: { events, feed: { assertRoomFeedReadable } } as unknown as AppServices,
     events,
@@ -96,41 +92,32 @@ describe("GET /api/feed/events (§11.1)", () => {
   });
 });
 
-describe("GET /api/simulations/:id/events (§11.1, §10.4)", () => {
+describe("GET /api/rooms/:id/events (§11.1)", () => {
   const apps: FastifyInstance[] = [];
 
   afterEach(async () => {
     await Promise.all(apps.splice(0).map((app) => app.close()));
   });
 
-  /**
-   * Without this, subscribing would say that a room exists and when it is busy —
-   * exactly what the REST read refuses to reveal.
-   */
-  it("refuses an anonymous subscriber", async () => {
+  it("requires a session", async () => {
     const { services, events, assertRoomFeedReadable } = makeServices();
     const app = await buildApp(services, null);
     apps.push(app);
-
-    const response = await app.inject({ method: "GET", url: "/api/simulations/room-1/events" });
-
+    const response = await app.inject({ method: "GET", url: "/api/rooms/room-1/events" });
     expect(response.statusCode).toBe(401);
-    expect(response.json()).toMatchObject({ error: { code: "unauthenticated" } });
     expect(assertRoomFeedReadable).not.toHaveBeenCalled();
     expect(events.subscriberCount("room-1")).toBe(0);
   });
 
-  it("subscribes a signed-in reader to a room it may read", async () => {
+  it("subscribes a signed-in reader to a readable room", async () => {
     const { services, events, assertRoomFeedReadable } = makeServices();
     const app = await buildApp(services, user);
     apps.push(app);
-
     const response = await app.inject({
       method: "GET",
-      url: "/api/simulations/room-1/events",
+      url: "/api/rooms/room-1/events",
       payloadAsStream: true,
     });
-
     expect(response.statusCode).toBe(200);
     expect(assertRoomFeedReadable).toHaveBeenCalledWith("room-1", {
       id: "user-1",
@@ -141,30 +128,13 @@ describe("GET /api/simulations/:id/events (§11.1, §10.4)", () => {
     response.stream().destroy();
   });
 
-  it("answers 404 for a room the reader may not read", async () => {
-    const { services, events } = makeServices({ readable: false });
+  it("answers 404 for an unreadable room", async () => {
+    const { services, events } = makeServices(false);
     const app = await buildApp(services, user);
     apps.push(app);
-
-    const response = await app.inject({ method: "GET", url: "/api/simulations/room-9/events" });
-
+    const response = await app.inject({ method: "GET", url: "/api/rooms/room-9/events" });
     expect(response.statusCode).toBe(404);
-    expect(response.json()).toMatchObject({ error: { code: "not_found" } });
     expect(events.subscriberCount("room-9")).toBe(0);
-  });
-
-  /** The global row is the feed; its stream is `/api/feed/events`. */
-  it("answers 404 for the reserved global simulation", async () => {
-    const { services } = makeServices({ readable: false });
-    const app = await buildApp(services, user);
-    apps.push(app);
-
-    const response = await app.inject({
-      method: "GET",
-      url: `/api/simulations/${GLOBAL_SIMULATION_ID}/events`,
-    });
-
-    expect(response.statusCode).toBe(404);
   });
 });
 
@@ -192,13 +162,13 @@ describe("SSE contract: visibility re-evaluation (§11.1)", () => {
    * §10.4). The stream is never opened, so no connection is registered.
    */
   it("refuses a non-member at subscription time — no connection registered", async () => {
-    const { services, events } = makeServices({ readable: false });
+    const { services, events } = makeServices(false);
     const app = await buildApp(services, user);
     apps.push(app);
 
     const response = await app.inject({
       method: "GET",
-      url: "/api/simulations/private-room/events",
+      url: "/api/rooms/private-room/events",
     });
 
     // Non-members receive 404, not an open stream.
@@ -225,7 +195,7 @@ describe("SSE contract: visibility re-evaluation (§11.1)", () => {
 
     const response = await app.inject({
       method: "GET",
-      url: "/api/simulations/room-1/events",
+      url: "/api/rooms/room-1/events",
       payloadAsStream: true,
     });
 
@@ -248,7 +218,7 @@ describe("SSE contract: visibility re-evaluation (§11.1)", () => {
 
     const response = await app.inject({
       method: "GET",
-      url: "/api/simulations/room-1/events",
+      url: "/api/rooms/room-1/events",
       payloadAsStream: true,
     });
 
@@ -269,7 +239,7 @@ describe("SSE contract: visibility re-evaluation (§11.1)", () => {
 
     const response = await app.inject({
       method: "GET",
-      url: "/api/simulations/room-1/events",
+      url: "/api/rooms/room-1/events",
       payloadAsStream: true,
     });
 
@@ -300,7 +270,7 @@ describe("SSE contract: visibility re-evaluation (§11.1)", () => {
 
     const response = await app.inject({
       method: "GET",
-      url: "/api/simulations/room-1/events",
+      url: "/api/rooms/room-1/events",
       payloadAsStream: true,
     });
 

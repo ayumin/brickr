@@ -11,7 +11,6 @@ import {
   bulkDeleteCharactersSchema,
   createInviteCodeSchema,
   createPostSchema,
-  createSimulationSchema,
   deleteCharacterQuerySchema,
   feedQuerySchema,
   idParams,
@@ -23,7 +22,6 @@ import {
   setBudgetLimitSchema,
   signupSchema,
   updateApplicationSettingsSchema,
-  updateSimulationSchema,
 } from "./schemas.js";
 
 type Schema = OpenAPIV3.ReferenceObject | OpenAPIV3.SchemaObject;
@@ -911,158 +909,13 @@ export const openApiDocument: OpenAPIV3.Document = {
         },
       },
     },
-    "/api/simulations": {
-      get: {
-        operationId: "listSimulations",
-        security: sessionSecurity,
-        tags: ["Simulations"],
-        summary: "List the rooms the caller may see",
-        description:
-          "Requires a session: rooms are not part of the public surface, where an anonymous visitor reads " +
-          "the unified feed and nothing else (5.1, 10.3). Ordered by last activity, newest first. The " +
-          "reserved global row is excluded because it is the feed rather than a room, and a stopped room " +
-          "is listed only for its creator and for an administrator. `canManage` says whether " +
-          "rename/stop/resume/analysis will be accepted, so no client has to re-derive it.",
-        responses: {
-          "200": jsonResponse("Rooms visible to the caller", {
-            type: "object",
-            required: ["simulations"],
-            properties: {
-              simulations: { type: "array", items: ref("SimulationSummary") },
-            },
-          }),
-          "401": { $ref: "#/components/responses/Unauthorized" },
-          "500": errorResponses["500"],
-        },
-      },
-      post: {
-        operationId: "createSimulation",
-        security: sessionSecurity,
-        tags: ["Simulations"],
-        summary: "Create a simulation",
-        requestBody: jsonBody(requestSchema(createSimulationSchema), false),
-        responses: {
-          "201": jsonResponse("Created simulation", {
-            type: "object",
-            required: ["simulation"],
-            properties: { simulation: ref("Simulation") },
-          }),
-          "400": errorResponses["400"],
-          "401": { $ref: "#/components/responses/Unauthorized" },
-          "500": errorResponses["500"],
-        },
-      },
-    },
-    "/api/simulations/{id}": {
-      get: {
-        operationId: "getSimulation",
-        security: sessionSecurity,
-        tags: ["Simulations"],
-        summary: "Get one room's basics",
-        description:
-          "Requires a session, and no longer returns the room's posts - reading a room is the feed's job " +
-          "(10.4). The reserved global row and a stopped room the caller neither created nor administers " +
-          "both answer 404, so this cannot be used to discover that a room exists. Summary-shaped " +
-          "(postCount/creator/canManage), same as a room list entry, for the room info panel (19.2).",
-        parameters: [idParameter("Simulation ID")],
-        responses: {
-          "200": jsonResponse("The room's basics", {
-            type: "object",
-            required: ["simulation"],
-            properties: { simulation: ref("SimulationSummary") },
-          }),
-          "401": { $ref: "#/components/responses/Unauthorized" },
-          ...errorResponses,
-        },
-      },
-      put: {
-        operationId: "updateSimulation",
-        security: sessionSecurity,
-        tags: ["Simulations"],
-        summary: "Rename a simulation",
-        description: "Creator or admin only (CLAUDE.md 66.6).",
-        parameters: [idParameter("Simulation ID")],
-        requestBody: jsonBody(requestSchema(updateSimulationSchema)),
-        responses: {
-          "200": jsonResponse("Renamed simulation", {
-            type: "object",
-            required: ["simulation"],
-            properties: { simulation: ref("Simulation") },
-          }),
-          "401": { $ref: "#/components/responses/Unauthorized" },
-          "403": { $ref: "#/components/responses/Forbidden" },
-          ...errorResponses,
-        },
-      },
-    },
-    "/api/simulations/{id}/analysis": {
-      get: {
-        operationId: "analyzeSimulation",
-        security: sessionSecurity,
-        tags: ["Simulations"],
-        summary: "Analyze posts in a simulation",
-        description:
-          "Unlike the simulation itself, the analysis is not public: only the creator or an admin may view it (CLAUDE.md 66.6).",
-        parameters: [idParameter("Simulation ID")],
-        responses: {
-          "200": jsonResponse("Simulation analysis", {
-            type: "object",
-            required: ["analysis"],
-            properties: { analysis: ref("SimulationAnalysis") },
-          }),
-          "401": { $ref: "#/components/responses/Unauthorized" },
-          "403": { $ref: "#/components/responses/Forbidden" },
-          ...errorResponses,
-        },
-      },
-    },
-    "/api/simulations/{id}/stop": {
-      post: {
-        operationId: "stopSimulation",
-        security: sessionSecurity,
-        tags: ["Simulations"],
-        summary: "Stop response generation",
-        description: "Creator or admin only (CLAUDE.md 66.6).",
-        parameters: [idParameter("Simulation ID")],
-        responses: {
-          "200": jsonResponse("Stopped simulation", {
-            type: "object",
-            required: ["simulation"],
-            properties: { simulation: ref("Simulation") },
-          }),
-          "401": { $ref: "#/components/responses/Unauthorized" },
-          "403": { $ref: "#/components/responses/Forbidden" },
-          ...errorResponses,
-        },
-      },
-    },
-    "/api/simulations/{id}/resume": {
-      post: {
-        operationId: "resumeSimulation",
-        security: sessionSecurity,
-        tags: ["Simulations"],
-        summary: "Resume response generation",
-        description: "Creator or admin only (CLAUDE.md 66.6).",
-        parameters: [idParameter("Simulation ID")],
-        responses: {
-          "200": jsonResponse("Resumed simulation", {
-            type: "object",
-            required: ["simulation"],
-            properties: { simulation: ref("Simulation") },
-          }),
-          "401": { $ref: "#/components/responses/Unauthorized" },
-          "403": { $ref: "#/components/responses/Forbidden" },
-          ...errorResponses,
-        },
-      },
-    },
     "/api/feed": {
       get: {
         operationId: "getFeed",
         tags: ["Feed"],
         summary: "Read the unified feed",
         description:
-          "Threads from every simulation, including the reserved global one, ordered by last activity. " +
+          "Threads from every room, ordered by last activity. " +
           "Readable without a session: an anonymous reader gets the same posts and capabilities that " +
           "permit nothing. Posts from stopped rooms remain listed, but nobody may reply to or quote them. " +
           "`filter=mine` requires a session and answers 401 without one.",
@@ -1074,18 +927,13 @@ export const openApiDocument: OpenAPIV3.Document = {
         },
       },
     },
-    "/api/simulations/{id}/feed": {
+    "/api/rooms/{id}/feed": {
       get: {
-        operationId: "getSimulationFeed",
+        operationId: "getRoomFeed",
         security: sessionSecurity,
         tags: ["Feed"],
-        summary: "Read one simulation's feed",
-        description:
-          "Same ordering, paging and reply previews as the unified feed, restricted to one simulation. " +
-          "The reserved global simulation is not available here — use `/api/feed`. A stopped simulation " +
-          "answers 404 unless the caller created it or is an administrator, so the endpoint cannot be " +
-          "used to discover it.",
-        parameters: [idParameter("Simulation ID"), ...feedParameters],
+        summary: "Read one room's feed",
+        parameters: [idParameter("Room ID"), ...feedParameters],
         responses: {
           "200": jsonResponse("One page of threads", ref("FeedPage")),
           "401": { $ref: "#/components/responses/Unauthorized" },
@@ -1093,19 +941,15 @@ export const openApiDocument: OpenAPIV3.Document = {
         },
       },
     },
-    "/api/simulations/{id}/posts": {
+    "/api/rooms/{id}/posts": {
       get: {
-        operationId: "listSimulationPosts",
+        operationId: "listRoomPosts",
         security: sessionSecurity,
         tags: ["Posts"],
         summary: "List every post in a room",
-        description:
-          "Requires a session and follows the same room access rule as the room itself, so the 404 given " +
-          "for somebody else's stopped room cannot be undone by reading its posts here (10.4, 10.8). The " +
-          "paged feed is what the UI reads.",
-        parameters: [idParameter("Simulation ID")],
+        parameters: [idParameter("Room ID")],
         responses: {
-          "200": jsonResponse("Simulation posts", {
+          "200": jsonResponse("Room posts", {
             type: "object",
             required: ["posts"],
             properties: { posts: { type: "array", items: ref("Post") } },
@@ -1115,19 +959,14 @@ export const openApiDocument: OpenAPIV3.Document = {
         },
       },
       post: {
-        operationId: "createPost",
+        operationId: "createRoomPost",
         security: sessionSecurity,
         tags: ["Posts"],
         summary: "Create a user post and start AI responses",
-        description:
-          "Images are accepted only on top-level posts. Replies and quotes cannot contain imageUrl. " +
-          "The response carries the authoritative thread shape as well as the post, so a client can " +
-          "show its own post immediately. SSE only announces the state change and clients re-fetch " +
-          "over REST (13.4).",
-        parameters: [idParameter("Simulation ID")],
+        parameters: [idParameter("Room ID")],
         requestBody: jsonBody(ref("CreatePost")),
         responses: {
-          "201": jsonResponse("Created post, with the thread it belongs to", {
+          "201": jsonResponse("Created post and its thread", {
             type: "object",
             required: ["post", "thread"],
             properties: { post: ref("Post"), thread: ref("FeedThread") },
@@ -1187,7 +1026,7 @@ export const openApiDocument: OpenAPIV3.Document = {
       get: {
         operationId: "streamFeedEvents",
         tags: ["Events"],
-        summary: "Stream events from every simulation",
+        summary: "Stream events from every room",
         description:
           "Server-Sent Events stream behind the unified feed. Event names: post.created, " +
           "response.started and response.finished. Authentication is optional, like the feed itself. " +
@@ -1203,18 +1042,13 @@ export const openApiDocument: OpenAPIV3.Document = {
         },
       },
     },
-    "/api/simulations/{id}/events": {
+    "/api/rooms/{id}/events": {
       get: {
-        operationId: "streamSimulationEvents",
+        operationId: "streamRoomEvents",
         security: sessionSecurity,
         tags: ["Events"],
-        summary: "Stream one simulation's events",
-        description:
-          "The same anonymous events as the feed stream, limited to one simulation. Requires a " +
-          "session, and answers 404 for the reserved global simulation or for a stopped one the " +
-          "caller neither created nor administers: subscribing must not reveal what the equivalent " +
-          "read refuses to show.",
-        parameters: [idParameter("Simulation ID")],
+        summary: "Stream one room's events",
+        parameters: [idParameter("Room ID")],
         responses: {
           "200": {
             description: "Named Server-Sent Events stream",
@@ -1355,7 +1189,12 @@ export const openApiDocument: OpenAPIV3.Document = {
               },
               creator: {
                 nullable: true,
-                allOf: [ref("SimulationCreator")],
+                type: "object",
+                properties: {
+                  id: { type: "string" },
+                  handle: { type: "string" },
+                  displayName: { type: "string" },
+                },
                 description:
                   "Present only for an administrator, the one caller whose list spans other people's characters (10.7, 20.3). Null means System-owned. Omitted entirely for an ordinary caller, whose list is their own by definition.",
               },
@@ -1683,107 +1522,6 @@ export const openApiDocument: OpenAPIV3.Document = {
         },
       },
       SaveUserProfile: requestSchema(saveUserProfileSchema),
-      Simulation: {
-        type: "object",
-        required: ["id", "title", "status", "createdAt"],
-        properties: {
-          id: { type: "string" },
-          title: { type: "string", nullable: true },
-          status: { type: "string", enum: ["active", "archived"] },
-          createdAt: { type: "string", format: "date-time" },
-          createdByUserId: {
-            type: "string",
-            description:
-              "Public to everyone, unlike Character ownership (CLAUDE.md 66.6). Omitted for simulations created before login existed.",
-          },
-        },
-      },
-      SimulationSummary: {
-        allOf: [
-          ref("Simulation"),
-          {
-            type: "object",
-            required: ["postCount", "lastActivityAt", "creator", "canManage"],
-            properties: {
-              postCount: { type: "integer", minimum: 0 },
-              lastActivityAt: {
-                type: "string",
-                format: "date-time",
-                description: "Newest activity anywhere in the room; the room list orders by it (10.3).",
-              },
-              creator: {
-                nullable: true,
-                allOf: [ref("SimulationCreator")],
-                description: "Null when the room has no owner.",
-              },
-              canManage: {
-                type: "boolean",
-                description:
-                  "Whether rename/stop/resume/analysis will be accepted. Decided by the server so no client re-derives the rule (10.3).",
-              },
-            },
-          },
-        ],
-      },
-      SimulationCreator: {
-        type: "object",
-        description:
-          "Public identity of an owner. A display name and a handle rather than a raw id, because an id tells a reader nothing.",
-        required: ["id", "handle", "displayName"],
-        properties: {
-          id: { type: "string" },
-          handle: { type: "string" },
-          displayName: { type: "string" },
-        },
-      },
-      SimulationAnalysis: {
-        type: "object",
-        required: ["simulation", "summary", "postCount", "authorCount", "replyCount", "repostCount", "ranking", "authorRanking"],
-        properties: {
-          simulation: ref("Simulation"),
-          summary: ref("SimulationContentSummary"),
-          postCount: { type: "integer", minimum: 0 },
-          authorCount: { type: "integer", minimum: 0 },
-          replyCount: { type: "integer", minimum: 0 },
-          repostCount: { type: "integer", minimum: 0 },
-          ranking: { type: "array", items: ref("SimulationPostRanking") },
-          authorRanking: { type: "array", items: ref("SimulationAuthorRanking") },
-        },
-      },
-      SimulationContentSummary: {
-        type: "object",
-        required: ["overallTopics", "postOverview", "highEngagementTopics", "lowEngagementTopics"],
-        properties: {
-          overallTopics: { type: "string" },
-          postOverview: { type: "string" },
-          highEngagementTopics: { type: "string" },
-          lowEngagementTopics: { type: "string" },
-        },
-      },
-      SimulationPostRanking: {
-        type: "object",
-        required: ["postId", "content", "author", "replyCount", "repostCount", "score", "createdAt"],
-        properties: {
-          postId: { type: "string" },
-          content: { type: "string" },
-          author: ref("PostAuthor"),
-          replyCount: { type: "integer", minimum: 0 },
-          repostCount: { type: "integer", minimum: 0 },
-          score: { type: "integer", minimum: 0 },
-          createdAt: { type: "string", format: "date-time" },
-        },
-      },
-      SimulationAuthorRanking: {
-        type: "object",
-        required: ["author", "postCount", "replyCount", "repostCount", "receivedReactionCount"],
-        properties: {
-          author: ref("PostAuthor"),
-          postCount: { type: "integer", minimum: 0 },
-          replyCount: { type: "integer", minimum: 0 },
-          repostCount: { type: "integer", minimum: 0 },
-          receivedReactionCount: { type: "integer", minimum: 0 },
-        },
-      },
       /**
        * One shape for people and characters alike: no field says which, because
        * that is exactly what the feed must not reveal (Brickr-ux-refine §9.1).

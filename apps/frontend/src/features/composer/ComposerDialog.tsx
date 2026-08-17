@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { GLOBAL_SIMULATION_ID } from "@brickr/shared";
+import { GLOBAL_ROOM_ID } from "@brickr/shared";
 import type { FeedThreadDto, PostDto, UserProfileDto } from "@brickr/shared";
 
 import { Dialog } from "../../components/Dialog";
@@ -33,7 +33,7 @@ export function ComposerDialog({ context, userProfile, onClose, onPosted, onUnau
   const [submitting, setSubmitting] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const needsRoomLookup = context.mode === "new" && context.simulationId !== GLOBAL_SIMULATION_ID;
+  const needsRoomLookup = context.mode === "new" && context.simulationId !== GLOBAL_ROOM_ID;
   const [roomState, setRoomState] = useState<RoomState>(() =>
     needsRoomLookup && context.mode === "new"
       ? { status: "loading" }
