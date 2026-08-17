@@ -2179,7 +2179,7 @@ Error: @prisma/client did not initialize yet. Please run "prisma generate" and t
 
 判断に迷ったら、まず`pnpm --filter @brickr/backend db:generate`を実行してから再測定します。
 
-## 67.3 画像アセットの差し替えはエージェントに任せない
+## 67.3 画像アセットの取得（バイナリ）はエージェントに任せない
 
 エージェントはバイナリ画像を見ることができず、Issueの添付ファイルもAPI経由では取得できません。
 ロゴやアイコンの差し替えをIssueへの画像添付だけで依頼すると、取得を試し続けて失敗します。
