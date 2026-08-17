@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import { APP_FULL_NAME } from "../../brand";
 import { AuthPageShell } from "./AuthPageShell";
@@ -11,8 +11,10 @@ import { SignupForm } from "./SignupForm";
 /** The standalone `/signup` route (§18.1: same `SignupForm` the `AuthDialog` uses). See `LoginPage` for the auth-intent redirect rationale. */
 export function SignupPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user, loading, setUser } = useAuth();
   const { intent } = useAuthIntent();
+  const initialInviteCode = searchParams.get("inviteCode") ?? "";
 
   useEffect(() => {
     if (!loading && user) navigate("/", { replace: true });
@@ -31,6 +33,7 @@ export function SignupPage() {
       }
     >
       <SignupForm
+        initialInviteCode={initialInviteCode}
         onSuccess={(signedUpUser) => {
           setUser(signedUpUser);
           const target = intent?.type === "compose" ? composerContextLandingPath(intent.context) : "/";
