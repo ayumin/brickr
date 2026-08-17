@@ -52,6 +52,7 @@ export function SettingsShell({ onProfileUpdated }: { onProfileUpdated?: (profil
   const location = useLocation();
   const params = useParams<{ section: string }>();
   const userProfile = useUserProfile();
+  const profileLoaded = !userProfile.loading && userProfile.profile.id !== "";
   const [theme, setTheme] = useState<Theme>(readPreferredTheme);
   const { user } = useAuth();
 
@@ -99,13 +100,19 @@ export function SettingsShell({ onProfileUpdated }: { onProfileUpdated?: (profil
           </div>
 
           {section === "profile" ? (
-            <ProfileSettings
-              profile={userProfile.profile}
-              onSaved={(saved) => {
-                userProfile.setProfile(saved);
-                onProfileUpdated?.(saved);
-              }}
-            />
+            profileLoaded ? (
+              <ProfileSettings
+                profile={userProfile.profile}
+                onSaved={(saved) => {
+                  userProfile.setProfile(saved);
+                  onProfileUpdated?.(saved);
+                }}
+              />
+            ) : (
+              <div className="flex items-center justify-center py-12 text-sm text-ink-muted">
+                読み込み中…
+              </div>
+            )
           ) : null}
           {section === "appearance" ? (
             <AppearanceSettings

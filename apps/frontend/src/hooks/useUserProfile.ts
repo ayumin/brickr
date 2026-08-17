@@ -19,11 +19,13 @@ const DEFAULT_PROFILE: UserProfileDto = {
 export function useUserProfile() {
   const [profile, setProfile] = useState<UserProfileDto>(DEFAULT_PROFILE);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
     setError(null);
+    setLoading(true);
     void api
       .getUserProfile(controller.signal)
       .then(setProfile)
@@ -34,11 +36,14 @@ export function useUserProfile() {
         // and wrong. `profile` is left at its last (placeholder) value.
         if (isUnauthorizedError(cause)) return;
         setError(toErrorMessage(cause));
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
   }, [reloadToken]);
 
   const reload = useCallback(() => setReloadToken((value) => value + 1), []);
 
-  return { profile, error, reload, setProfile };
+  return { profile, loading, error, reload, setProfile };
 }
