@@ -1,24 +1,11 @@
 /**
- * Integration flow: post → ScheduledEvent → Cast response → SSE → Feed (issue #171).
+ * Quality coverage for worker event processing and EventHub delivery (issue #171).
  *
- * This test verifies the end-to-end flow that connects the API layer (user
- * submits a post), the worker layer (ScheduledEvent is claimed and processed),
- * and the SSE/feed layer (the Cast's response is published and delivered to
- * subscribers).
- *
- * The test uses the real service implementations (EventProcessor, EventHub)
- * with mocked repositories and LLM clients, following the established pattern
- * in event-processor.test.ts. No real database or network is required.
- *
- * Flow under test:
- *   1. A user post is submitted → a character.respond ScheduledEvent is created.
- *   2. The worker claims the event (pending → processing).
- *   3. processEvent executes: loads the post, selects responders, generates
- *      a Cast reply, and publishes it.
- *   4. The published post triggers an SSE event via EventHub.publish.
- *   5. A subscribed feed reader receives the SSE event.
- *
- * Each step is asserted independently so a regression is immediately locatable.
+ * The worker and API processes do not share an EventHub, so these production
+ * boundaries are exercised independently with their real implementations and
+ * mocked repositories/LLM clients. ScheduledEvent creation and claim semantics
+ * are covered by scheduled-event-lifecycle.test.ts; the archive route's
+ * RoomService → EventHub.closeRoom wiring is covered by rooms-routes.test.ts.
  */
 
 import { describe, expect, it, vi } from "vitest";
@@ -166,47 +153,10 @@ function threadActivityEvent(options: {
 }
 
 // ---------------------------------------------------------------------------
-// Step 1: ScheduledEvent creation (deduplication guard)
+// Step 1: processEvent executes the Cast response
 // ---------------------------------------------------------------------------
 
-describe("Step 1 — ScheduledEvent creation after user post", () => {
-  it("creates a character.respond event for the triggering post", () => {
-    // The event carries the roomId, postId, and characterId so the worker
-    // knows exactly what to process.
-    expect(characterRespondEvent.type).toBe("character.respond");
-    expect(characterRespondEvent.roomId).toBe(userPost.roomId);
-    expect(characterRespondEvent.postId).toBe(userPost.id);
-    expect(characterRespondEvent.status).toBe("processing"); // claimed by worker
-  });
-
-  it("event carries the thread root so the worker can load the full context", () => {
-    expect(characterRespondEvent.threadRootId).toBe(userPost.threadRootId);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Step 2: Worker claims the event (pending → processing)
-// ---------------------------------------------------------------------------
-
-describe("Step 2 — Worker claims the event", () => {
-  it("claimed event has status=processing and a lockedBy worker id", () => {
-    expect(characterRespondEvent.status).toBe("processing");
-    expect(characterRespondEvent.lockedBy).toBe("worker-1");
-    expect(characterRespondEvent.attempts).toBe(1);
-  });
-
-  it("attempt counter increments on each claim (retry tracking)", () => {
-    // A second claim (after a crash) would have attempts=2.
-    const secondAttempt: ScheduledEvent = { ...characterRespondEvent, attempts: 2 };
-    expect(secondAttempt.attempts).toBeGreaterThan(characterRespondEvent.attempts - 1);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Step 3: processEvent executes the Cast response
-// ---------------------------------------------------------------------------
-
-describe("Step 3 — processEvent generates and publishes the Cast reply", () => {
+describe("Step 1 — processEvent generates and publishes the Cast reply", () => {
   function makeDeps(overrides: Partial<EventProcessorDeps> = {}): {
     deps: EventProcessorDeps;
     publish: ReturnType<typeof vi.fn>;
@@ -353,10 +303,10 @@ describe("Step 3 — processEvent generates and publishes the Cast reply", () =>
 });
 
 // ---------------------------------------------------------------------------
-// Step 4: SSE delivery via EventHub
+// Step 2: SSE delivery via EventHub
 // ---------------------------------------------------------------------------
 
-describe("Step 4 — SSE delivery via EventHub", () => {
+describe("Step 2 — SSE delivery via EventHub", () => {
   it("publish delivers an event to a room subscriber", () => {
     const hub = new EventHub();
     const received: PublishedInternalSseEvent[] = [];
@@ -431,36 +381,8 @@ describe("Step 4 — SSE delivery via EventHub", () => {
     expect(user2Closed).toBe(false);
     expect(hub.subscriberCount("room-1")).toBe(1);
   });
-});
 
-// ---------------------------------------------------------------------------
-// Step 5: Feed visibility — archived rooms excluded from non-owner views
-// ---------------------------------------------------------------------------
-
-describe("Step 5 — Feed visibility after room archival", () => {
-  it("archived room events do not reach non-owner subscribers after closeRoom", () => {
-    const hub = new EventHub();
-    const received: PublishedInternalSseEvent[] = [];
-
-    hub.subscribe("room-1", (e) => received.push(e), () => {}, "user-non-owner");
-
-    // Room is archived: close all streams.
-    hub.closeRoom("room-1");
-
-    // Any subsequent publish to the room reaches nobody (no subscribers).
-    hub.publish(
-      "room-1",
-      threadActivityEvent({
-        postId: "post-after-archive",
-        status: "archived",
-      }),
-    );
-
-    // The subscriber was closed before the publish, so it received nothing.
-    expect(received).toHaveLength(0);
-  });
-
-  it("global feed subscriber still receives events from other rooms after one room is closed", () => {
+  it("closing one room does not interrupt the global feed subscriber", () => {
     const hub = new EventHub();
     const feedEvents: PublishedInternalSseEvent[] = [];
     hub.subscribeAll((e) => feedEvents.push(e));
