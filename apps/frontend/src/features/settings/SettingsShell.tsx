@@ -52,6 +52,7 @@ export function SettingsShell({ onProfileUpdated }: { onProfileUpdated?: (profil
   const location = useLocation();
   const params = useParams<{ section: string }>();
   const userProfile = useUserProfile();
+  const profileLoaded = !userProfile.loading && userProfile.profile.id !== "";
   const [theme, setTheme] = useState<Theme>(readPreferredTheme);
   const { user } = useAuth();
 
@@ -99,22 +100,19 @@ export function SettingsShell({ onProfileUpdated }: { onProfileUpdated?: (profil
           </div>
 
           {section === "profile" ? (
-            <ProfileSettings
-              // Remounts once the real profile lands (`id` goes "" → the
-              // account id): `ProfileSettings`'s fields are plain `useState`
-              // seeded from `profile` on first mount only, so without this key
-              // a fetch that resolves after mount (a fresh page load or a fast
-              // navigation into /settings/profile) would leave `avatarUrl` at
-              // its placeholder value of `undefined` — indistinguishable from
-              // "no avatar" — and saving would then wipe a real avatar via the
-              // repository's ?? null fallback.
-              key={userProfile.profile.id}
-              profile={userProfile.profile}
-              onSaved={(saved) => {
-                userProfile.setProfile(saved);
-                onProfileUpdated?.(saved);
-              }}
-            />
+            profileLoaded ? (
+              <ProfileSettings
+                profile={userProfile.profile}
+                onSaved={(saved) => {
+                  userProfile.setProfile(saved);
+                  onProfileUpdated?.(saved);
+                }}
+              />
+            ) : (
+              <div className="flex items-center justify-center py-12 text-sm text-ink-muted">
+                読み込み中…
+              </div>
+            )
           ) : null}
           {section === "appearance" ? (
             <AppearanceSettings
