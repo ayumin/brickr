@@ -14,8 +14,9 @@ export type FeedThreadCardProps = {
   onOpenAuthor?: (authorId: string) => void;
   onOpenHandle?: (handle: string) => void;
   onOpenThread?: (postId: string) => void;
-  onReply?: (post: PostDto) => void;
-  onRepost?: (post: PostDto) => void;
+  /** Required; capabilities still decide whether either action is rendered. */
+  onReply: (post: PostDto) => void;
+  onRepost: (post: PostDto) => void;
 };
 
 /**
@@ -63,8 +64,8 @@ export function FeedThreadCard({
         {...(actions.root.canOpenAuthor && onOpenAuthor ? { onOpenAuthor } : {})}
         {...(actions.root.canOpenAuthor && onOpenHandle ? { onOpenHandle } : {})}
         {...(actions.root.canOpenThread && onOpenThread ? { onExpand: onOpenThread } : {})}
-        {...(actions.root.canReply && onReply ? { onReply: () => onReply(root) } : {})}
-        {...(actions.root.canQuote && onRepost ? { onRepost: () => onRepost(root) } : {})}
+        {...(actions.root.canReply ? { onReply: () => onReply(root) } : {})}
+        {...(actions.root.canQuote ? { onRepost: () => onRepost(root) } : {})}
       />
 
       <ReplyPreview

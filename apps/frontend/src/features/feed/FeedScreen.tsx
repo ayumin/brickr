@@ -1,11 +1,17 @@
 import { useCallback, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { DEFAULT_ROOM_ID, DEFAULT_ROOM_TITLE, type FeedFilter } from "@brickr/shared";
+import {
+  DEFAULT_ROOM_ID,
+  DEFAULT_ROOM_TITLE,
+  type FeedFilter,
+  type PostDto,
+} from "@brickr/shared";
 
 import { Avatar } from "../../components/Avatar";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { Spinner } from "../../components/Spinner";
 import { useAuth } from "../auth/AuthContext";
+import { composerContextForQuote, composerContextForReply } from "../composer/composer-utils";
 import { useComposeController } from "../composer/ComposeContext";
 import { useUserProfile } from "../../hooks/useUserProfile";
 import { handlePath, postPath } from "../../routes";
@@ -20,9 +26,9 @@ const GLOBAL_FEED_SCOPE = { kind: "all" } as const;
 /**
  * The unified feed (§5.1, §5.2, §16.1, §16.4).
  *
- * Reply and quote are only available from within a Room (§168); a new
- * top-level post from the feed itself goes to the always-seeded default room
- * (`DEFAULT_ROOM_ID`) so posting never requires picking a room first.
+ * Reply and quote target the selected post's own Room; a new top-level post
+ * from the feed itself goes to the always-seeded default room
+ * (`DEFAULT_ROOM_ID`) so posting never requires picking a Room first.
  * `FeedThreadList` (shared with `RoomScreen`, §10.2) renders the threads and
  * owns the scroll-position correction (§12.4).
  */
@@ -43,6 +49,26 @@ export function FeedScreen() {
       },
     });
   }, [composeController, feed]);
+
+  const openReply = useCallback(
+    (post: PostDto) => {
+      composeController.request({
+        context: composerContextForReply(post),
+        onPosted: (_post, thread) => feed.upsertThread(thread),
+      });
+    },
+    [composeController, feed],
+  );
+
+  const openQuote = useCallback(
+    (post: PostDto) => {
+      composeController.request({
+        context: composerContextForQuote(post),
+        onPosted: (_post, thread) => feed.upsertThread(thread),
+      });
+    },
+    [composeController, feed],
+  );
 
   const handleFilterChange = useCallback((next: FeedFilter) => {
     writeFeedFilter(next);
@@ -161,6 +187,8 @@ export function FeedScreen() {
             onOpenAuthor={openAuthor}
             onOpenHandle={openHandle}
             onOpenThread={openThread}
+            onReply={openReply}
+            onRepost={openQuote}
           />
 
           {/* Load more (§16.4) */}

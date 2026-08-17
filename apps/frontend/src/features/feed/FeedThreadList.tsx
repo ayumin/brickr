@@ -12,8 +12,9 @@ export type FeedThreadListProps = {
   onOpenAuthor?: (authorId: string) => void;
   onOpenHandle?: (handle: string) => void;
   onOpenThread?: (postId: string) => void;
-  onReply?: (post: PostDto) => void;
-  onRepost?: (post: PostDto) => void;
+  /** Required so write capabilities can never silently lose their UI handlers. */
+  onReply: (post: PostDto) => void;
+  onRepost: (post: PostDto) => void;
 };
 
 function measureThreadTops(container: HTMLElement): Map<string, number> {
@@ -115,8 +116,8 @@ export function FeedThreadList({
             {...(onOpenAuthor ? { onOpenAuthor } : {})}
             {...(onOpenHandle ? { onOpenHandle } : {})}
             {...(onOpenThread ? { onOpenThread } : {})}
-            {...(onReply ? { onReply } : {})}
-            {...(onRepost ? { onRepost } : {})}
+            onReply={onReply}
+            onRepost={onRepost}
           />
         </li>
       ))}
