@@ -19,9 +19,16 @@ default:
   before_script:
     - !reference [.node-setup, before_script]
 
-# Shared dependency installation job - runs once, shares via artifacts
+# Shared dependency installation job - runs once, shares via artifacts.
+# --shamefully-hoist produces a flat node_modules layout (no symlinks) so the
+# artifact archive is reliable across all runner platforms.
 "deps:install":
   stage: .pre
+  before_script:
+    - corepack enable
+    - corepack prepare pnpm@11.21.0 --activate
+    - pnpm config set store-dir .pnpm-store
+    - pnpm install --frozen-lockfile --shamefully-hoist
   script:
     - pnpm --filter @brickr/backend db:generate
   artifacts:
