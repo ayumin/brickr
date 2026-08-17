@@ -9,6 +9,9 @@
   needs: []
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes:
+        - apps/backend/prisma/schema.prisma
+        - apps/backend/prisma/migrations/**/*
       when: manual
       allow_failure: true
   manual_confirmation: "ステージングDBの全データを削除し、seed後にbackendを再デプロイします。実行しますか？"
