@@ -21,8 +21,10 @@
  */
 export const RESERVED_HANDLES: readonly string[] = [
   // Routes the app serves today. `rooms` and `cast` are the refreshed names for
-  // the room list and character management (§6.1); `characters` and `simulations`
-  // stay reserved because the old URLs keep redirecting during phase 1 (§6.2).
+  // the room list and character management (§6.1). `characters` and `simulations`
+  // are the old names (removed in phase 5, §168) and stay reserved so no user
+  // can ever claim them — a word is cheap to reserve now and expensive once
+  // somebody holds it.
   //
   // `admin` is deliberately absent: there is no `/admin` route in §6.1 (admin
   // screens live under `/settings/*`), and `ADMIN_HANDLE` defaults to exactly

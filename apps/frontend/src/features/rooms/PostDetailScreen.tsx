@@ -16,7 +16,7 @@ import {
 } from "../../services/api-client";
 import { useUserProfile } from "../../hooks/useUserProfile";
 import { PostDetail } from "../timeline/PostDetail";
-import { useSimulationEvents } from "../simulation/useSimulationEvents";
+import { useRoomPosts } from "./useRoomPosts";
 
 type PostState =
   | { status: "loading" }
@@ -68,7 +68,7 @@ export function PostDetailScreen({ postId }: { postId: string }) {
   const simulationId = state.status === "ready" ? state.post.roomId : null;
 
   const userProfile = useUserProfile();
-  const events = useSimulationEvents(simulationId ?? "", simulationId !== null);
+  const events = useRoomPosts(simulationId ?? "", simulationId !== null);
 
   // Whether the room is stopped, fetched separately from the post itself:
   // a stopped room's post detail still opens for its creator/admin (§10.8),

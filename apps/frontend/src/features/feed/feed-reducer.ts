@@ -1,6 +1,6 @@
 /**
  * State the unified feed reduces into, kept free of React so dedupe/sort rules
- * can be tested directly (mirrors `features/simulation/simulation-event-state.ts`).
+ * can be tested directly.
  */
 import type { FeedFilter, FeedPageDto, FeedThreadDto } from "@brickr/shared";
 

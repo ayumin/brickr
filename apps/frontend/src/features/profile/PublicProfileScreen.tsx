@@ -8,7 +8,7 @@ import { useAuth } from "../auth/AuthContext";
 import { CharacterEditor } from "../characters/CharacterEditor";
 import { CharacterProfile } from "../characters/CharacterProfile";
 import { PostCard } from "../timeline/PostCard";
-import { classifyHandleResolutionError } from "../simulation/handle-resolution";
+import { classifyHandleResolutionError } from "./handle-resolution";
 import { api, isAbortError, toErrorMessage } from "../../services/api-client";
 import { postPath, settingsPath } from "../../routes";
 
