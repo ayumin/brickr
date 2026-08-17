@@ -8,7 +8,6 @@
  * and it only ever needs to survive a `/login`↔`/` navigation within the same
  * tab, not a reload (§18.2 explicitly allows storage but recommends state).
  */
-import { GLOBAL_ROOM_ID } from "@brickr/shared";
 import { roomPath } from "../../routes";
 import type { ComposerContext } from "../../types";
 
@@ -21,5 +20,5 @@ export type AuthIntent = { type: "compose"; context: ComposerContext } | null;
  * feed, even though the intent itself carries that context along either way).
  */
 export function composerContextLandingPath(context: ComposerContext): string {
-  return context.simulationId === GLOBAL_ROOM_ID ? "/" : roomPath(context.simulationId);
+  return roomPath(context.roomId);
 }

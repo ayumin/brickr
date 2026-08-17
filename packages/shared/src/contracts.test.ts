@@ -44,7 +44,7 @@ describe("Room SSE shared contracts", () => {
 });
 
 describe("Room API error contract", () => {
-  it("exposes Room and membership errors without Simulation-specific codes", () => {
+  it("exposes Room and membership errors without legacy-specific codes", () => {
     expect(API_ERROR_CODES).toEqual(
       expect.arrayContaining([
         "cannot_modify_owner",

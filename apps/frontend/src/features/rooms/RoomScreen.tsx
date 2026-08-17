@@ -27,7 +27,7 @@ import { useSelectedRoom } from "./useSelectedRoom";
  * Renders through the same `FeedThreadList`/`FeedThreadCard` as the unified
  * feed, scoped to this room via `useFeed({ kind: "room", roomId }, filter)`
  * (§10.2: "並び・ページング・返信プレビューは統合フィードと同じ") - not the
- * old flat `Timeline`/`useSimulationEvents` pair, which fetched every post in
+ * old flat `Timeline`/`useRoomPosts` pair, which fetched every post in
  * the room up front instead of paging through the feed API.
  */
 export function RoomScreen({ roomId }: { roomId: string }) {
@@ -124,11 +124,11 @@ export function RoomScreen({ roomId }: { roomId: string }) {
     );
   }
 
-  const { simulation } = selectedRoom.state;
-  const isStopped = simulation.status === "archived";
+  const { room } = selectedRoom.state;
+  const isStopped = room.status === "archived";
   const roomInfoProps = {
-    simulation,
-    onOpenAnalysis: () => navigate(roomAnalysisPath(simulation.id)),
+    room,
+    onOpenAnalysis: () => navigate(roomAnalysisPath(room.id)),
     // Closes the mobile info sheet too: opened from there, `RoomNameDialog`
     // would otherwise stack on top of it — two `Dialog`s mounted at once,
     // each with its own Escape handler racing the other's.
@@ -149,7 +149,7 @@ export function RoomScreen({ roomId }: { roomId: string }) {
             thread list beneath scrolls. */}
         <div className="sticky top-0 z-10 bg-canvas/95 backdrop-blur">
           <RoomHeader
-            title={simulation.title ?? "無題のルーム"}
+            title={room.title ?? "無題のルーム"}
             isStopped={isStopped}
             activeResponseCount={feed.activeResponseCount}
             connection={feed.connection}
@@ -176,8 +176,8 @@ export function RoomScreen({ roomId }: { roomId: string }) {
                   composeController.request({
                     context: {
                       mode: "new",
-                      simulationId: simulation.id,
-                      roomLabel: simulation.title ?? "無題のルーム",
+                      roomId: room.id,
+                      roomLabel: room.title ?? "無題のルーム",
                     },
                     onPosted: (_post, thread) => feed.upsertThread(thread),
                   });
@@ -292,7 +292,7 @@ export function RoomScreen({ roomId }: { roomId: string }) {
       {renameDialogOpen ? (
         <RoomNameDialog
           mode="rename"
-          initialValue={simulation.title ?? ""}
+          initialValue={room.title ?? ""}
           onClose={() => setRenameDialogOpen(false)}
           onSave={async (title) => {
             await selectedRoom.rename(title);

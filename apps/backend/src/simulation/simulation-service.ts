@@ -118,14 +118,12 @@ export class PostNotFoundError extends DomainError {
 }
 
 /**
- * Whether this actor may read one simulation *as a room* (§10.2, §10.4).
+ * Whether this actor may read one room (§10.2, §10.4).
  *
  * Both refusals are 404 rather than 403 on purpose: 403 confirms that something
  * is there, which turns any of these endpoints into a way to discover somebody
  * else's stopped rooms by id (§10.4).
  *
- * - The global row is not a room. It is the feed, and serving it here would give
- *   the same posts a second, room-shaped surface (§10.2).
  * - A stopped room stays readable for its creator and for an administrator, and
  *   does not exist for anyone else. Note that this is about reading a room; the
  *   posts themselves remain visible to everybody through the unified feed, which
@@ -138,7 +136,7 @@ export class PostNotFoundError extends DomainError {
  * cannot reach through one endpoint what another would refuse.
  */
 export function assertRoomReadable(
-  simulation: Pick<Simulation, "id" | "scope" | "status" | "visibility" | "createdByUserId">,
+  simulation: Pick<Simulation, "id" | "status" | "visibility" | "createdByUserId">,
   actor: SimulationActor,
 ): void {
   // Until #153 supplies real membership snapshots, retain the existing access
@@ -217,7 +215,7 @@ export class SimulationService {
   async get(id: string, actor: SimulationActor): Promise<RoomResponse> {
     const simulation = await this.requireSimulationSummary(id);
     assertRoomReadable(simulation, actor);
-    return { simulation: toSimulationSummaryDto(simulation, actor) };
+    return { room: toSimulationSummaryDto(simulation, actor) };
   }
 
   /**
@@ -356,13 +354,13 @@ export class SimulationService {
 
       this.deps.events.publish(triggerPost.roomId, {
         type: "generation.completed",
-        simulationId: triggerPost.roomId,
+        roomId: triggerPost.roomId,
         triggerPostId: triggerPost.id,
         generatedPostIds: generatedIds,
       });
     } catch (error) {
       this.deps.logger.error(
-        { simulationId: triggerPost.roomId, err: describe(error) },
+        { roomId: triggerPost.roomId, err: describe(error) },
         "simulation run failed",
       );
       // Internal only: the reason names the provider or model that failed, which
@@ -370,7 +368,7 @@ export class SimulationService {
       // about failures through `response.finished` outcomes instead.
       this.deps.events.publish(triggerPost.roomId, {
         type: "generation.failed",
-        simulationId: triggerPost.roomId,
+        roomId: triggerPost.roomId,
         reason: describe(error),
       });
     }
@@ -454,8 +452,8 @@ export class SimulationService {
     allCharacters: Character[],
     billingUserId: string,
   ): Promise<Post | null> {
-    const simulationId = target.roomId;
-    if (this.stopped.has(simulationId)) return null;
+    const roomId = target.roomId;
+    if (this.stopped.has(roomId)) return null;
 
     // The activity, not the character: subscribers learn that *a* response is
     // being generated, never whose (§11.2). The id exists only to pair the finish
@@ -472,7 +470,7 @@ export class SimulationService {
       // The only place the reason exists. Publishing it would describe the
       // machinery behind the post (§11.2).
       this.deps.logger.warn(
-        { simulationId, characterId: character.id, err: describe(error) },
+        { roomId, characterId: character.id, err: describe(error) },
         "character generation failed",
       );
       return null;
@@ -495,7 +493,7 @@ export class SimulationService {
     allCharacters: Character[],
     billingUserId: string,
   ): Promise<Post | null> {
-    const simulationId = target.roomId;
+    const roomId = target.roomId;
 
     const context = await this.loadGenerationContext(target, allCharacters);
     if (!context) return null;
@@ -515,11 +513,11 @@ export class SimulationService {
       resolveHandle,
     });
 
-    if (this.stopped.has(simulationId)) return null;
+    if (this.stopped.has(roomId)) return null;
 
     if (generated.usage) {
       await this.recordUsage(billingUserId, generated.usage, {
-        simulationId,
+        roomId,
         characterId: character.id,
         providerId: generated.providerId,
       });
@@ -528,7 +526,7 @@ export class SimulationService {
     const { replyTo, quoteOf } = resolveActionTargets(action, thread.target);
 
     const post = await this.deps.posts.publish({
-      roomId: simulationId,
+      roomId: roomId,
       authorId: character.id,
       content: generated.content,
       replyTo,
@@ -537,7 +535,7 @@ export class SimulationService {
 
     this.deps.logger.info(
       {
-        simulationId,
+        roomId,
         characterId: character.id,
         action,
         providerId: generated.providerId,
@@ -580,7 +578,7 @@ export class SimulationService {
   private async recordUsage(
     billingUserId: string,
     usage: NonNullable<GeneratedPost["usage"]>,
-    context: { simulationId: string; characterId: string; providerId: ProviderId },
+    context: { roomId: string; characterId: string; providerId: ProviderId },
   ): Promise<void> {
     try {
       await this.deps.tokenUsage.record(billingUserId, usage);
@@ -599,7 +597,7 @@ export class SimulationService {
         await this.deps.llmBudget.recordUsage(
           context.providerId,
           usage.totalTokens,
-          context.simulationId,
+          context.roomId,
         );
       } catch (error) {
         this.deps.logger.warn(
@@ -619,7 +617,7 @@ export class SimulationService {
   private beginResponse(target: Post): { finish: (outcome: ResponseOutcome) => void } {
     const activityId = randomUUID();
     const shared = {
-      simulationId: target.roomId,
+      roomId: target.roomId,
       activityId,
       targetPostId: target.id,
       threadRootId: target.threadRootId,

@@ -53,7 +53,6 @@ const room: Simulation = {
   id: "room-1",
   title: "Room",
   status: "active",
-  scope: "room",
   visibility: "public",
   tags: [],
   createdAt: now,

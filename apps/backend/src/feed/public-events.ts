@@ -50,7 +50,7 @@ export function withReaderCapabilities(
 export function toPublicEvent(event: PublishedInternalSseEvent): SseEvent | null {
   const metadata = {
     eventId: event.eventId,
-    roomId: event.simulationId,
+    roomId: event.roomId,
     timestamp: event.timestamp,
   };
 

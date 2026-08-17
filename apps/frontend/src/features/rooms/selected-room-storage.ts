@@ -7,14 +7,14 @@ import { STORAGE_KEYS, clearStored, readStored, writeStored } from "../../servic
  * signed-in session on `/`, per §13.3 — nothing here enforces that on its own.
  */
 export function readSelectedRoomId(): string | null {
-  return readStored(STORAGE_KEYS.selectedSimulationId);
+  return readStored(STORAGE_KEYS.selectedRoomId);
 }
 
 export function writeSelectedRoomId(roomId: string): void {
-  writeStored(STORAGE_KEYS.selectedSimulationId, roomId);
+  writeStored(STORAGE_KEYS.selectedRoomId, roomId);
 }
 
 /** Explicitly opening the feed, or the stored room turning out inaccessible, both clear this (§7.1). */
 export function clearSelectedRoomId(): void {
-  clearStored(STORAGE_KEYS.selectedSimulationId);
+  clearStored(STORAGE_KEYS.selectedRoomId);
 }

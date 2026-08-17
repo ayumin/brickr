@@ -57,6 +57,12 @@ services:
       ADMIN_DISPLAY_NAME: ${ADMIN_DISPLAY_NAME:-管理者}
     ports:
       - "3000:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://localhost:3000/api/health >/dev/null || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 15s
     volumes:
       # Live reload against the host source without clobbering node_modules.
       - ./apps/backend/src:/app/apps/backend/src
@@ -72,7 +78,7 @@ services:
       db:
         condition: service_healthy
       backend:
-        condition: service_started
+        condition: service_healthy
     command: ["pnpm", "worker:raw"]
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-brickr}:${POSTGRES_PASSWORD:-brickr}@db:5432/${POSTGRES_DB:-brickr}?schema=public
@@ -96,13 +102,15 @@ services:
       WORKER_MAX_ATTEMPTS: ${WORKER_MAX_ATTEMPTS:-4}
       WORKER_HEALTH_PORT: "3001"
       WORKER_HEALTH_HOST: "0.0.0.0"
+      # The healthy backend has already applied migrations and seed data.
+      SKIP_DB_BOOTSTRAP: "true"
     # No host-port binding: multiple replicas would conflict on the same port.
     # Use `docker compose ps` or `docker inspect` to find each replica's IP,
     # or scale with `docker compose up --scale worker=2`.
     expose:
       - "3001"
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/health || exit 1"]
+      test: ["CMD-SHELL", "curl --fail --silent http://localhost:3001/health >/dev/null || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3

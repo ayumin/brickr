@@ -293,12 +293,12 @@ export function RoomListScreen() {
           onClose={() => setDialog(null)}
           onSave={async (title) => {
             if (dialog.mode === "create") {
-              const created = await api.createSimulation({ title });
+              const created = await api.createRoom({ title });
               writeSelectedRoomId(created.id);
               setDialog(null);
               navigate(roomPath(created.id));
             } else {
-              await api.updateSimulation(dialog.room.id, { title });
+              await api.updateRoom(dialog.room.id, { title });
               setDialog(null);
               load();
             }

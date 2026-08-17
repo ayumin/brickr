@@ -23,7 +23,6 @@ function makeRoomRow(overrides: Record<string, unknown> = {}) {
     id: "simulation-1",
     title: "テスト",
     status: "active",
-    scope: "room",
     visibility: "public",
     createdAt,
     updatedAt: createdAt,
@@ -45,7 +44,6 @@ describe("SimulationRepository.findAllVisibleTo", () => {
         id: "simulation-1",
         title: "履歴",
         status: "active",
-        scope: "room",
         visibility: "public",
         tags: ["history"],
         createdAt,
@@ -65,7 +63,6 @@ describe("SimulationRepository.findAllVisibleTo", () => {
       id: "simulation-1",
       title: "履歴",
       status: "active",
-      scope: "room",
       createdAt,
       lastActivityAt,
       createdByUserId: "user-1",
@@ -79,12 +76,10 @@ describe("SimulationRepository.findAllVisibleTo", () => {
 
     await new SimulationRepository(db).findAllVisibleTo(USER);
 
-    // Rooms only, because the reserved global row is the feed itself rather than
-    // an entry in the room list (§8.2). Activity order, not creation order, so an
-    // active room cannot sink out of reach (§10.3).
+    // Activity order, not creation order, so an active room cannot sink out of
+    // reach (§10.3).
     // The AND clause combines: (1) archived-room ownership and (2) visibility.
     const call = firstFindManyArgs(findMany);
-    expect(call).toHaveProperty("where.scope", "room");
     expect(call).toHaveProperty("where.AND");
     expect(call).toHaveProperty("orderBy", [
       { lastActivityAt: "desc" },
@@ -145,8 +140,8 @@ describe("SimulationRepository.findAllVisibleTo", () => {
     await new SimulationRepository(db).findAllVisibleTo(ADMIN);
 
     const call = firstFindManyArgs(findMany);
-    // Admin query has no AND clause — just scope: "room"
-    expect(call).toHaveProperty("where", { scope: "room" });
+    // Admins do not need visibility or lifecycle filters.
+    expect(call).toHaveProperty("where", {});
   });
 
   it("includes pending membership count in the _count select", async () => {
@@ -274,7 +269,6 @@ describe("SimulationRepository.archiveByIds", () => {
       where: {
         id: { in: ["room-transferred", "room-created"] },
         status: "active",
-        scope: "room",
       },
       data: { status: "archived" },
     });

@@ -107,7 +107,7 @@ function SnapshotDisplay({ snapshot }: { snapshot: RoomAnalysisSnapshotDto }) {
 // ---------------------------------------------------------------------------
 
 export type RoomAnalysisPanelProps = {
-  simulation: RoomSummaryDto;
+  room: RoomSummaryDto;
 };
 
 export function canUpdateRoomAnalysis(options: {
@@ -135,12 +135,12 @@ export function canUpdateRoomAnalysis(options: {
  *   implied by the snapshot being absent or the room having new posts.
  * - Shows running/failed/last-successful states appropriately.
  */
-export function RoomAnalysisPanel({ simulation }: RoomAnalysisPanelProps) {
+export function RoomAnalysisPanel({ room }: RoomAnalysisPanelProps) {
   const { state, updating, updateError, updateOutcome, dismissUpdateError, update } =
-    useRoomAnalysisSnapshot(simulation.id);
+    useRoomAnalysisSnapshot(room.id);
 
-  const isOwner = simulation.canManage;
-  const isArchived = simulation.status === "archived";
+  const isOwner = room.canManage;
+  const isArchived = room.status === "archived";
 
   // Owners can update when: not archived, not currently updating, and either
   // there's no snapshot yet or the snapshot is not "pending".

@@ -71,7 +71,7 @@ function makeServices(
 ): AppServices {
   return {
     simulations: {
-      get: () => Promise.resolve({ simulation: {} }),
+      get: () => Promise.resolve({ room: {} }),
       listRooms: () => Promise.resolve([]),
     },
     rooms: {

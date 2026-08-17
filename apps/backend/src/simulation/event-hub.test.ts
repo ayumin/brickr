@@ -2,10 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import { EventHub, type EventListener } from "./event-hub.js";
 import type { InternalSseEvent } from "./public-events.js";
 
-function activity(simulationId: string): InternalSseEvent {
+function activity(roomId: string): InternalSseEvent {
   return {
     type: "response.started",
-    simulationId,
+    roomId,
     activityId: "activity-1",
     targetPostId: "post-1",
     threadRootId: "post-1",

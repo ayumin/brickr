@@ -51,15 +51,15 @@ export class EventHub {
    * route handler should end the HTTP response.
    */
   subscribe(
-    simulationId: string,
+    roomId: string,
     listener: EventListener,
     onClose: () => void,
     subscriberId?: string,
   ): { unsubscribe: () => void; connectionId: string } {
-    let connections = this.bySimulation.get(simulationId);
+    let connections = this.bySimulation.get(roomId);
     if (!connections) {
       connections = new Map();
-      this.bySimulation.set(simulationId, connections);
+      this.bySimulation.set(roomId, connections);
     }
 
     const connectionId = randomUUID();
@@ -70,10 +70,10 @@ export class EventHub {
     });
 
     const unsubscribe = (): void => {
-      const current = this.bySimulation.get(simulationId);
+      const current = this.bySimulation.get(roomId);
       if (!current) return;
       current.delete(connectionId);
-      if (current.size === 0) this.bySimulation.delete(simulationId);
+      if (current.size === 0) this.bySimulation.delete(roomId);
     };
 
     return { unsubscribe, connectionId };
@@ -92,25 +92,25 @@ export class EventHub {
    * metadata is assigned once here so room and feed subscribers receive the same
    * identity and timestamp.
    */
-  publish(simulationId: string, event: InternalSseEvent): void {
+  publish(roomId: string, event: InternalSseEvent): void {
     const published: PublishedInternalSseEvent = {
       ...event,
       eventId: randomUUID(),
       timestamp: new Date().toISOString(),
     };
-    this.deliverToRoom(simulationId, published);
+    this.deliverToRoom(roomId, published);
     this.deliver(this.global, published);
   }
 
   /**
-   * Terminates every open room-scoped stream for `simulationId`.
+   * Terminates every open room-scoped stream for `roomId`.
    *
    * Called when a room is archived (§11.1). Each connection's `onClose` callback
    * is invoked so the route handler can end the HTTP response. Clients that
    * reconnect receive a 404 — the correct answer for a stopped room (§10.4).
    */
-  closeRoom(simulationId: string): void {
-    const connections = this.bySimulation.get(simulationId);
+  closeRoom(roomId: string): void {
+    const connections = this.bySimulation.get(roomId);
     if (!connections) return;
 
     // Snapshot before iterating: onClose may trigger unsubscribe.
@@ -122,7 +122,7 @@ export class EventHub {
       }
     }
 
-    this.bySimulation.delete(simulationId);
+    this.bySimulation.delete(roomId);
   }
 
   /**
@@ -132,8 +132,8 @@ export class EventHub {
    * (§11.1 visibility re-evaluation). The connection's `onClose` callback is
    * invoked so the route handler can end the HTTP response.
    */
-  closeSubscriber(simulationId: string, subscriberId: string): void {
-    const connections = this.bySimulation.get(simulationId);
+  closeSubscriber(roomId: string, subscriberId: string): void {
+    const connections = this.bySimulation.get(roomId);
     if (!connections) return;
 
     const targeted = [...connections].filter(
@@ -142,7 +142,7 @@ export class EventHub {
     for (const [connectionId] of targeted) {
       connections.delete(connectionId);
     }
-    if (connections.size === 0) this.bySimulation.delete(simulationId);
+    if (connections.size === 0) this.bySimulation.delete(roomId);
 
     for (const [, connection] of targeted) {
       try {
@@ -153,8 +153,8 @@ export class EventHub {
     }
   }
 
-  subscriberCount(simulationId: string): number {
-    return this.bySimulation.get(simulationId)?.size ?? 0;
+  subscriberCount(roomId: string): number {
+    return this.bySimulation.get(roomId)?.size ?? 0;
   }
 
   feedSubscriberCount(): number {
@@ -168,12 +168,12 @@ export class EventHub {
    * feed's listeners count for every room, so this is false only when neither
    * stream is open.
    */
-  hasSubscribers(simulationId: string): boolean {
-    return this.subscriberCount(simulationId) > 0 || this.feedSubscriberCount() > 0;
+  hasSubscribers(roomId: string): boolean {
+    return this.subscriberCount(roomId) > 0 || this.feedSubscriberCount() > 0;
   }
 
-  private deliverToRoom(simulationId: string, event: PublishedInternalSseEvent): void {
-    const connections = this.bySimulation.get(simulationId);
+  private deliverToRoom(roomId: string, event: PublishedInternalSseEvent): void {
+    const connections = this.bySimulation.get(roomId);
     if (!connections) return;
     for (const [connectionId, { listener }] of [...connections]) {
       try {
@@ -182,7 +182,7 @@ export class EventHub {
         // One broken subscriber must not stop delivery to the others.
         connections.delete(connectionId);
         if (connections.size === 0) {
-          this.bySimulation.delete(simulationId);
+          this.bySimulation.delete(roomId);
         }
       }
     }

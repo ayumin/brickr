@@ -1,4 +1,4 @@
-import type { RoomVisibility, RoomScope, RoomStatus } from "@brickr/shared";
+import type { RoomVisibility, RoomStatus } from "@brickr/shared";
 import type { Db, DbTransaction } from "../persistence/prisma.js";
 import { optionalField } from "../persistence/repository-mapping.js";
 import { toFallbackHandle } from "../user-profile/user-profile-repository.js";
@@ -8,7 +8,6 @@ type SimulationRow = {
   id: string;
   title: string | null;
   status: string;
-  scope: string;
   visibility: string;
   tags: string[];
   createdAt: Date;
@@ -22,11 +21,6 @@ export function toSimulationStatus(value: string): RoomStatus {
 }
 
 /** The database column is an unconstrained string; this is the one place that trusts it. */
-export function toSimulationScope(value: string): RoomScope {
-  return value as RoomScope;
-}
-
-/** The database column is an unconstrained string; this is the one place that trusts it. */
 export function toSimulationVisibility(value: string): RoomVisibility {
   return value as RoomVisibility;
 }
@@ -36,7 +30,6 @@ function toSimulation(row: SimulationRow): Simulation {
     id: row.id,
     title: row.title,
     status: toSimulationStatus(row.status),
-    scope: toSimulationScope(row.scope),
     visibility: toSimulationVisibility(row.visibility),
     tags: row.tags,
     createdAt: row.createdAt,
@@ -57,12 +50,6 @@ type SimulationSummaryRow = SimulationRow & {
    */
   _callerIsActiveMember?: boolean;
 };
-
-// ---------------------------------------------------------------------------
-// Internal note: the Prisma model is now `Room` (@@map("rooms")), but the
-// domain layer still uses the name "Simulation" for the concept. All
-// `this.db.simulation.*` calls below are replaced with `this.db.room.*`.
-// ---------------------------------------------------------------------------
 
 function toSimulationSummary(row: SimulationSummaryRow): SimulationSummary {
   return {
@@ -86,7 +73,7 @@ export class SimulationRepository {
   constructor(private readonly db: Db) {}
 
   /**
-   * A room, always. The global row is seeded, never created here (§8.2).
+   * Creates an ordinary room.
    *
    * `lastActivityAt` starts at the creation time so an empty room still sorts
    * sensibly in an activity-ordered list.
@@ -97,7 +84,6 @@ export class SimulationRepository {
       data: {
         title,
         status: "active",
-        scope: "room",
         visibility: "public",
         createdByUserId,
         createdAt,
@@ -127,7 +113,6 @@ export class SimulationRepository {
         data: {
           title,
           status: "active",
-          scope: "room",
           visibility,
           createdByUserId,
           createdAt,
@@ -168,7 +153,6 @@ export class SimulationRepository {
       where: {
         id: { in: roomIds },
         status: "active",
-        scope: "room",
       },
       data: { status: "archived" },
     });
@@ -179,8 +163,6 @@ export class SimulationRepository {
    *
    * Visibility rules (enforced in the query, not by post-filtering):
    *
-   * - The global row is excluded: it is the feed, not an entry in the room list
-   *   (§8.2).
    * - A stopped room is listed only for its creator and for an administrator.
    *   Everyone else gets a list in which it does not appear at all (§10.3).
    * - `public` / `open` rooms are discoverable by all authenticated users.
@@ -202,7 +184,6 @@ export class SimulationRepository {
   async findAllVisibleTo(actor: SimulationActor): Promise<SimulationSummary[]> {
     const rows = await this.db.room.findMany({
       where: {
-        scope: "room",
         ...(actor.isAdmin
           ? {}
           : {

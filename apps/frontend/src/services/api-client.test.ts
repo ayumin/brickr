@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { api, request, simulationEventsUrl, API_BASE_URL } from "./api-client";
+import { api, request, roomEventsUrl, API_BASE_URL } from "./api-client";
 
 describe("api-client", () => {
   let fetchMock: ReturnType<typeof vi.fn>;
@@ -237,7 +237,7 @@ describe("api-client", () => {
       fetchMock.mockResolvedValue({
         ok: true,
         json: async () => ({
-          simulation: { id: "room-1" },
+          room: { id: "room-1" },
           analysis: { postCount: 0 },
           posts: [],
           threads: [],
@@ -247,13 +247,13 @@ describe("api-client", () => {
         }),
       });
 
-      await api.createSimulation({ title: "Room" });
+      await api.createRoom({ title: "Room" });
       await api.getRoomFeed("room-1", "all");
-      await api.updateSimulation("room-1", { title: "Renamed" });
-      await api.getSimulationAnalysis("room-1");
-      await api.getSimulation("room-1");
-      await api.stopSimulation("room-1");
-      await api.resumeSimulation("room-1");
+      await api.updateRoom("room-1", { title: "Renamed" });
+      await api.getRoomAnalysis("room-1");
+      await api.getRoom("room-1");
+      await api.stopRoom("room-1");
+      await api.resumeRoom("room-1");
       await api.getPosts("room-1");
       await api.createPost("room-1", { content: "hello" });
 
@@ -269,23 +269,22 @@ describe("api-client", () => {
         `${API_BASE_URL}/api/rooms/room-1/posts`,
         `${API_BASE_URL}/api/rooms/room-1/posts`,
       ]);
-      expect(urls.every((url) => !url.includes("/api/simulations"))).toBe(true);
     });
   });
 
-  describe("simulationEventsUrl function", () => {
+  describe("roomEventsUrl function", () => {
     it("should construct valid SSE URLs with proper encoding", () => {
-      const url = simulationEventsUrl("test-simulation-123");
-      expect(url).toBe(`${API_BASE_URL}/api/rooms/test-simulation-123/events`);
+      const url = roomEventsUrl("test-room-123");
+      expect(url).toBe(`${API_BASE_URL}/api/rooms/test-room-123/events`);
     });
 
-    it("should properly encode special characters in simulation IDs", () => {
-      const url = simulationEventsUrl("test/simulation?id=123");
-      expect(url).toContain(encodeURIComponent("test/simulation?id=123"));
-      expect(url).not.toContain("test/simulation?id=123");
+    it("should properly encode special characters in room IDs", () => {
+      const url = roomEventsUrl("test/room?id=123");
+      expect(url).toContain(encodeURIComponent("test/room?id=123"));
+      expect(url).not.toContain("test/room?id=123");
     });
 
-    it("should prevent SSRF attacks through simulation ID parameter", () => {
+    it("should prevent SSRF attacks through room ID parameter", () => {
       const maliciousIds = [
         "http://evil.com",
         "//evil.com",
@@ -293,7 +292,7 @@ describe("api-client", () => {
       ];
 
       for (const id of maliciousIds) {
-        const url = simulationEventsUrl(id);
+        const url = roomEventsUrl(id);
         expect(url).toContain(encodeURIComponent(id));
         expect(url).toContain("/api/rooms/");
         expect(url).not.toContain(id);

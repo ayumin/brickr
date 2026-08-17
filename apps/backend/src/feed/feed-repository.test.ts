@@ -15,7 +15,6 @@ const ROOM_ROW = {
   id: "room-1",
   title: "設計の部屋",
   status: "active",
-  scope: "room",
   visibility: "public",
   createdByUserId: "owner-1",
 };
@@ -106,7 +105,6 @@ describe("FeedRepository.findThreadPage (§10.1)", () => {
           id: true,
           title: true,
           status: true,
-          scope: true,
           visibility: true,
           createdByUserId: true,
         },
@@ -116,7 +114,6 @@ describe("FeedRepository.findThreadPage (§10.1)", () => {
       id: "room-1",
       title: "設計の部屋",
       status: "active",
-      scope: "room",
       visibility: "public",
       createdByUserId: "owner-1",
     });
@@ -138,7 +135,7 @@ describe("FeedRepository.findThreadPage (§10.1)", () => {
   it("restricts to one room when asked", async () => {
     const { db, calls } = makeDb();
 
-    await new FeedRepository(db).findThreadPage({ limit: 21, simulationId: "room-1" });
+    await new FeedRepository(db).findThreadPage({ limit: 21, roomId: "room-1" });
 
     expect(calls[0]?.where).toMatchObject({ roomId: "room-1" });
   });
@@ -312,7 +309,7 @@ describe("FeedRepository mine filter (§12.3)", () => {
 
     await new FeedRepository(db).findThreadPage({
       limit: 21,
-      simulationId: "room-1",
+      roomId: "room-1",
       mine: { userId: "reader-1", handle: "hanako" },
     });
 

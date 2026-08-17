@@ -83,7 +83,7 @@ async function main(): Promise<void> {
   });
   console.log(describeAdminBootstrap(outcome));
 
-  // --- Demo rooms (scope: "room") -------------------------------------------
+  // --- Demo rooms -----------------------------------------------------------
   //
   // One room per visibility type so every code path can be exercised on a
   // fresh database. Memberships cover active / pending / left / removed /
@@ -124,7 +124,6 @@ async function seedDemoRooms(): Promise<void> {
         title: "パブリックルーム",
         description: "誰でも参加できる公開ルームです。",
         status: "active",
-        scope: "room",
         visibility: "public",
         tags: ["demo", "public"],
         createdByUserId: null,
@@ -146,7 +145,6 @@ async function seedDemoRooms(): Promise<void> {
         title: "オープンルーム",
         description: "誰でも閲覧できますが、参加には承認が必要です。",
         status: "active",
-        scope: "room",
         visibility: "open",
         tags: ["demo", "open"],
         createdByUserId: null,
@@ -168,7 +166,6 @@ async function seedDemoRooms(): Promise<void> {
         title: "クローズドルーム",
         description: "メンバーのみ閲覧可能で、招待制のルームです。",
         status: "active",
-        scope: "room",
         visibility: "closed",
         tags: ["demo", "closed"],
         createdByUserId: null,
@@ -190,7 +187,6 @@ async function seedDemoRooms(): Promise<void> {
         title: "プライベートルーム",
         description: "招待された人だけが参加できる非公開ルームです。",
         status: "active",
-        scope: "room",
         visibility: "private",
         tags: ["demo", "private"],
         createdByUserId: null,

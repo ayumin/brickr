@@ -4,6 +4,7 @@ stages:
   - typecheck
   - test
   - build
+  - e2e
   - security
   - approve
   - container
@@ -22,6 +23,7 @@ include:
   - local: /.gitlab/ci/branch.yml
   - local: /.gitlab/ci/merge-request.yml
   - local: /.gitlab/ci/main.yml
+  - local: /.gitlab/ci/quality.yml
   - local: /.gitlab/ci/staging-maintenance.yml
   - local: /.gitlab/ci/infrastructure.yml
   - local: /.gitlab/ci/release.yml

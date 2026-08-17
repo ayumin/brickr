@@ -21,7 +21,7 @@ Brickrへのコントリビューションを検討いただき、ありがと�
 - 不具合修正と再現テスト
 - アクセシビリティ、操作性、レスポンシブ表示の改善
 - LLM Provider間の互換性と失敗処理の改善
-- シミュレーション、投稿、スレッド処理のテスト追加
+- Room、投稿、ScheduledEvent、スレッド処理のテスト追加
 - セットアップ、運用、アーキテクチャ文書の改善
 - 小さく明確な性能改善
 
@@ -55,19 +55,22 @@ USE_MOCK_LLM=true
 Signupは招待制なので、最初の管理者を作る場合はSeed前に`ADMIN_EMAIL`と`ADMIN_PASSWORD`も
 設定してください。`ADMIN_EMAIL`が空の場合、管理者Bootstrapはスキップされます。
 
-PostgreSQLだけをDockerで起動し、スキーマと初期データを準備します。
+PostgreSQLだけをDockerで起動し、migrationと初期データを準備します。
 
 ```bash
 docker compose up -d db
 pnpm --filter @brickr/backend db:generate
-pnpm db:push
-pnpm seed
+pnpm db:reset
 ```
 
-FrontendとBackendを起動します。
+FrontendとBackendを起動し、別terminalでworkerを起動します。
 
 ```bash
 pnpm dev
+```
+
+```bash
+pnpm --filter @brickr/backend worker
 ```
 
 - Frontend: <http://localhost:5173>
@@ -80,7 +83,7 @@ pnpm dev
 
 ```text
 apps/
-├── backend/       Fastify API、シミュレーション、LLM、Prisma
+├── backend/       Fastify API、Room/Cast、worker、LLM、Prisma
 └── frontend/      React UI、REST/SSE Client、表示用の派生ロジック
 packages/
 └── shared/        FrontendとBackendで共有するDTO、Event、定数
@@ -98,12 +101,12 @@ packages/
 | 認証Context | `apps/backend/src/auth/auth-context.ts` | Session解決とUser/Admin Guard |
 | Account/招待 | `apps/backend/src/auth/` | Signup/Login、Session、Admin、InviteCode |
 | Handle | `apps/backend/src/handles/` | User/Character共有Namespace |
-| シミュレーション | `apps/backend/src/simulation/simulation-service.ts` | 投稿生成のオーケストレーション |
-| シミュレーション分析 | `apps/backend/src/simulation/simulation-analysis-service.ts` | 集計とLLM要約 |
+| Room処理 | `apps/backend/src/simulation/` | Room、membership、分析、投稿生成 |
+| 非同期worker | `apps/backend/src/worker/` | ScheduledEvent claim・実行・再試行 |
 | LLM抽象化 | `apps/backend/src/llm/provider.ts` | Provider共通契約 |
 | 実行設定 | `apps/backend/src/settings/` | 環境変数とDB Overrideの合成 |
 | DB Schema | `apps/backend/prisma/schema.prisma` | PostgreSQLのデータモデル |
-| Frontend起動 | `apps/frontend/src/App.tsx` | 初期ロードとSimulation復元 |
+| Frontend起動 | `apps/frontend/src/App.tsx` | SessionとRoom routeの初期化 |
 | Frontend Route | `apps/frontend/src/routes.ts` | URL生成と静的Path優先のRoute match |
 | 主要画面 | `apps/frontend/src/features/feed/FeedScreen.tsx`, `apps/frontend/src/features/rooms/RoomScreen.tsx`, `apps/frontend/src/features/rooms/PostDetailScreen.tsx` | 統合Feed・個別Room・投稿詳細のUI統合 |
 | API Client | `apps/frontend/src/services/api-client.ts` | Frontend唯一のRESTアクセス層 |
@@ -162,19 +165,18 @@ docs: explain local database setup
 - Password、Session生Token、BirthdateはDTOやLogへ出さないでください。Sessionはhashだけを保存します。
 - UserとCharacterのhandleは`handles` Tableの共有Namespaceです。予約語、正規化、競合処理を
   Frontend、Zod Schema、Domainで不一致にしないでください。
-- User作成CharacterとSimulationには`createdByUserId`を設定し、Owner/Adminだけが管理できます。
+- User作成CastとRoomには`createdByUserId`を設定し、Owner/Adminだけが管理できます。
   `createdByUserId = null`のSeed CharacterはSystem所有で、Adminだけが変更できます。
 - Signup、InviteCode消費、handle確保のように途中状態を残せない操作はTransaction境界を維持してください。
 - 停止UserはLoginと既存Session解決の両方で拒否し、Admin自身を停止・再開する境界ケースもテストしてください。
 
-### シミュレーション
+### Roomと非同期イベント
 
-- ユーザー投稿は先に保存してHTTPレスポンスを返し、Character生成を待たせません。
-- 生成結果は保存後にSSEで配信します。
-- 永続的なRound/Wave Modelは追加しません。各Characterは処理開始時点のThreadを読みます。
-- Character単位の失敗で、他Characterの処理を中断しないでください。
+- Postは必ず`roomId`を持ち、横断Feedを投稿先として扱わないでください。
+- 遅延・自律処理はScheduledEventへ登録し、API process内のfire-and-forgetを増やさないでください。
+- worker claimは原子的に行い、lock timeout、retry、cancel規則を維持してください。
+- Character単位の失敗で、他CharacterやUser postを失敗させないでください。
 - 同時実行数、cascade深度、投稿数には必ず上限を持たせてください。
-- `simulation.completed.generatedPostIds`には、実際に保存された生成Postだけを含めてください。
 
 ### 投稿とスレッド
 
@@ -243,7 +245,7 @@ docs: explain local database setup
 
 1. `packages/shared/src/events.ts`のEvent unionと`SSE_EVENT_TYPES`を更新します。
 2. Backendで永続化または状態変更の後にEventを発行します。
-3. Frontendの`useSimulationEvents` Reducerへ処理を追加します。
+3. FrontendのRoom/Feed event reducerへ処理を追加します。
 4. REST hydrationとSSEが競合しても重複しない設計にします。
 5. 切断、再接続、購読解除時の状態を確認します。
 
@@ -299,8 +301,7 @@ git diff --check
 ### 手動検証チェックリスト（ブラウザが必要な確認項目）
 
 Modal focus trap、スクロール位置、Visual viewportなど、Vitestだけでは検証できない項目です。
-Playwright等のE2E基盤は導入していないため、該当する変更を行うPRでは以下をブラウザで確認し、
-結果をPR本文へ記載してください。
+自動化しにくい視覚・device依存項目は、以下をブラウザで確認して結果をMR本文へ記載してください。
 
 - Modal / bottom sheetのfocus trap、Escapeで閉じる、閉じた後にtriggerへFocusが戻ること
   （`Dialog`利用箇所全般、および独自実装の`SecretResultDialog`）
@@ -309,22 +310,23 @@ Playwright等のE2E基盤は導入していないため、該当する変更を�
 - Mobile幅でのBottom Navigationがsafe areaを避けて表示されること
 - 未ログイン時、投稿・返信・引用等のactionがdisabled表示ではなく非表示であること
 - 停止中Roomでも同様にactionが非表示であること
-- 旧URL（`/characters`, `/simulations`, `/simulations/:id/analysis`）が新URLへ遷移すること
 - 390×844 / 768×1024 / 1280×800 / 1440×1000 の各幅で、Brickr Dark / Lightそれぞれ崩れがないこと
 
 ## GitLab CI
 
 リポジトリ直下の`.gitlab-ci.yml`は、Branch、Tag、Merge RequestのPipelineで次を実行します。
 
-1. Frontend、Backend、SharedのLint、型検査、Coverage付きTestを独立Jobとして並列実行
-2. GitLab SAST、Dependency Scanning、Secret Detectionを実行
-3. Default BranchとTagだけでFrontend、Backend、SharedをBuild
-4. Buildした各workspaceの`dist/`を1週間Artifactとして保存
+1. Frontend、Backend、SharedのLint、型検査、Coverage付きTest、Production build
+2. 空PostgreSQLへのmigration reset、seed、migration status確認
+3. PlaywrightによるFeed・login・Room作成・投稿の主要UI導線
+4. Docker Composeでbackendとworker 2 replicasがhealthyになること
+5. 旧URL、旧ID field、削除済みglobal固定投稿先等の再混入チェック
+6. GitLab SAST、Dependency Scanning、Secret Detection
 
 CIは開発環境と同じNode.js 22と、`packageManager`で固定しているpnpm 11.21.0を使用します。依存関係は
 `pnpm-lock.yaml`に基づいて固定され、pnpm storeはLockfile単位でキャッシュされます。
-テストは外部LLM APIやPostgreSQLへ接続しないため、APIキーやDatabase Serviceは不要です。
-Backend JobだけがInstall後にPrisma Clientを生成します。
+通常testは外部LLM APIへ接続しません。DB/E2E jobは一時PostgreSQLとMock LLMを使い、実API keyを
+必要としません。Backend JobだけがInstall後にPrisma Clientを生成します。
 
 ## Pull Request
 

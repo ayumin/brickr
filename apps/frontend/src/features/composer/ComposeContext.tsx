@@ -126,7 +126,7 @@ export function ComposeControllerProvider({ children }: { children: ReactNode })
         <ComposerDialog
           key={
             composerRequest.context.mode === "new"
-              ? `new:${composerRequest.context.simulationId}`
+              ? `new:${composerRequest.context.roomId}`
               : `${composerRequest.context.mode}:${composerRequest.context.post.id}`
           }
           context={composerRequest.context}

@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { GLOBAL_ROOM_ID } from "@brickr/shared";
 import type { FeedThreadDto, PostDto, UserProfileDto } from "@brickr/shared";
 
 import { Dialog } from "../../components/Dialog";
@@ -24,20 +23,19 @@ type RoomState = { status: "loading" } | { status: "ready"; label: string; disab
  * (feed, room, reply, quote) opens through (Issue #50).
  *
  * For a room-scoped new post, the caller's `roomLabel` is only a placeholder
- * for the instant before this dialog's own `getSimulation` fetch resolves the
+ * for the instant before this dialog's own `getRoom` fetch resolves the
  * authoritative title and stopped state — the same fetch a caller without a
- * known title (the nav's "投稿する" button) relies on entirely. The unified
- * feed never needs this: it is never stopped.
+ * known title relies on entirely.
  */
 export function ComposerDialog({ context, userProfile, onClose, onPosted, onUnauthorized }: ComposerDialogProps) {
   const [submitting, setSubmitting] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const needsRoomLookup = context.mode === "new" && context.simulationId !== GLOBAL_ROOM_ID;
+  const needsRoomLookup = context.mode === "new";
   const [roomState, setRoomState] = useState<RoomState>(() =>
-    needsRoomLookup && context.mode === "new"
+    context.mode === "new"
       ? { status: "loading" }
-      : { status: "ready", label: context.mode === "new" ? context.roomLabel : "", disabled: false },
+      : { status: "ready", label: "", disabled: false },
   );
 
   useEffect(() => {
@@ -46,12 +44,12 @@ export function ComposerDialog({ context, userProfile, onClose, onPosted, onUnau
     }
     const controller = new AbortController();
     api
-      .getSimulation(context.simulationId, controller.signal)
-      .then(({ simulation }) => {
+      .getRoom(context.roomId, controller.signal)
+      .then(({ room }) => {
         setRoomState({
           status: "ready",
-          label: simulation.title ?? "無題のルーム",
-          disabled: simulation.status === "archived",
+          label: room.title ?? "無題のルーム",
+          disabled: room.status === "archived",
         });
       })
       .catch((cause: unknown) => {

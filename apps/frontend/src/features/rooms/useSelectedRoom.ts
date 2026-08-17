@@ -17,7 +17,7 @@ export type SelectedRoomState =
   | { status: "loading" }
   | { status: "denied" }
   | { status: "error"; message: string }
-  | { status: "ready"; simulation: RoomSummaryDto };
+  | { status: "ready"; room: RoomSummaryDto };
 
 export type UseSelectedRoomResult = {
   state: SelectedRoomState;
@@ -47,10 +47,10 @@ export function useSelectedRoom(roomId: string): UseSelectedRoomResult {
     const controller = new AbortController();
     setState({ status: "loading" });
     api
-      .getSimulation(roomId, controller.signal)
-      .then(({ simulation }) => {
-        const decision = checkRoomAccess(simulation, user);
-        setState(decision.allowed ? { status: "ready", simulation } : { status: "denied" });
+      .getRoom(roomId, controller.signal)
+      .then(({ room }) => {
+        const decision = checkRoomAccess(room, user);
+        setState(decision.allowed ? { status: "ready", room: room } : { status: "denied" });
       })
       .catch((cause: unknown) => {
         if (isAbortError(cause)) return;
@@ -79,19 +79,19 @@ export function useSelectedRoom(roomId: string): UseSelectedRoomResult {
 
   const rename = useCallback(
     async (title: string): Promise<void> => {
-      await api.updateSimulation(roomId, { title });
+      await api.updateRoom(roomId, { title });
       reload();
     },
     [roomId, reload],
   );
 
   const stop = useCallback(async (): Promise<void> => {
-    await api.stopSimulation(roomId);
+    await api.stopRoom(roomId);
     reload();
   }, [roomId, reload]);
 
   const resume = useCallback(async (): Promise<void> => {
-    await api.resumeSimulation(roomId);
+    await api.resumeRoom(roomId);
     reload();
   }, [roomId, reload]);
 

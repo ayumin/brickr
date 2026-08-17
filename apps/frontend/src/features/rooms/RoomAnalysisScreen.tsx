@@ -39,7 +39,7 @@ export function RoomAnalysisScreen({ roomId }: { roomId: string }) {
 
   return (
     <div className="mx-auto w-full max-w-2xl">
-      <RoomAnalysisPanel simulation={selectedRoom.state.simulation} />
+      <RoomAnalysisPanel room={selectedRoom.state.room} />
     </div>
   );
 }

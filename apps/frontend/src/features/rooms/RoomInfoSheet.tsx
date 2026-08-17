@@ -31,7 +31,7 @@ export function RoomInfoSheet({ onClose, ...content }: RoomInfoSheetProps) {
       placement="bottom-sheet"
     >
       <RoomInfoContent {...content} onBusyChange={setBusy} />
-      <RoomAnalysisPanel simulation={content.simulation} />
+      <RoomAnalysisPanel room={content.room} />
     </Dialog>
   );
 }

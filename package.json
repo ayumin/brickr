@@ -11,11 +11,15 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
+    "test:e2e": "playwright test",
+    "quality:legacy": "node scripts/check-no-legacy-refs.mjs",
     "seed": "pnpm --filter @brickr/backend seed",
-    "db:push": "pnpm --filter @brickr/backend db:push"
+    "db:push": "pnpm --filter @brickr/backend db:push",
+    "db:reset": "pnpm --filter @brickr/backend db:reset"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "1.55.0",
     "eslint": "^10.8.1",
     "globals": "^17.9.0",
     "typescript-eslint": "^8.66.0"

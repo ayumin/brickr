@@ -49,22 +49,22 @@ describe("appendMentionOnce", () => {
 describe("composerContextForReply / composerContextForQuote", () => {
   it("targets the post's own room, not wherever the reader is", () => {
     const post = makePost({ roomId: "room-42" });
-    expect(composerContextForReply(post)).toEqual({ mode: "reply", simulationId: "room-42", post });
-    expect(composerContextForQuote(post)).toEqual({ mode: "quote", simulationId: "room-42", post });
+    expect(composerContextForReply(post)).toEqual({ mode: "reply", roomId: "room-42", post });
+    expect(composerContextForQuote(post)).toEqual({ mode: "quote", roomId: "room-42", post });
   });
 });
 
 describe("composerDialogTitle", () => {
   it("labels each mode", () => {
-    expect(composerDialogTitle({ mode: "new", simulationId: "s", roomLabel: "フィード" })).toBe("投稿する");
-    expect(composerDialogTitle({ mode: "reply", simulationId: "s", post: makePost() })).toBe("返信する");
-    expect(composerDialogTitle({ mode: "quote", simulationId: "s", post: makePost() })).toBe("引用してリポスト");
+    expect(composerDialogTitle({ mode: "new", roomId: "s", roomLabel: "フィード" })).toBe("投稿する");
+    expect(composerDialogTitle({ mode: "reply", roomId: "s", post: makePost() })).toBe("返信する");
+    expect(composerDialogTitle({ mode: "quote", roomId: "s", post: makePost() })).toBe("引用してリポスト");
   });
 });
 
 describe("initialComposerContent", () => {
   it("is empty for a new post", () => {
-    expect(initialComposerContent({ mode: "new", simulationId: "s", roomLabel: "フィード" }, "me")).toBe("");
+    expect(initialComposerContent({ mode: "new", roomId: "s", roomLabel: "フィード" }, "me")).toBe("");
   });
 
   it("is empty for a quote (no mention prefill)", () => {

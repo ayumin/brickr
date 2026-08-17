@@ -164,14 +164,14 @@ function EmptyState({ title, body }: { title: string; body: string }) {
 export type TimelineProps = {
   /** Posts to show at the top level, already ordered by the caller. */
   rootPosts: PostDto[];
-  /** Every post in the simulation, used to derive threads and reposts. */
+  /** Every post in the room, used to derive threads and reposts. */
   allPosts: PostDto[];
   userProfile: UserProfileDto;
   activities: ResponseActivity[];
   loading: boolean;
   emptyTitle: string;
   emptyBody: string;
-  /** False when the simulation is stopped: no reply / repost composers. */
+  /** False when the room is stopped: no reply / repost composers. */
   canPost: boolean;
   onOpenAuthor: (authorId: string) => void;
   /** `@handle` mentions in post content link here directly (§10.5: free text, no roster lookup needed). */

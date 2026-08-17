@@ -4,26 +4,6 @@ export const ROOM_STATUSES = ["active", "archived"] as const;
 
 export type RoomStatus = (typeof ROOM_STATUSES)[number];
 
-/**
- * Internal only: `scope` never reaches a screen as a label (§8.1). The reserved
- * global room is shown as "フィード", ordinary ones as rooms.
- */
-export const ROOM_SCOPES = ["global", "room"] as const;
-
-export type RoomScope = (typeof ROOM_SCOPES)[number];
-
-/**
- * The one room the unified feed posts into (§8.2).
- *
- * A real row with a fixed id, rather than `roomId = null`, so the existing
- * foreign key, posting API and permission checks keep working unchanged. It is
- * seeded, never created through the API, and rejects rename/stop/resume/delete.
- */
-export const GLOBAL_ROOM_ID = "00000000-0000-4000-8000-000000000001";
-
-/** Title seeded for the global room, and what the feed is called on screen. */
-export const GLOBAL_ROOM_TITLE = "フィード";
-
 /** Visibility of a room to non-members. */
 export const ROOM_VISIBILITIES = ["public", "open", "closed", "private"] as const;
 
@@ -88,10 +68,6 @@ export type RoomSummaryDto = RoomDto & {
   pendingCount?: number;
 };
 
-export type RoomsResponse = {
-  simulations: RoomSummaryDto[];
-};
-
 /**
  * One entry in the visibility-aware room list (issue #155).
  *
@@ -124,7 +100,7 @@ export type CreateRoomRequest = {
 };
 
 export type CreateRoomResponse = {
-  simulation: RoomDto;
+  room: RoomDto;
 };
 
 export type UpdateRoomRequest = {
@@ -157,7 +133,7 @@ export type RoomContentSummaryDto = {
 };
 
 export type RoomAnalysisDto = {
-  simulation: RoomDto;
+  room: RoomDto;
   summary: RoomContentSummaryDto;
   postCount: number;
   authorCount: number;
@@ -184,7 +160,7 @@ export type RoomAnalysisResponse = {
  * variant would just be the same fields under a different name.
  */
 export type RoomResponse = {
-  simulation: RoomSummaryDto;
+  room: RoomSummaryDto;
 };
 
 // ---------------------------------------------------------------------------
@@ -243,4 +219,3 @@ export type RoomMembershipDto = {
   createdAt: string;
   updatedAt: string;
 };
-

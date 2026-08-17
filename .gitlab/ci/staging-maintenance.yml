@@ -48,7 +48,7 @@
         --region="$GCP_REGION" \
         --image="$BACKEND_IMAGE_REF" \
         --command=sh \
-        "--args=^|^-c|pnpm exec prisma db push --skip-generate --force-reset && exec node -e 'require(\"http\").createServer((q,s)=>s.end(\"ok\")).listen(3000)'" \
+        "--args=^|^-c|pnpm exec prisma migrate reset --force --skip-seed && exec node -e 'require(\"http\").createServer((q,s)=>s.end(\"ok\")).listen(3000)'" \
         --quiet
 
       curl --fail --silent --show-error \

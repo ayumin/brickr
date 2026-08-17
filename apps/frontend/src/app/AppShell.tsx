@@ -25,7 +25,7 @@ function activeItemFor(pathname: string): NavActiveItem {
 
 /**
  * The persistent app shell (§13.1, §13.5, §14) that replaces the old
- * `SimulationBootstrap` + always-mounted `SimulationView`.
+ * the old bootstrap + always-mounted room view.
  *
  * Feed and each opened Room stay in the tree permanently once reached
  * (toggled with the `hidden` attribute, never unmounted), so their SSE
@@ -80,7 +80,7 @@ function AppShellContent() {
     onComposeClick: () => {
       if (activeRoomId) {
         composeController.request({
-          context: { mode: "new", simulationId: activeRoomId, roomLabel: "ルーム" },
+          context: { mode: "new", roomId: activeRoomId, roomLabel: "ルーム" },
         });
       }
     },

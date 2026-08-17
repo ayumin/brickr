@@ -395,7 +395,7 @@ export const api = {
 
   /**
    * The public profile behind a handle — what a direct `/handle` visit or a
-   * reload needs, with no simulation loaded (CLAUDE.md §66.2).
+   * reload needs, with no room loaded (CLAUDE.md §66.2).
    *
    * One shape for people and cast members alike (§10.6). The endpoint this
    * replaced, `GET /api/handles/:handle`, answered with an owner type, which told
@@ -453,7 +453,7 @@ export const api = {
     );
   },
 
-  async createSimulation(
+  async createRoom(
     body: CreateRoomRequest = {},
     signal?: AbortSignal,
   ): Promise<RoomDto> {
@@ -462,7 +462,7 @@ export const api = {
       body,
       ...(signal ? { signal } : {}),
     });
-    return data.simulation;
+    return data.room;
   },
 
   /**
@@ -479,11 +479,11 @@ export const api = {
    * Use `deleteRoom` to permanently remove an archived room.
    */
   async archiveRoom(id: string): Promise<RoomDto> {
-    const data = await request<{ simulation: RoomDto }>(
+    const data = await request<{ room: RoomDto }>(
       `/api/rooms/${encodeURIComponent(id)}/archive`,
       { method: "POST" },
     );
-    return data.simulation;
+    return data.room;
   },
 
   /**
@@ -591,18 +591,18 @@ export const api = {
     );
   },
 
-  async updateSimulation(
+  async updateRoom(
     id: string,
     body: UpdateRoomRequest,
   ): Promise<RoomDto> {
-    const data = await request<{ simulation: RoomDto }>(
+    const data = await request<{ room: RoomDto }>(
       `/api/rooms/${encodeURIComponent(id)}`,
       { method: "PUT", body },
     );
-    return data.simulation;
+    return data.room;
   },
 
-  async getSimulationAnalysis(
+  async getRoomAnalysis(
     id: string,
     signal?: AbortSignal,
   ): Promise<RoomAnalysisDto> {
@@ -613,7 +613,7 @@ export const api = {
     return data.analysis;
   },
 
-  getSimulation(
+  getRoom(
     id: string,
     signal?: AbortSignal,
   ): Promise<RoomResponse> {
@@ -623,31 +623,31 @@ export const api = {
     );
   },
 
-  async stopSimulation(
+  async stopRoom(
     id: string,
     signal?: AbortSignal,
   ): Promise<RoomDto> {
-    const data = await request<{ simulation: RoomDto }>(
+    const data = await request<{ room: RoomDto }>(
       `/api/rooms/${encodeURIComponent(id)}/stop`,
       { method: "POST", ...(signal ? { signal } : {}) },
     );
-    return data.simulation;
+    return data.room;
   },
 
-  async resumeSimulation(
+  async resumeRoom(
     id: string,
     signal?: AbortSignal,
   ): Promise<RoomDto> {
-    const data = await request<{ simulation: RoomDto }>(
+    const data = await request<{ room: RoomDto }>(
       `/api/rooms/${encodeURIComponent(id)}/resume`,
       { method: "POST", ...(signal ? { signal } : {}) },
     );
-    return data.simulation;
+    return data.room;
   },
 
-  async getPosts(simulationId: string, signal?: AbortSignal): Promise<PostDto[]> {
+  async getPosts(roomId: string, signal?: AbortSignal): Promise<PostDto[]> {
     const data = await request<PostsResponse>(
-      `/api/rooms/${encodeURIComponent(simulationId)}/posts`,
+      `/api/rooms/${encodeURIComponent(roomId)}/posts`,
       signal ? { signal } : {},
     );
     return data.posts;
@@ -659,12 +659,12 @@ export const api = {
    * notification, so this REST response remains the authoritative DTO.
    */
   createPost(
-    simulationId: string,
+    roomId: string,
     body: CreatePostRequest,
     signal?: AbortSignal,
   ): Promise<CreatePostResponse> {
     return request<CreatePostResponse>(
-      `/api/rooms/${encodeURIComponent(simulationId)}/posts`,
+      `/api/rooms/${encodeURIComponent(roomId)}/posts`,
       { method: "POST", body, ...(signal ? { signal } : {}) },
     );
   },
@@ -806,15 +806,15 @@ export const api = {
   },
 };
 
-/** URL of the SSE stream for one simulation. */
-export function simulationEventsUrl(simulationId: string): string {
-  return `${API_BASE_URL}/api/rooms/${encodeURIComponent(simulationId)}/events`;
+/** URL of the SSE stream for one room. */
+export function roomEventsUrl(roomId: string): string {
+  return `${API_BASE_URL}/api/rooms/${encodeURIComponent(roomId)}/events`;
 }
 
 /**
  * URL of the SSE stream behind the unified feed (§11.1).
  *
- * No id: this stream carries every simulation's public events, and it is the one
+ * No id: this stream carries every room's public events, and it is the one
  * events endpoint a signed-out visitor may open.
  */
 export function feedEventsUrl(): string {
