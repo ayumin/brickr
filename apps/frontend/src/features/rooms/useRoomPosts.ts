@@ -5,69 +5,10 @@ import { api, isAbortError, toErrorMessage } from "../../services/api-client";
 import { subscribeToSimulationEvents } from "../../services/sse-client";
 import { createRefreshScheduler } from "../../services/sse-refresh";
 import type { ConnectionState, ResponseActivity } from "../../types";
-
-type RoomPostsState = {
-  posts: PostDto[];
-  activities: ResponseActivity[];
-  connection: ConnectionState;
-  loading: boolean;
-  error: string | null;
-};
-
-const INITIAL_STATE: RoomPostsState = {
-  posts: [],
-  activities: [],
-  connection: "connecting",
-  loading: true,
-  error: null,
-};
-
-type RoomPostsAction =
-  | { kind: "reset" }
-  | { kind: "hydrated"; posts: PostDto[] }
-  | { kind: "loadFailed"; message: string }
-  | { kind: "upsertPosts"; posts: PostDto[] }
-  | { kind: "responseStarted"; activity: ResponseActivity }
-  | { kind: "responseFinished"; activityId: string }
-  | { kind: "connection"; connection: ConnectionState }
-  | { kind: "disconnected" };
-
-function comparePosts(a: PostDto, b: PostDto): number {
-  if (a.createdAt !== b.createdAt) return a.createdAt < b.createdAt ? -1 : 1;
-  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
-}
-
-function mergePosts(existing: PostDto[], incoming: PostDto[]): PostDto[] {
-  if (incoming.length === 0) return existing;
-  const byId = new Map<string, PostDto>();
-  for (const post of existing) byId.set(post.id, post);
-  for (const post of incoming) byId.set(post.id, post);
-  return [...byId.values()].sort(comparePosts);
-}
-
-function reduce(state: RoomPostsState, action: RoomPostsAction): RoomPostsState {
-  switch (action.kind) {
-    case "reset":
-      return INITIAL_STATE;
-    case "hydrated":
-      return { ...state, posts: mergePosts(state.posts, action.posts), loading: false, error: null };
-    case "loadFailed":
-      return { ...state, loading: false, error: action.message };
-    case "upsertPosts":
-      return { ...state, posts: mergePosts(state.posts, action.posts) };
-    case "responseStarted":
-      if (state.activities.some((a) => a.activityId === action.activity.activityId)) return state;
-      return { ...state, activities: [...state.activities, action.activity] };
-    case "responseFinished":
-      return { ...state, activities: state.activities.filter((a) => a.activityId !== action.activityId) };
-    case "connection":
-      return state.connection === action.connection ? state : { ...state, connection: action.connection };
-    case "disconnected":
-      return { ...state, connection: "disconnected", activities: [] };
-    default:
-      return state;
-  }
-}
+import {
+  INITIAL_ROOM_POSTS_STATE,
+  reduceRoomPosts,
+} from "./room-posts-state";
 
 export type UseRoomPostsResult = {
   posts: PostDto[];
@@ -88,7 +29,7 @@ export type UseRoomPostsResult = {
  * `useFeed` provides.
  */
 export function useRoomPosts(roomId: string, enabled = true): UseRoomPostsResult {
-  const [state, dispatch] = useReducer(reduce, INITIAL_STATE);
+  const [state, dispatch] = useReducer(reduceRoomPosts, INITIAL_ROOM_POSTS_STATE);
   const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {

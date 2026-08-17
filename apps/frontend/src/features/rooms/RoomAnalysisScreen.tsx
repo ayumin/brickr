@@ -12,7 +12,12 @@ import { useSelectedRoom } from "./useSelectedRoom";
 export function RoomAnalysisScreen({ roomId }: { roomId: string }) {
   const selectedRoom = useSelectedRoom(roomId);
 
-  if (selectedRoom.state.status === "loading" || selectedRoom.state.status === "denied") {
+  if (selectedRoom.state.status === "denied") {
+    // useSelectedRoom centralizes denial handling and redirects to the feed.
+    return null;
+  }
+
+  if (selectedRoom.state.status === "loading") {
     return (
       <div className="flex items-center justify-center px-4 py-16">
         <Spinner size="lg" />
