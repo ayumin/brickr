@@ -167,7 +167,7 @@ function EnvironmentPanel({
       {error ? <ErrorBanner message="環境設定を保存できませんでした" detail={error} onDismiss={() => setError(null)} /> : null}
       <div className="overflow-hidden rounded-xl border border-line">
         <table className="w-full text-left text-sm">
-          <thead className="bg-surface-muted text-ink-muted">
+          <thead className="bg-surface-raised text-ink-muted">
             <tr>
               <th className="px-4 py-3">変数</th>
               <th className="px-4 py-3">現在値</th>
@@ -285,7 +285,7 @@ function ModelsPanel({ settings, loading }: SettingsPanelProps) {
                     {providerLabel(provider.providerId)}
                   </span>
                   <span
-                    className={`rounded-full px-2 py-1 text-xs ${provider.available ? "bg-accent/15 text-accent" : "bg-surface-muted text-ink-faint"}`}
+                    className={`rounded-full px-2 py-1 text-xs ${provider.available ? "bg-accent/15 text-accent" : "bg-surface-raised text-ink-faint"}`}
                   >
                     {provider.available ? "利用可能" : "未設定"}
                   </span>
@@ -303,7 +303,7 @@ function ModelsPanel({ settings, loading }: SettingsPanelProps) {
         </h4>
         <div className="max-h-64 overflow-auto rounded-xl border border-line">
           <table className="w-full border-separate border-spacing-0 text-left text-sm">
-            <thead className="bg-surface-muted text-ink-muted">
+            <thead className="bg-surface-raised text-ink-muted">
               <tr>
                 <th className="border-b border-line px-4 py-3">プロバイダー</th>
                 <th className="border-b border-line px-4 py-3">モデル</th>
@@ -355,13 +355,13 @@ function UsagePanel({ settings, loading }: SettingsPanelProps) {
         <UsageMetric label="合計" value={totals.total} detail={costDetail} />
       </div>
       {settings.llm.usage.entries.length === 0 ? (
-        <p className="rounded-xl border border-line bg-surface-muted p-5 text-sm text-ink-muted">
+        <p className="rounded-xl border border-line bg-surface-raised p-5 text-sm text-ink-muted">
           まだLLMの利用記録はありません。
         </p>
       ) : (
         <div className="overflow-auto rounded-xl border border-line">
           <table className="w-full text-left text-sm">
-            <thead className="bg-surface-muted text-ink-muted">
+            <thead className="bg-surface-raised text-ink-muted">
               <tr>
                 <th className="px-3 py-3">プロバイダー / モデル</th>
                 <th className="px-3 py-3 text-right">回数</th>

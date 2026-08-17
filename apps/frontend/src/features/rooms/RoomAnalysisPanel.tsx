@@ -78,7 +78,7 @@ function SnapshotDisplay({ snapshot }: { snapshot: RoomAnalysisSnapshotDto }) {
 
     return (
       <div className="space-y-3">
-        <p className="text-xs text-error">
+        <p className="text-xs text-danger">
           分析に失敗しました。
         </p>
         {lastSummary ? (
@@ -203,7 +203,7 @@ export function RoomAnalysisPanel({ room }: RoomAnalysisPanelProps) {
             : "まだ分析が生成されていません。"}
         </p>
       ) : state.status === "error" ? (
-        <p className="text-xs text-error">{state.message}</p>
+        <p className="text-xs text-danger">{state.message}</p>
       ) : (
         <SnapshotDisplay snapshot={state.snapshot} />
       )}

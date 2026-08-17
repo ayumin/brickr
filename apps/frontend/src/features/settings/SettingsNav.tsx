@@ -56,7 +56,7 @@ export function SettingsNav({
   };
 
   return (
-    <aside className="w-full shrink-0 border-b border-line bg-surface-muted p-3 sm:w-56 sm:border-b-0 sm:border-r sm:p-4">
+    <aside className="w-full shrink-0 border-b border-line bg-surface-raised p-3 sm:w-56 sm:border-b-0 sm:border-r sm:p-4">
       <nav aria-label="設定区分" className="flex gap-1 overflow-x-auto sm:block sm:space-y-1">
         {USER_ITEMS.map((item) => (
           <NavButton

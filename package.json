@@ -13,6 +13,7 @@
     "test": "pnpm -r test",
     "test:e2e": "playwright test",
     "quality:legacy": "node scripts/check-no-legacy-refs.mjs",
+    "quality:design-tokens": "node scripts/check-design-tokens.mjs",
     "seed": "pnpm --filter @brickr/backend seed",
     "db:push": "pnpm --filter @brickr/backend db:push",
     "db:reset": "pnpm --filter @brickr/backend db:reset"

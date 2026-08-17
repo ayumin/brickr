@@ -70,6 +70,7 @@
 
   --color-live: #6fae7f;
   --color-danger: #e0665c;
+  --color-danger-strong: #c2453c;
   --color-warn: #e0a34a;
 
   --font-sans:
@@ -115,6 +116,12 @@
  * accent-strong #b8501f is 3.31-3.82 here: it is the pressed/hover *fill* for an
  * accent surface, not a text colour, and white on it clears AA. Do not use it as
  * text on a dark surface.
+ *
+ * danger-strong #c2453c is 4.99 against white: danger itself is only 3.37
+ * against white, which fails AA for a solid-fill button (e.g. the delete
+ * confirm action) at the 14px semibold this app uses - too small to count as
+ * large text. Use danger for text on a surface, danger-strong for white text
+ * on a filled button.
  */
 html,
 html[data-theme="brickr-dark"] {
@@ -135,6 +142,7 @@ html[data-theme="brickr-dark"] {
   --color-accent-soft: #2b1712;
   --color-live: #6fae7f;
   --color-danger: #e0665c;
+  --color-danger-strong: #c2453c;
   --color-warn: #e0a34a;
 }
 
@@ -151,6 +159,9 @@ html[data-theme="brickr-dark"] {
  *   live          #3a7449   4.52-5.56   AA  (prototype #3f7f52 fell to 3.91 on hover)
  *   danger        #b93427   4.76-5.86   AA  (prototype #c0392b fell to 4.42 on hover)
  *   warn          #8a5a10   4.81-5.92   AA
+ *
+ * danger-strong is the same #b93427 as danger here: 5.86 against white already
+ * clears AA for a solid-fill button, so light theme needs no separate shade.
  */
 html[data-theme="brickr-light"] {
   color-scheme: light;
@@ -169,6 +180,7 @@ html[data-theme="brickr-light"] {
   --color-accent-soft: #f9ece7;
   --color-live: #3a7449;
   --color-danger: #b93427;
+  --color-danger-strong: #b93427;
   --color-warn: #8a5a10;
 }
 

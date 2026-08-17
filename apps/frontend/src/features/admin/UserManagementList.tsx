@@ -220,7 +220,7 @@ export function UserManagementList() {
                           className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                             user.status === "suspended"
                               ? "bg-danger/10 text-danger"
-                              : "bg-emerald-400/10 text-emerald-600"
+                              : "bg-live/10 text-live"
                           }`}
                         >
                           {statusLabel(user.status)}

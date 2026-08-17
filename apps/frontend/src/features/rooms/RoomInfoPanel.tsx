@@ -131,7 +131,7 @@ export function RoomInfoContent({
               type="button"
               disabled={busy}
               onClick={() => setConfirmDialog({ kind: "delete" })}
-              className="flex w-full items-center gap-2 rounded-xl border border-line px-3 py-2 text-sm text-error transition hover:bg-error/10 disabled:opacity-50"
+              className="flex w-full items-center gap-2 rounded-xl border border-line px-3 py-2 text-sm text-danger transition hover:bg-danger/10 disabled:opacity-50"
             >
               <Icon name="trash" />
               削除する
@@ -171,7 +171,7 @@ export function RoomInfoContent({
                 onClick={() => void handleConfirm()}
                 className={`rounded-full px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 ${
                   confirmDialog.kind === "delete"
-                    ? "bg-error hover:bg-error/80"
+                    ? "bg-danger-strong hover:bg-danger"
                     : "bg-accent-strong hover:bg-accent"
                 }`}
               >

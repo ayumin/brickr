@@ -14,7 +14,7 @@ const CONNECTION_LABEL: Record<ConnectionState, string> = {
 
 const CONNECTION_DOT: Record<ConnectionState, string> = {
   connecting: "bg-ink-faint",
-  open: "bg-emerald-400",
+  open: "bg-live",
   reconnecting: "bg-warn",
   disconnected: "bg-ink-faint",
 };
