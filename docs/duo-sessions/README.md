@@ -61,8 +61,21 @@ query {
 }' | jq '.data.duoWorkflowWorkflows.nodes'
 ```
 
-`updatedAfter` で期間を絞り込めます。`type` / `excludeTypes` で `code_review/v1` を
+`updatedAfter` で期間を絞り込めます。`excludeTypes` で `code_review/v1` を
 除外すると、実装セッションだけを取り出せます。
+
+```shell
+glab api graphql -f query='
+query {
+  duoWorkflowWorkflows(
+    projectPath: "gl-demo-ultimate-aaizawa/brickr",
+    first: 50,
+    excludeTypes: ["code_review/v1"]
+  ) {
+    nodes { id goal workflowDefinition createdAt updatedAt archived }
+  }
+}' | jq '.data.duoWorkflowWorkflows.nodes'
+```
 
 > **ページネーションに注意:** 上記クエリはいずれも `first: 50` で最大 50 件しか返しません。
 > セッション数が 50 を超えると、超過分は**通知なしに切り捨てられます**。
