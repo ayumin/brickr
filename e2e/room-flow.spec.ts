@@ -10,6 +10,12 @@ test("signed-out feed remains read-only", async ({ page }) => {
   await expect(page.getByRole("button", { name: "投稿する" })).toHaveCount(0);
 });
 
+test("signup pre-fills an invite code from the URL", async ({ page }) => {
+  await page.goto("/signup?inviteCode=INVITE-FROM-URL");
+
+  await expect(page.getByLabel("招待コード")).toHaveValue("INVITE-FROM-URL");
+});
+
 test("admin can sign in, create a room, and publish a post", async ({ page }) => {
   await page.goto("/login");
   await page.getByLabel("メールアドレス").fill(adminEmail);

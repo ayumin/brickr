@@ -8,6 +8,7 @@ import { validateSignupForm } from "./auth-utils";
 
 export type SignupFormProps = {
   onSuccess: (user: AuthUserDto) => void;
+  initialInviteCode?: string;
 };
 
 type FormState = {
@@ -63,8 +64,8 @@ function toSignupRequest(form: FormState): SignupRequest {
 }
 
 /** The signup fields, validation, and submit, shared by `AuthDialog` and `SignupPage` (Issue #50 / §18.1). */
-export function SignupForm({ onSuccess }: SignupFormProps) {
-  const [form, setForm] = useState<FormState>(EMPTY_FORM);
+export function SignupForm({ onSuccess, initialInviteCode = "" }: SignupFormProps) {
+  const [form, setForm] = useState<FormState>(() => ({ ...EMPTY_FORM, inviteCode: initialInviteCode }));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
