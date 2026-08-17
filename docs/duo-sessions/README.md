@@ -64,6 +64,20 @@ query {
 `updatedAfter` で期間を絞り込めます。`type` / `excludeTypes` で `code_review/v1` を
 除外すると、実装セッションだけを取り出せます。
 
+> **ページネーションに注意:** 上記クエリはいずれも `first: 50` で最大 50 件しか返しません。
+> セッション数が 50 を超えると、超過分は**通知なしに切り捨てられます**。
+> 取りこぼしを防ぐには、レスポンスの `pageInfo` を確認してください。
+>
+> ```graphql
+> duoWorkflowWorkflows(first: 50, after: $cursor) {
+>   pageInfo { hasNextPage endCursor }
+>   nodes { ... }
+> }
+> ```
+>
+> `pageInfo.hasNextPage` が `true` の場合は `endCursor` の値を次のクエリの `after` に渡し、
+> `hasNextPage` が `false` になるまで繰り返します。
+
 利用可能なフィールドは introspection で確認できます。
 
 ```shell
