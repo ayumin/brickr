@@ -25,6 +25,7 @@ import {
   InvalidStatusTransitionError,
 } from "./room-membership-service.js";
 import { RoomNotFoundError, RoomArchivedError, RoomForbiddenError } from "./room-service.js";
+import { FeedRoomImmutableError } from "./feed-room-guard.js";
 import type { Simulation, SimulationActor } from "./simulation.js";
 
 
@@ -47,6 +48,11 @@ function makeRoom(overrides: Partial<Simulation> = {}): Simulation {
     createdByUserId: OWNER.id,
     ...overrides,
   };
+}
+
+/** The reserved Feed room: unowned (admin-only), scope: 'global'. */
+function makeFeedRoom(overrides: Partial<Simulation> = {}): Simulation {
+  return makeRoom({ scope: "global", createdByUserId: undefined, ...overrides });
 }
 
 function makeMembership(overrides: Partial<RoomMembership> = {}): RoomMembership {
@@ -307,6 +313,32 @@ describe("RoomMembershipService.invite", () => {
     ).rejects.toThrow(RoomNotFoundError);
   });
 
+  it("throws FeedRoomImmutableError when the target is the Feed room (admin)", async () => {
+    const { service } = makeService({
+      findById: vi.fn(() => Promise.resolve(makeFeedRoom())),
+    });
+
+    await expect(
+      service.invite(
+        { roomId: "room-1", targetId: "user-target", targetKind: "user", inviterId: ADMIN.id },
+        ADMIN,
+      ),
+    ).rejects.toThrow(FeedRoomImmutableError);
+  });
+
+  it("throws RoomForbiddenError (not FeedRoomImmutableError) for a non-admin on the Feed room", async () => {
+    const { service } = makeService({
+      findById: vi.fn(() => Promise.resolve(makeFeedRoom())),
+    });
+
+    await expect(
+      service.invite(
+        { roomId: "room-1", targetId: "user-target", targetKind: "user", inviterId: OTHER.id },
+        OTHER,
+      ),
+    ).rejects.toThrow(RoomForbiddenError);
+  });
+
 });
 
 // ── remove ────────────────────────────────────────────────────────────────────
@@ -389,6 +421,24 @@ describe("RoomMembershipService.remove", () => {
     await expect(service.remove("room-1", "missing-mem", OWNER)).rejects.toThrow(
       MembershipNotFoundError,
     );
+  });
+
+  it("throws FeedRoomImmutableError when the target is the Feed room (admin)", async () => {
+    const { service } = makeService({
+      findById: vi.fn(() => Promise.resolve(makeFeedRoom())),
+    });
+
+    await expect(service.remove("room-1", "mem-1", ADMIN)).rejects.toThrow(
+      FeedRoomImmutableError,
+    );
+  });
+
+  it("throws RoomForbiddenError (not FeedRoomImmutableError) for a non-admin on the Feed room", async () => {
+    const { service } = makeService({
+      findById: vi.fn(() => Promise.resolve(makeFeedRoom())),
+    });
+
+    await expect(service.remove("room-1", "mem-1", OTHER)).rejects.toThrow(RoomForbiddenError);
   });
 });
 
@@ -477,6 +527,22 @@ describe("RoomMembershipService.ban", () => {
 
     await expect(service.ban("room-1", "mem-1", OTHER)).rejects.toThrow(RoomForbiddenError);
   });
+
+  it("throws FeedRoomImmutableError when the target is the Feed room (admin)", async () => {
+    const { service } = makeService({
+      findById: vi.fn(() => Promise.resolve(makeFeedRoom())),
+    });
+
+    await expect(service.ban("room-1", "mem-1", ADMIN)).rejects.toThrow(FeedRoomImmutableError);
+  });
+
+  it("throws RoomForbiddenError (not FeedRoomImmutableError) for a non-admin on the Feed room", async () => {
+    const { service } = makeService({
+      findById: vi.fn(() => Promise.resolve(makeFeedRoom())),
+    });
+
+    await expect(service.ban("room-1", "mem-1", OTHER)).rejects.toThrow(RoomForbiddenError);
+  });
 });
 
 // ── unban ─────────────────────────────────────────────────────────────────────
@@ -529,6 +595,24 @@ describe("RoomMembershipService.unban", () => {
     await service.unban("room-1", "mem-1", OWNER);
 
     expect(memberships.updateStatus).toHaveBeenCalledWith("mem-1", "removed");
+  });
+
+  it("throws FeedRoomImmutableError when the target is the Feed room (admin)", async () => {
+    const { service } = makeService({
+      findById: vi.fn(() => Promise.resolve(makeFeedRoom())),
+    });
+
+    await expect(service.unban("room-1", "mem-1", ADMIN)).rejects.toThrow(
+      FeedRoomImmutableError,
+    );
+  });
+
+  it("throws RoomForbiddenError (not FeedRoomImmutableError) for a non-admin on the Feed room", async () => {
+    const { service } = makeService({
+      findById: vi.fn(() => Promise.resolve(makeFeedRoom())),
+    });
+
+    await expect(service.unban("room-1", "mem-1", OTHER)).rejects.toThrow(RoomForbiddenError);
   });
 });
 
@@ -616,6 +700,24 @@ describe("RoomMembershipService.approve", () => {
 
     await expect(service.approve("room-1", "mem-1", OTHER)).rejects.toThrow(RoomForbiddenError);
   });
+
+  it("throws FeedRoomImmutableError when the target is the Feed room (admin)", async () => {
+    const { service } = makeService({
+      findById: vi.fn(() => Promise.resolve(makeFeedRoom())),
+    });
+
+    await expect(service.approve("room-1", "mem-1", ADMIN)).rejects.toThrow(
+      FeedRoomImmutableError,
+    );
+  });
+
+  it("throws RoomForbiddenError (not FeedRoomImmutableError) for a non-admin on the Feed room", async () => {
+    const { service } = makeService({
+      findById: vi.fn(() => Promise.resolve(makeFeedRoom())),
+    });
+
+    await expect(service.approve("room-1", "mem-1", OTHER)).rejects.toThrow(RoomForbiddenError);
+  });
 });
 
 // ── reject ────────────────────────────────────────────────────────────────────
@@ -659,5 +761,23 @@ describe("RoomMembershipService.reject", () => {
     await expect(service.reject("room-1", "missing-mem", OWNER)).rejects.toThrow(
       MembershipNotFoundError,
     );
+  });
+
+  it("throws FeedRoomImmutableError when the target is the Feed room (admin)", async () => {
+    const { service } = makeService({
+      findById: vi.fn(() => Promise.resolve(makeFeedRoom())),
+    });
+
+    await expect(service.reject("room-1", "mem-1", ADMIN)).rejects.toThrow(
+      FeedRoomImmutableError,
+    );
+  });
+
+  it("throws RoomForbiddenError (not FeedRoomImmutableError) for a non-admin on the Feed room", async () => {
+    const { service } = makeService({
+      findById: vi.fn(() => Promise.resolve(makeFeedRoom())),
+    });
+
+    await expect(service.reject("room-1", "mem-1", OTHER)).rejects.toThrow(RoomForbiddenError);
   });
 });

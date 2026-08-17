@@ -28,6 +28,7 @@ import {
   VisibilityImmutableError,
 } from "./room-service.js";
 import { CannotModifyOwnerError } from "./room-membership-errors.js";
+import { FeedRoomImmutableError } from "./feed-room-guard.js";
 import type { Simulation, SimulationActor } from "./simulation.js";
 import type { RoomMembership } from "./room-membership-repository.js";
 
@@ -51,6 +52,11 @@ function makeRoom(overrides: Partial<Simulation> = {}): Simulation {
     createdByUserId: OWNER.id,
     ...overrides,
   };
+}
+
+/** The reserved Feed room: unowned (admin-only), scope: 'global'. */
+function makeFeedRoom(overrides: Partial<Simulation> = {}): Simulation {
+  return makeRoom({ scope: "global", createdByUserId: undefined, ...overrides });
 }
 
 function makeSimulationRepo(
@@ -236,6 +242,26 @@ describe("RoomService.update", () => {
     );
   });
 
+  it("throws FeedRoomImmutableError when the target is the Feed room (admin)", async () => {
+    const { service } = makeService({
+      findById: vi.fn(() => Promise.resolve(makeFeedRoom())),
+    });
+
+    await expect(service.update("room-1", { title: "x" }, ADMIN)).rejects.toThrow(
+      FeedRoomImmutableError,
+    );
+  });
+
+  it("throws RoomForbiddenError (not FeedRoomImmutableError) for a non-admin on the Feed room", async () => {
+    const { service } = makeService({
+      findById: vi.fn(() => Promise.resolve(makeFeedRoom())),
+    });
+
+    await expect(service.update("room-1", { title: "x" }, OTHER)).rejects.toThrow(
+      RoomForbiddenError,
+    );
+  });
+
 });
 
 // ── archive ───────────────────────────────────────────────────────────────────
@@ -270,6 +296,22 @@ describe("RoomService.archive", () => {
     });
 
     await expect(service.archive("missing", OWNER)).rejects.toThrow(RoomNotFoundError);
+  });
+
+  it("throws FeedRoomImmutableError when the target is the Feed room (admin)", async () => {
+    const { service } = makeService({
+      findById: vi.fn(() => Promise.resolve(makeFeedRoom())),
+    });
+
+    await expect(service.archive("room-1", ADMIN)).rejects.toThrow(FeedRoomImmutableError);
+  });
+
+  it("throws RoomForbiddenError (not FeedRoomImmutableError) for a non-admin on the Feed room", async () => {
+    const { service } = makeService({
+      findById: vi.fn(() => Promise.resolve(makeFeedRoom())),
+    });
+
+    await expect(service.archive("room-1", OTHER)).rejects.toThrow(RoomForbiddenError);
   });
 
 });
@@ -319,6 +361,22 @@ describe("RoomService.delete", () => {
     });
 
     await expect(service.delete("room-1", OWNER)).rejects.toThrow(RoomNotArchivedError);
+  });
+
+  it("throws FeedRoomImmutableError when the target is the Feed room (admin)", async () => {
+    const { service } = makeService({
+      findById: vi.fn(() => Promise.resolve(makeFeedRoom({ status: "archived" }))),
+    });
+
+    await expect(service.delete("room-1", ADMIN)).rejects.toThrow(FeedRoomImmutableError);
+  });
+
+  it("throws RoomForbiddenError (not FeedRoomImmutableError) for a non-admin on the Feed room", async () => {
+    const { service } = makeService({
+      findById: vi.fn(() => Promise.resolve(makeFeedRoom({ status: "archived" }))),
+    });
+
+    await expect(service.delete("room-1", OTHER)).rejects.toThrow(RoomForbiddenError);
   });
 
 });
@@ -444,6 +502,14 @@ describe("RoomService.join", () => {
 
     await expect(service.join("missing", OTHER)).rejects.toThrow(RoomNotFoundError);
   });
+
+  it("throws FeedRoomImmutableError when the target is the Feed room", async () => {
+    const { service } = makeService({
+      findById: vi.fn(() => Promise.resolve(makeFeedRoom())),
+    });
+
+    await expect(service.join("room-1", OTHER)).rejects.toThrow(FeedRoomImmutableError);
+  });
 });
 
 // ── inviteByHandle ────────────────────────────────────────────────────────────
@@ -540,6 +606,26 @@ describe("RoomService.inviteByHandle", () => {
     );
     expect(result.status).toBe("active");
   });
+
+  it("throws FeedRoomImmutableError when the target is the Feed room (owner-equivalent admin)", async () => {
+    const { service } = makeService({
+      findById: vi.fn(() => Promise.resolve(makeFeedRoom())),
+    });
+
+    await expect(service.inviteByHandle("room-1", "other", ADMIN)).rejects.toThrow(
+      FeedRoomImmutableError,
+    );
+  });
+
+  it("throws RoomForbiddenError (not FeedRoomImmutableError) for a non-admin on the Feed room", async () => {
+    const { service } = makeService({
+      findById: vi.fn(() => Promise.resolve(makeFeedRoom())),
+    });
+
+    await expect(service.inviteByHandle("room-1", "other", OTHER)).rejects.toThrow(
+      RoomForbiddenError,
+    );
+  });
 });
 
 // ── approveMembership ─────────────────────────────────────────────────────────
@@ -579,6 +665,26 @@ describe("RoomService.approveMembership", () => {
       RoomForbiddenError,
     );
   });
+
+  it("throws FeedRoomImmutableError when the target is the Feed room (admin)", async () => {
+    const { service } = makeService({
+      findById: vi.fn(() => Promise.resolve(makeFeedRoom())),
+    });
+
+    await expect(service.approveMembership("room-1", OTHER.id, ADMIN)).rejects.toThrow(
+      FeedRoomImmutableError,
+    );
+  });
+
+  it("throws RoomForbiddenError (not FeedRoomImmutableError) for a non-admin on the Feed room", async () => {
+    const { service } = makeService({
+      findById: vi.fn(() => Promise.resolve(makeFeedRoom())),
+    });
+
+    await expect(service.approveMembership("room-1", OTHER.id, OTHER)).rejects.toThrow(
+      RoomForbiddenError,
+    );
+  });
 });
 
 // ── removeMembership ──────────────────────────────────────────────────────────
@@ -612,6 +718,26 @@ describe("RoomService.removeMembership", () => {
       CannotModifyOwnerError,
     );
     expect(memberships.updateStatusByMember).not.toHaveBeenCalled();
+  });
+
+  it("throws FeedRoomImmutableError when the target is the Feed room (admin)", async () => {
+    const { service } = makeService({
+      findById: vi.fn(() => Promise.resolve(makeFeedRoom())),
+    });
+
+    await expect(service.removeMembership("room-1", OTHER.id, ADMIN)).rejects.toThrow(
+      FeedRoomImmutableError,
+    );
+  });
+
+  it("throws RoomForbiddenError (not FeedRoomImmutableError) for a non-admin on the Feed room", async () => {
+    const { service } = makeService({
+      findById: vi.fn(() => Promise.resolve(makeFeedRoom())),
+    });
+
+    await expect(service.removeMembership("room-1", OTHER.id, OTHER)).rejects.toThrow(
+      RoomForbiddenError,
+    );
   });
 
 });
@@ -660,6 +786,26 @@ describe("RoomService.banMember", () => {
       CannotModifyOwnerError,
     );
     expect(memberships.updateStatusByMember).not.toHaveBeenCalled();
+  });
+
+  it("throws FeedRoomImmutableError when the target is the Feed room (admin)", async () => {
+    const { service } = makeService({
+      findById: vi.fn(() => Promise.resolve(makeFeedRoom())),
+    });
+
+    await expect(service.banMember("room-1", OTHER.id, ADMIN)).rejects.toThrow(
+      FeedRoomImmutableError,
+    );
+  });
+
+  it("throws RoomForbiddenError (not FeedRoomImmutableError) for a non-admin on the Feed room", async () => {
+    const { service } = makeService({
+      findById: vi.fn(() => Promise.resolve(makeFeedRoom())),
+    });
+
+    await expect(service.banMember("room-1", OTHER.id, OTHER)).rejects.toThrow(
+      RoomForbiddenError,
+    );
   });
 
 });
