@@ -251,5 +251,10 @@ glab api projects/:id/issues/:iid/notes \
   may not exist and MR creation fails.
 - **No `--state` on `mr list`** — use `--all`, `--merged`, or `--closed`.
 - **No `--body` flag** — `--body` is a `gh` flag. `glab` uses `--description`.
+- **Never assemble a Markdown body inline for `--description`** — backticks and
+  `$` inside the double-quoted string are shell-expanded, silently mangling the
+  description while `glab` still exits 0 and creates the merge request. Write
+  the body to a file and pass `--description "$(cat /tmp/desc.md)"`. See
+  [Descriptions on `create` / `update`](#descriptions-on-create--update--always-go-through-a-file).
 - **Labels** — `--label` to add, `--unlabel` to remove. Scoped labels like
   `status::doing` auto-replace within their scope.
