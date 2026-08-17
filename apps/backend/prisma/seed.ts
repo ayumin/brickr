@@ -89,8 +89,7 @@ async function main(): Promise<void> {
   //
   // The unified feed's embedded composer posts new top-level threads into this
   // room directly, so posting from the feed never requires picking a room
-  // first. An ordinary public room in every other respect - unowned, like the
-  // demo rooms below.
+  // first. It is hidden from the user-facing Room list and remains unowned.
 
   await prisma.room.upsert({
     where: { id: DEFAULT_ROOM_ID },

@@ -25,10 +25,10 @@ export const MEMBER_ROLES = ["owner", "member"] as const;
 export type MemberRole = (typeof MEMBER_ROLES)[number];
 
 /**
- * A normal, always-seeded public room: the unified feed's embedded composer
- * targets it directly so a new top-level post never requires the poster to
- * pick a room first. Ordinary in every other respect (no special scope, no
- * mutation guard) - just a fixed id both sides can agree on without a lookup.
+ * An always-seeded public room: the unified feed's embedded composer targets
+ * it directly so a new top-level post never requires the poster to pick a
+ * room first. It remains a real Room for persistence and feed aggregation,
+ * but is intentionally omitted from the user-facing Room list.
  */
 export const DEFAULT_ROOM_ID = "20000000-0000-4000-8000-000000000001";
 export const DEFAULT_ROOM_TITLE = "フィード";

@@ -172,7 +172,8 @@ docs: explain local database setup
 
 ### Roomと非同期イベント
 
-- Postは必ず`roomId`を持ち、横断Feedを投稿先として扱わないでください。
+- Postは必ず`roomId`を持ちます。Feedからの新規投稿は固定Feed Roomを使いますが、このRoomを
+  `GET /api/rooms`の一覧へ露出させないでください。
 - 遅延・自律処理はScheduledEventへ登録し、API process内のfire-and-forgetを増やさないでください。
 - worker claimは原子的に行い、lock timeout、retry、cancel規則を維持してください。
 - Character単位の失敗で、他CharacterやUser postを失敗させないでください。

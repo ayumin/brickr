@@ -7,7 +7,8 @@
 ## 1. 設計原則
 
 - Roomを会話の唯一のコンテナとし、Postは必ず`roomId`を持つ。
-- Feedは投稿先を持たない、閲覧可能なRoomを横断するread-only viewとする。
+- Feedへの新規投稿は固定IDの非表示Roomへ保存し、そのRoom自体はRoom一覧に表示しない。
+- 統合Feedは固定Roomを含む、閲覧可能なRoomを横断するviewとする。
 - UserとCastはRoomMembershipで同じ参加ライフサイクルを使う。
 - 遅延・自律処理はPostgreSQL上のScheduledEventをworkerがclaimして実行する。
 - SSEは状態変更通知に限定し、正しい状態はRESTから再取得する。
@@ -48,7 +49,7 @@ apps/
 │       └── llm/            provider abstraction、budget、usage
 ├── frontend/src/
 │   ├── app/                persistent shellとrouting
-│   ├── features/feed/      read-only unified Feed
+│   ├── features/feed/      unified Feedと非表示Feed Roomへの新規投稿
 │   ├── features/rooms/     Room list/detail/management
 │   ├── features/composer/  Room内post/reply/quote
 │   └── services/           REST/SSE clients
@@ -164,8 +165,9 @@ idempotentに投入します。本番相当環境では`prisma migrate deploy`�
 
 ## 10. Frontend
 
-AppShellはFeedと開いたRoomを保持し、route移動で不要にunmountしません。FeedScreenはread-only、
-RoomScreenだけがnew post/reply/quote composerを開きます。`useThreadFeed`が全体FeedとRoom Feedを
+AppShellはFeedと開いたRoomを保持し、route移動で不要にunmountしません。FeedScreenからの新規投稿は
+一覧に出さない固定Feed Roomへ保存します。RoomScreenではRoomへのnew post/reply/quote composerを
+開きます。`useThreadFeed`が全体FeedとRoom Feedを
 共通化し、SSE通知時のrefresh、cursor paging、重複排除を担当します。認可はserverのcapabilitiesを
 表示へ反映し、frontendで独自に再計算しません。
 
