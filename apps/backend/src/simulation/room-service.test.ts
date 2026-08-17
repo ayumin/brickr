@@ -44,6 +44,7 @@ function makeRoom(overrides: Partial<Simulation> = {}): Simulation {
     title: "テストルーム",
     status: "active",
     visibility: "public",
+    scope: "room",
     tags: [],
     createdAt: new Date("2026-08-16T00:00:00.000Z"),
     lastActivityAt: new Date("2026-08-16T00:00:00.000Z"),

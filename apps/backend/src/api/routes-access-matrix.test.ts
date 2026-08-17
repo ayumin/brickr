@@ -68,6 +68,7 @@ function room(id: string, overrides: Partial<Simulation> = {}): Simulation {
     title: id,
     status: "active",
     visibility: "public",
+    scope: "room",
     tags: [],
     createdAt: NOW,
     lastActivityAt: NOW,

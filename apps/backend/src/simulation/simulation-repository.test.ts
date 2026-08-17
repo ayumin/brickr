@@ -24,6 +24,7 @@ function makeRoomRow(overrides: Record<string, unknown> = {}) {
     title: "テスト",
     status: "active",
     visibility: "public",
+    scope: "room",
     createdAt,
     updatedAt: createdAt,
     lastActivityAt: createdAt,
@@ -45,6 +46,7 @@ describe("SimulationRepository.findAllVisibleTo", () => {
         title: "履歴",
         status: "active",
         visibility: "public",
+        scope: "room",
         tags: ["history"],
         createdAt,
         updatedAt: createdAt,
@@ -134,14 +136,15 @@ describe("SimulationRepository.findAllVisibleTo", () => {
     );
   });
 
-  it("puts no status or visibility condition on an administrator's list", async () => {
+  it("puts no status or visibility condition on an administrator's list, but still filters by scope", async () => {
     const { db, findMany } = makeDb([]);
 
     await new SimulationRepository(db).findAllVisibleTo(ADMIN);
 
     const call = firstFindManyArgs(findMany);
-    // Admins do not need visibility or lifecycle filters.
-    expect(call).toHaveProperty("where", {});
+    // Admins do not need visibility or lifecycle filters, but the scope filter
+    // always applies so the Feed room (scope: 'global') is excluded from the list.
+    expect(call).toHaveProperty("where", { scope: "room" });
   });
 
   it("includes pending membership count in the _count select", async () => {
