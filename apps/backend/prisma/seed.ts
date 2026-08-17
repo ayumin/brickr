@@ -98,12 +98,14 @@ async function main(): Promise<void> {
       title: DEFAULT_ROOM_TITLE,
       status: "active",
       visibility: "public",
+      scope: "global",
       createdByUserId: null,
     },
     update: {
       title: DEFAULT_ROOM_TITLE,
       status: "active",
       visibility: "public",
+      scope: "global",
     },
   });
   console.log("seeded default room");
@@ -150,6 +152,7 @@ async function seedDemoRooms(): Promise<void> {
         description: "誰でも参加できる公開ルームです。",
         status: "active",
         visibility: "public",
+        scope: "room",
         tags: ["demo", "public"],
         createdByUserId: null,
       },
@@ -158,6 +161,7 @@ async function seedDemoRooms(): Promise<void> {
         description: "誰でも参加できる公開ルームです。",
         status: "active",
         visibility: "public",
+        scope: "room",
         tags: ["demo", "public"],
       },
     });
@@ -171,6 +175,7 @@ async function seedDemoRooms(): Promise<void> {
         description: "誰でも閲覧できますが、参加には承認が必要です。",
         status: "active",
         visibility: "open",
+        scope: "room",
         tags: ["demo", "open"],
         createdByUserId: null,
       },
@@ -179,6 +184,7 @@ async function seedDemoRooms(): Promise<void> {
         description: "誰でも閲覧できますが、参加には承認が必要です。",
         status: "active",
         visibility: "open",
+        scope: "room",
         tags: ["demo", "open"],
       },
     });
@@ -192,6 +198,7 @@ async function seedDemoRooms(): Promise<void> {
         description: "メンバーのみ閲覧可能で、招待制のルームです。",
         status: "active",
         visibility: "closed",
+        scope: "room",
         tags: ["demo", "closed"],
         createdByUserId: null,
       },
@@ -200,6 +207,7 @@ async function seedDemoRooms(): Promise<void> {
         description: "メンバーのみ閲覧可能で、招待制のルームです。",
         status: "active",
         visibility: "closed",
+        scope: "room",
         tags: ["demo", "closed"],
       },
     });
@@ -213,6 +221,7 @@ async function seedDemoRooms(): Promise<void> {
         description: "招待された人だけが参加できる非公開ルームです。",
         status: "active",
         visibility: "private",
+        scope: "room",
         tags: ["demo", "private"],
         createdByUserId: null,
       },
@@ -221,6 +230,7 @@ async function seedDemoRooms(): Promise<void> {
         description: "招待された人だけが参加できる非公開ルームです。",
         status: "active",
         visibility: "private",
+        scope: "room",
         tags: ["demo", "private"],
       },
     });

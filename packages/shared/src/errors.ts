@@ -4,6 +4,7 @@ export const API_ERROR_CODES = [
   "cannot_modify_owner",
   "character_generation_failed",
   "email_conflict",
+  "feed_room_immutable",
   "forbidden",
   "handle_conflict",
   "internal_error",

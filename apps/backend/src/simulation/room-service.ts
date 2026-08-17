@@ -25,6 +25,7 @@ import {
   toSimulationDto,
   type SimulationActor,
 } from "./simulation-service.js";
+import type { Simulation } from "./simulation.js";
 import type { RoomDto } from "@brickr/shared";
 
 // ---------------------------------------------------------------------------
@@ -68,6 +69,14 @@ export class VisibilityImmutableError extends DomainError {
   readonly errorCode = "visibility_immutable" as const;
   constructor() {
     super("room visibility cannot be changed after creation");
+  }
+}
+
+export class FeedRoomImmutableError extends DomainError {
+  readonly httpStatus = 403;
+  readonly errorCode = "feed_room_immutable" as const;
+  constructor() {
+    super("the Feed room cannot be modified or deleted");
   }
 }
 
@@ -168,6 +177,7 @@ export class RoomService {
     }
 
     const simulation = await this.requireRoom(id);
+    this.assertNotFeedRoom(simulation);
     this.assertOwnerOrAdmin(simulation, actor, id);
 
     if (simulation.status === "archived") {
@@ -187,6 +197,7 @@ export class RoomService {
    */
   async archive(id: string, actor: SimulationActor): Promise<RoomDto> {
     const simulation = await this.requireRoom(id);
+    this.assertNotFeedRoom(simulation);
     this.assertOwnerOrAdmin(simulation, actor, id);
 
     const archived = await this.deps.simulations.updateStatus(id, "archived");
@@ -199,6 +210,7 @@ export class RoomService {
    */
   async delete(id: string, actor: SimulationActor): Promise<void> {
     const simulation = await this.requireRoom(id);
+    this.assertNotFeedRoom(simulation);
     this.assertOwnerOrAdmin(simulation, actor, id);
 
     if (simulation.status !== "archived") {
@@ -240,6 +252,7 @@ export class RoomService {
    */
   async join(roomId: string, actor: SimulationActor): Promise<RoomMembershipDto> {
     const simulation = await this.requireRoom(roomId);
+    this.assertNotFeedRoom(simulation);
 
     if (simulation.status === "archived") {
       throw new RoomArchivedError(roomId);
@@ -293,6 +306,7 @@ export class RoomService {
     actor: SimulationActor,
   ): Promise<RoomMembershipDto> {
     const simulation = await this.requireRoom(roomId);
+    this.assertNotFeedRoom(simulation);
     this.assertOwnerOrAdmin(simulation, actor, roomId);
 
     if (simulation.status === "archived") {
@@ -344,6 +358,7 @@ export class RoomService {
     actor: SimulationActor,
   ): Promise<RoomMembershipDto> {
     const simulation = await this.requireRoom(roomId);
+    this.assertNotFeedRoom(simulation);
     this.assertOwnerOrAdmin(simulation, actor, roomId);
 
     if (simulation.status === "archived") {
@@ -370,6 +385,7 @@ export class RoomService {
     actor: SimulationActor,
   ): Promise<void> {
     const simulation = await this.requireRoom(roomId);
+    this.assertNotFeedRoom(simulation);
     this.assertOwnerOrAdmin(simulation, actor, roomId);
 
     if (simulation.status === "archived") {
@@ -396,6 +412,7 @@ export class RoomService {
     actor: SimulationActor,
   ): Promise<void> {
     const simulation = await this.requireRoom(roomId);
+    this.assertNotFeedRoom(simulation);
     this.assertOwnerOrAdmin(simulation, actor, roomId);
 
     if (simulation.status === "archived") {
@@ -436,6 +453,19 @@ export class RoomService {
   ): void {
     if (memberId === simulation.createdByUserId) {
       throw new CannotModifyOwnerError();
+    }
+  }
+
+  /**
+   * Rejects any mutating operation on the reserved Feed room.
+   *
+   * The Feed room (scope: 'global') is an internal singleton — its title,
+   * lifecycle, and memberships must not be changed through the normal room
+   * management API.
+   */
+  private assertNotFeedRoom(simulation: Pick<Simulation, "scope">): void {
+    if (simulation.scope === "global") {
+      throw new FeedRoomImmutableError();
     }
   }
 }

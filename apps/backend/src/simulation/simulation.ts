@@ -10,11 +10,19 @@ import type { UserAccount } from "../auth/user-account.js";
  */
 export type SimulationActor = Pick<UserAccount, "id" | "isAdmin">;
 
+/** Internal room scope: distinguishes the Feed room from user-created rooms. */
+export type RoomScope = "global" | "room";
+
 export type Simulation = {
   id: string;
   title: string | null;
   status: RoomStatus;
   visibility: RoomVisibility;
+  /**
+   * Internal scope: 'global' for the reserved Feed room, 'room' for all
+   * user-created rooms. Not exposed in public DTOs.
+   */
+  scope: RoomScope;
   /** Free-form discovery tags used to match autonomous Cast interests. */
   tags: string[];
   createdAt: Date;

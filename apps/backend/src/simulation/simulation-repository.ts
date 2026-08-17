@@ -2,13 +2,14 @@ import type { RoomVisibility, RoomStatus } from "@brickr/shared";
 import type { Db, DbTransaction } from "../persistence/prisma.js";
 import { optionalField } from "../persistence/repository-mapping.js";
 import { toFallbackHandle } from "../user-profile/user-profile-repository.js";
-import type { Simulation, SimulationActor, SimulationSummary } from "./simulation.js";
+import type { Simulation, SimulationActor, SimulationSummary, RoomScope } from "./simulation.js";
 
 type SimulationRow = {
   id: string;
   title: string | null;
   status: string;
   visibility: string;
+  scope: string;
   tags: string[];
   createdAt: Date;
   lastActivityAt: Date;
@@ -25,12 +26,18 @@ export function toSimulationVisibility(value: string): RoomVisibility {
   return value as RoomVisibility;
 }
 
+/** The database column is an unconstrained string; this is the one place that trusts it. */
+export function toSimulationScope(value: string): RoomScope {
+  return value as RoomScope;
+}
+
 function toSimulation(row: SimulationRow): Simulation {
   return {
     id: row.id,
     title: row.title,
     status: toSimulationStatus(row.status),
     visibility: toSimulationVisibility(row.visibility),
+    scope: toSimulationScope(row.scope),
     tags: row.tags,
     createdAt: row.createdAt,
     lastActivityAt: row.lastActivityAt,
@@ -85,6 +92,7 @@ export class SimulationRepository {
         title,
         status: "active",
         visibility: "public",
+        scope: "room",
         createdByUserId,
         createdAt,
         lastActivityAt: createdAt,
@@ -114,6 +122,7 @@ export class SimulationRepository {
           title,
           status: "active",
           visibility,
+          scope: "room",
           createdByUserId,
           createdAt,
           lastActivityAt: createdAt,
@@ -184,6 +193,8 @@ export class SimulationRepository {
   async findAllVisibleTo(actor: SimulationActor): Promise<SimulationSummary[]> {
     const rows = await this.db.room.findMany({
       where: {
+        // The Feed room (scope: 'global') is never shown in the room list.
+        scope: "room",
         ...(actor.isAdmin
           ? {}
           : {

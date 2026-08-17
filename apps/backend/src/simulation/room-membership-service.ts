@@ -27,7 +27,8 @@ import {
   isSimulationOwnerOrAdmin,
   type SimulationActor,
 } from "./simulation-service.js";
-import { RoomNotFoundError, RoomArchivedError, RoomForbiddenError } from "./room-service.js";
+import { RoomNotFoundError, RoomArchivedError, RoomForbiddenError, FeedRoomImmutableError } from "./room-service.js";
+import type { Simulation } from "./simulation.js";
 
 // ---------------------------------------------------------------------------
 // Domain errors
@@ -129,6 +130,7 @@ export class RoomMembershipService {
    */
   async invite(input: InviteInput, actor: SimulationActor): Promise<RoomMembershipDto> {
     const room = await this.requireRoom(input.roomId);
+    this.assertNotFeedRoom(room);
     this.assertOwnerOrAdmin(room, actor, input.roomId);
 
     if (room.status === "archived") {
@@ -187,6 +189,7 @@ export class RoomMembershipService {
     actor: SimulationActor,
   ): Promise<RoomMembershipDto> {
     const room = await this.requireRoom(roomId);
+    this.assertNotFeedRoom(room);
     this.assertOwnerOrAdmin(room, actor, roomId);
 
     if (room.status === "archived") {
@@ -226,6 +229,7 @@ export class RoomMembershipService {
     actor: SimulationActor,
   ): Promise<RoomMembershipDto> {
     const room = await this.requireRoom(roomId);
+    this.assertNotFeedRoom(room);
     this.assertOwnerOrAdmin(room, actor, roomId);
 
     if (room.status === "archived") {
@@ -261,6 +265,7 @@ export class RoomMembershipService {
     actor: SimulationActor,
   ): Promise<RoomMembershipDto> {
     const room = await this.requireRoom(roomId);
+    this.assertNotFeedRoom(room);
     this.assertOwnerOrAdmin(room, actor, roomId);
 
     const membership = await this.requireMembership(membershipId, roomId);
@@ -299,6 +304,7 @@ export class RoomMembershipService {
     actor: SimulationActor,
   ): Promise<RoomMembershipDto> {
     const room = await this.requireRoom(roomId);
+    this.assertNotFeedRoom(room);
     this.assertOwnerOrAdmin(room, actor, roomId);
 
     if (room.status === "archived") {
@@ -326,6 +332,7 @@ export class RoomMembershipService {
     actor: SimulationActor,
   ): Promise<void> {
     const room = await this.requireRoom(roomId);
+    this.assertNotFeedRoom(room);
     this.assertOwnerOrAdmin(room, actor, roomId);
 
     const membership = await this.requireMembership(membershipId, roomId);
@@ -363,6 +370,18 @@ export class RoomMembershipService {
   ): void {
     if (!isSimulationOwnerOrAdmin(simulation, actor)) {
       throw new RoomForbiddenError(id);
+    }
+  }
+
+  /**
+   * Rejects any mutating operation on the reserved Feed room.
+   *
+   * The Feed room (scope: 'global') is an internal singleton — its
+   * memberships must not be changed through the normal membership API.
+   */
+  private assertNotFeedRoom(room: Pick<Simulation, "scope">): void {
+    if (room.scope === "global") {
+      throw new FeedRoomImmutableError();
     }
   }
 }
