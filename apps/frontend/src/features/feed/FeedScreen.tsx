@@ -112,29 +112,28 @@ export function FeedScreen() {
           onFilterChange={handleFilterChange}
         />
 
-        {/* Compose trigger — logged-in users only (§5.1). Opens the shared
-            composer dialog (§17) rather than an inline form; `openComposer`'s
-            `onPosted` upserts the new thread from the response immediately
-            (preserving any additional pages already loaded via "さらに読み込む")
-            - the SSE echo arriving shortly after is a no-op against the same
-            thread id. */}
-        {user ? (
-          <div className="flex items-center gap-3 border-b border-line px-4 py-3">
-            <Avatar
-              handle={userProfile.profile.handle}
-              displayName={userProfile.profile.displayName}
-              avatarUrl={userProfile.profile.avatarUrl}
-              size="md"
-            />
-            <button
-              type="button"
-              onClick={openComposer}
-              className="min-w-0 flex-1 rounded-full border border-line bg-surface px-4 py-2.5 text-left text-sm text-ink-faint transition hover:border-accent/50"
-            >
-              {"いま何が起きてる？　@ でキャストを指名"}
-            </button>
-          </div>
-        ) : null}
+        {/* Compose trigger (§5.1). It remains visible while signed out;
+            ComposeController opens the auth dialog first and resumes this
+            compose intent after authentication (§18.2). For signed-in users,
+            the shared composer dialog (§17) opens immediately. `onPosted`
+            upserts the new thread from the response (preserving additional
+            pages already loaded via "さらに読み込む"); the following SSE echo
+            is a no-op against the same thread id. */}
+        <div className="flex items-center gap-3 border-b border-line px-4 py-3">
+          <Avatar
+            handle={userProfile.profile.handle}
+            displayName={userProfile.profile.displayName}
+            avatarUrl={userProfile.profile.avatarUrl}
+            size="md"
+          />
+          <button
+            type="button"
+            onClick={openComposer}
+            className="min-w-0 flex-1 rounded-full border border-line bg-surface px-4 py-2.5 text-left text-sm text-ink-faint transition hover:border-accent/50"
+          >
+            {user ? "いま何が起きてる？　@ でキャストを指名" : "ログインして投稿する"}
+          </button>
+        </div>
       </div>
 
       {/* SSE reconnecting indicator (§16.4) */}
