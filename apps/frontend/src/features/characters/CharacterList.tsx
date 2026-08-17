@@ -450,7 +450,7 @@ export function CharacterList({
       ) : null}
 
       {notice ? (
-        <div className="mx-4 mt-3 flex items-center justify-between gap-3 rounded-xl border border-emerald-400/40 bg-emerald-400/10 px-3 py-2 text-sm text-ink">
+        <div className="mx-4 mt-3 flex items-center justify-between gap-3 rounded-xl border border-live/40 bg-live/10 px-3 py-2 text-sm text-ink">
           <span>{notice}</span>
           <button
             type="button"

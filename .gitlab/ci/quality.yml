@@ -34,6 +34,15 @@
   script:
     - node scripts/check-no-legacy-refs.mjs
 
+"quality:design-tokens":
+  extends: .quality-change-rules
+  stage: validate
+  image: node:22-bookworm-slim
+  before_script: []
+  needs: []
+  script:
+    - node scripts/check-design-tokens.mjs
+
 "quality:empty-database":
   extends:
     - .backend-job
