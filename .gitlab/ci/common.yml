@@ -19,10 +19,56 @@ default:
   before_script:
     - !reference [.node-setup, before_script]
 
+# Shared dependency installation job - runs once, shares via artifacts.
+# --shamefully-hoist produces a flat node_modules layout (no symlinks) so the
+# artifact archive is reliable across all runner platforms.
+"deps:install":
+  stage: .pre
+  before_script:
+    - corepack enable
+    - corepack prepare pnpm@11.21.0 --activate
+    - pnpm config set store-dir .pnpm-store
+    - pnpm install --frozen-lockfile --shamefully-hoist
+  script:
+    - pnpm --filter @brickr/backend db:generate
+  artifacts:
+    paths:
+      - node_modules/
+      - apps/frontend/node_modules/
+      - apps/backend/node_modules/
+      - packages/shared/node_modules/
+      - apps/backend/src/infrastructure/database/generated/
+    expire_in: 1 hour
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - .gitlab-ci.yml
+        - .gitlab/ci/**/*
+        - apps/frontend/**/*
+        - apps/backend/**/*
+        - packages/shared/**/*
+        - package.json
+        - pnpm-lock.yaml
+        - pnpm-workspace.yaml
+        - eslint.config.mjs
+
+# Template for jobs that use pre-installed dependencies
+.with-deps:
+  needs:
+    - job: "deps:install"
+      artifacts: true
+  before_script:
+    - corepack enable
+    - corepack prepare pnpm@11.21.0 --activate
+
 .backend-job:
   before_script:
     - !reference [.node-setup, before_script]
     - pnpm --filter @brickr/backend db:generate
+
+# Backend job using shared deps (no pnpm install, no db:generate)
+.backend-job-with-deps:
+  extends: .with-deps
 
 .independent:
   needs: []
@@ -121,6 +167,97 @@ default:
 
 .shared-build:
   extends: .independent
+  stage: build
+  script:
+    - pnpm --filter @brickr/shared build
+
+# Optimized templates using shared dependencies
+.frontend-lint-with-deps:
+  extends: .with-deps
+  stage: lint
+  script:
+    - pnpm --filter @brickr/frontend lint
+
+.backend-lint-with-deps:
+  extends: .backend-job-with-deps
+  stage: lint
+  script:
+    - pnpm --filter @brickr/backend lint
+
+.shared-lint-with-deps:
+  extends: .with-deps
+  stage: lint
+  script:
+    - pnpm --filter @brickr/shared lint
+
+.frontend-typecheck-with-deps:
+  extends: .with-deps
+  stage: typecheck
+  script:
+    - pnpm --filter @brickr/frontend typecheck
+
+.backend-typecheck-with-deps:
+  extends: .backend-job-with-deps
+  stage: typecheck
+  script:
+    - pnpm --filter @brickr/backend typecheck
+
+.shared-typecheck-with-deps:
+  extends: .with-deps
+  stage: typecheck
+  script:
+    - pnpm --filter @brickr/shared typecheck
+
+.frontend-test-with-deps:
+  extends: .with-deps
+  stage: test
+  script:
+    - pnpm --filter @brickr/frontend test --coverage
+  coverage: '/Statements\s*:\s*([\d.]+)%/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: apps/frontend/coverage/cobertura-coverage.xml
+
+.backend-test-with-deps:
+  extends: .backend-job-with-deps
+  stage: test
+  script:
+    - pnpm --filter @brickr/backend test --coverage
+  coverage: '/Statements\s*:\s*([\d.]+)%/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: apps/backend/coverage/cobertura-coverage.xml
+
+.shared-test-with-deps:
+  extends: .with-deps
+  stage: test
+  script:
+    - pnpm --filter @brickr/shared test --coverage
+  coverage: '/Statements\s*:\s*([\d.]+)%/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: packages/shared/coverage/cobertura-coverage.xml
+
+.frontend-build-with-deps:
+  extends: .with-deps
+  stage: build
+  script:
+    - pnpm --filter @brickr/frontend build
+
+.backend-build-with-deps:
+  extends: .backend-job-with-deps
+  stage: build
+  script:
+    - pnpm --filter @brickr/backend build
+
+.shared-build-with-deps:
+  extends: .with-deps
   stage: build
   script:
     - pnpm --filter @brickr/shared build

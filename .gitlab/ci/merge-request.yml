@@ -43,41 +43,42 @@ include:
         - pnpm-workspace.yaml
         - eslint.config.mjs
 
+# Use optimized templates with shared dependencies
 "mr:frontend:lint":
-  extends: [.frontend-lint, .mr-frontend-rules]
+  extends: [.frontend-lint-with-deps, .mr-frontend-rules]
 
 "mr:frontend:typecheck":
-  extends: [.frontend-typecheck, .mr-frontend-rules]
+  extends: [.frontend-typecheck-with-deps, .mr-frontend-rules]
 
 "mr:frontend:test":
-  extends: [.frontend-test, .mr-frontend-rules]
+  extends: [.frontend-test-with-deps, .mr-frontend-rules]
 
 "mr:frontend:build":
-  extends: [.frontend-build, .mr-frontend-rules]
+  extends: [.frontend-build-with-deps, .mr-frontend-rules]
 
 "mr:backend:lint":
-  extends: [.backend-lint, .mr-backend-rules]
+  extends: [.backend-lint-with-deps, .mr-backend-rules]
 
 "mr:backend:typecheck":
-  extends: [.backend-typecheck, .mr-backend-rules]
+  extends: [.backend-typecheck-with-deps, .mr-backend-rules]
 
 "mr:backend:test":
-  extends: [.backend-test, .mr-backend-rules]
+  extends: [.backend-test-with-deps, .mr-backend-rules]
 
 "mr:backend:build":
-  extends: [.backend-build, .mr-backend-rules]
+  extends: [.backend-build-with-deps, .mr-backend-rules]
 
 "mr:shared:lint":
-  extends: [.shared-lint, .mr-shared-rules]
+  extends: [.shared-lint-with-deps, .mr-shared-rules]
 
 "mr:shared:typecheck":
-  extends: [.shared-typecheck, .mr-shared-rules]
+  extends: [.shared-typecheck-with-deps, .mr-shared-rules]
 
 "mr:shared:test":
-  extends: [.shared-test, .mr-shared-rules]
+  extends: [.shared-test-with-deps, .mr-shared-rules]
 
 "mr:shared:build":
-  extends: [.shared-build, .mr-shared-rules]
+  extends: [.shared-build-with-deps, .mr-shared-rules]
 
 # Scanner images do not contain Node.js. Secret detection remains enabled for
 # every MR, including documentation-only changes, while the heavier scanners
