@@ -1,5 +1,4 @@
 import type { FeedThreadDto, SseEvent } from "@brickr/shared";
-import { isGlobalSimulation } from "../simulation/simulation.js";
 import { isSimulationOwnerOrAdmin } from "../simulation/simulation-service.js";
 import type { PublishedInternalSseEvent } from "../simulation/public-events.js";
 import { toFeedCapabilities } from "./feed-capabilities.js";
@@ -25,7 +24,6 @@ export function withReaderCapabilities(
     ...thread,
     capabilities: toFeedCapabilities({
       isSignedIn: reader !== null,
-      isFeedRoom: isGlobalSimulation(room),
       isStoppedRoom: room.status === "archived",
       isRoomOwnerOrAdmin: reader !== null && isSimulationOwnerOrAdmin(room, reader),
       replyCount: thread.replyCount,

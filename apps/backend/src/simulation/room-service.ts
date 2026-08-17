@@ -21,12 +21,11 @@ import type {
 import { CannotModifyOwnerError } from "./room-membership-errors.js";
 import type { HandleRepository } from "../handles/handle-repository.js";
 import {
-  assertNotGlobalSimulation,
   isSimulationOwnerOrAdmin,
   toSimulationDto,
   type SimulationActor,
 } from "./simulation-service.js";
-import type { SimulationDto } from "@brickr/shared";
+import type { RoomDto } from "@brickr/shared";
 
 // ---------------------------------------------------------------------------
 // Domain errors
@@ -145,7 +144,7 @@ export class RoomService {
    * Creates a room and grants the creator an active `owner` membership in a
    * single transaction. Visibility defaults to `public` and is fixed at creation.
    */
-  async create(input: CreateRoomInput): Promise<SimulationDto> {
+  async create(input: CreateRoomInput): Promise<RoomDto> {
     const visibility: RoomVisibility = input.visibility ?? "public";
     const simulation = await this.deps.simulations.createWithOwner(
       input.title ?? null,
@@ -163,13 +162,12 @@ export class RoomService {
     id: string,
     input: UpdateRoomInput,
     actor: SimulationActor,
-  ): Promise<SimulationDto> {
+  ): Promise<RoomDto> {
     if (input.visibility !== undefined) {
       throw new VisibilityImmutableError();
     }
 
     const simulation = await this.requireRoom(id);
-    assertNotGlobalSimulation(simulation);
     this.assertOwnerOrAdmin(simulation, actor, id);
 
     if (simulation.status === "archived") {
@@ -186,11 +184,9 @@ export class RoomService {
 
   /**
    * Archives a room. Only the owner or an admin may archive.
-   * The global room cannot be archived.
    */
-  async archive(id: string, actor: SimulationActor): Promise<SimulationDto> {
+  async archive(id: string, actor: SimulationActor): Promise<RoomDto> {
     const simulation = await this.requireRoom(id);
-    assertNotGlobalSimulation(simulation);
     this.assertOwnerOrAdmin(simulation, actor, id);
 
     const archived = await this.deps.simulations.updateStatus(id, "archived");
@@ -203,7 +199,6 @@ export class RoomService {
    */
   async delete(id: string, actor: SimulationActor): Promise<void> {
     const simulation = await this.requireRoom(id);
-    assertNotGlobalSimulation(simulation);
     this.assertOwnerOrAdmin(simulation, actor, id);
 
     if (simulation.status !== "archived") {
@@ -245,7 +240,6 @@ export class RoomService {
    */
   async join(roomId: string, actor: SimulationActor): Promise<RoomMembershipDto> {
     const simulation = await this.requireRoom(roomId);
-    assertNotGlobalSimulation(simulation);
 
     if (simulation.status === "archived") {
       throw new RoomArchivedError(roomId);
@@ -299,7 +293,6 @@ export class RoomService {
     actor: SimulationActor,
   ): Promise<RoomMembershipDto> {
     const simulation = await this.requireRoom(roomId);
-    assertNotGlobalSimulation(simulation);
     this.assertOwnerOrAdmin(simulation, actor, roomId);
 
     if (simulation.status === "archived") {
@@ -351,7 +344,6 @@ export class RoomService {
     actor: SimulationActor,
   ): Promise<RoomMembershipDto> {
     const simulation = await this.requireRoom(roomId);
-    assertNotGlobalSimulation(simulation);
     this.assertOwnerOrAdmin(simulation, actor, roomId);
 
     if (simulation.status === "archived") {
@@ -378,7 +370,6 @@ export class RoomService {
     actor: SimulationActor,
   ): Promise<void> {
     const simulation = await this.requireRoom(roomId);
-    assertNotGlobalSimulation(simulation);
     this.assertOwnerOrAdmin(simulation, actor, roomId);
 
     if (simulation.status === "archived") {
@@ -405,7 +396,6 @@ export class RoomService {
     actor: SimulationActor,
   ): Promise<void> {
     const simulation = await this.requireRoom(roomId);
-    assertNotGlobalSimulation(simulation);
     this.assertOwnerOrAdmin(simulation, actor, roomId);
 
     if (simulation.status === "archived") {

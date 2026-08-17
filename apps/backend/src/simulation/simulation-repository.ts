@@ -1,4 +1,4 @@
-import type { RoomVisibility, SimulationScope, SimulationStatus } from "@brickr/shared";
+import type { RoomVisibility, RoomScope, RoomStatus } from "@brickr/shared";
 import type { Db, DbTransaction } from "../persistence/prisma.js";
 import { optionalField } from "../persistence/repository-mapping.js";
 import { toFallbackHandle } from "../user-profile/user-profile-repository.js";
@@ -17,13 +17,13 @@ type SimulationRow = {
 };
 
 /** The database column is an unconstrained string; this is the one place that trusts it. */
-export function toSimulationStatus(value: string): SimulationStatus {
-  return value as SimulationStatus;
+export function toSimulationStatus(value: string): RoomStatus {
+  return value as RoomStatus;
 }
 
 /** The database column is an unconstrained string; this is the one place that trusts it. */
-export function toSimulationScope(value: string): SimulationScope {
-  return value as SimulationScope;
+export function toSimulationScope(value: string): RoomScope {
+  return value as RoomScope;
 }
 
 /** The database column is an unconstrained string; this is the one place that trusts it. */
@@ -294,7 +294,7 @@ export class SimulationRepository {
     return toSimulation(row);
   }
 
-  async updateStatus(id: string, status: SimulationStatus): Promise<Simulation> {
+  async updateStatus(id: string, status: RoomStatus): Promise<Simulation> {
     const row = await this.db.room.update({
       where: { id },
       data: { status },

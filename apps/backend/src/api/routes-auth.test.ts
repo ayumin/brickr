@@ -42,11 +42,11 @@ const characterBody = {
 
 /** Every route that must refuse a signed-out caller. */
 const writeRoutes = [
-  { method: "POST" as const, url: "/api/simulations", payload: {} },
-  { method: "PUT" as const, url: "/api/simulations/s1", payload: { title: "t" } },
-  { method: "POST" as const, url: "/api/simulations/s1/stop", payload: undefined },
-  { method: "POST" as const, url: "/api/simulations/s1/resume", payload: undefined },
-  { method: "POST" as const, url: "/api/simulations/s1/posts", payload: { content: "hi" } },
+  { method: "POST" as const, url: "/api/rooms", payload: {} },
+  { method: "PUT" as const, url: "/api/rooms/s1", payload: { title: "t" } },
+  { method: "POST" as const, url: "/api/rooms/s1/stop", payload: undefined },
+  { method: "POST" as const, url: "/api/rooms/s1/resume", payload: undefined },
+  { method: "POST" as const, url: "/api/rooms/s1/posts", payload: { content: "hi" } },
   { method: "POST" as const, url: "/api/characters", payload: characterBody },
   { method: "PUT" as const, url: "/api/characters/c1", payload: characterBody },
   { method: "DELETE" as const, url: "/api/characters/c1", payload: undefined },
@@ -78,6 +78,11 @@ const publicRoutes = ["/api/health", "/api/auth/session"];
  * nothing would break, the data would just be public again.
  */
 const protectedReadRoutes = [
+  "/api/rooms",
+  "/api/rooms/s1",
+  "/api/rooms/s1/feed",
+  "/api/rooms/s1/posts",
+  "/api/rooms/s1/analysis",
   "/api/characters",
   "/api/characters/management",
   "/api/characters/export",
@@ -85,9 +90,6 @@ const protectedReadRoutes = [
   "/api/characters/c1/config",
   "/api/character-bulk-jobs/job-1",
   "/api/model-profiles",
-  "/api/simulations",
-  "/api/simulations/s1",
-  "/api/simulations/s1/posts",
   "/api/posts/p1",
   "/api/posts/p1/replies",
   "/api/profiles/hanako",
@@ -157,7 +159,6 @@ function makeServices(): AppServices {
       rename: () => Promise.resolve({ id: "s1" }),
       stop: () => Promise.resolve({ id: "s1" }),
       resume: () => Promise.resolve({ id: "s1" }),
-      submitUserPost: () => Promise.resolve({ id: "p1" }),
     },
     posts: {
       toDto: () => Promise.resolve({ id: "p1" }),
@@ -307,25 +308,6 @@ describe("read endpoints", () => {
     apps.push(app);
 
     const response = await app.inject({ method: "GET", url: "/api/user-profile" });
-
-    expect(response.statusCode).toBe(200);
-  });
-
-  // Also an exception: unlike the simulation itself, its analysis is not public (§66.6).
-  it("refuses GET /api/simulations/:id/analysis while signed out", async () => {
-    const app = await buildApp(null);
-    apps.push(app);
-
-    const response = await app.inject({ method: "GET", url: "/api/simulations/s1/analysis" });
-
-    expect(response.statusCode).toBe(401);
-  });
-
-  it("lets a signed-in caller request the analysis (ownership is checked in the service)", async () => {
-    const app = await buildApp(signedInUser);
-    apps.push(app);
-
-    const response = await app.inject({ method: "GET", url: "/api/simulations/s1/analysis" });
 
     expect(response.statusCode).toBe(200);
   });

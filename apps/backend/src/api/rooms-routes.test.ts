@@ -159,10 +159,19 @@ function makeServices(
     simulations: {
       get: () => Promise.resolve({ simulation: roomSummary }),
       listRooms: () => Promise.resolve([]),
+      stop: () => Promise.resolve({ ...roomDto, status: "archived" as const }),
+      resume: () => Promise.resolve(roomDto),
       ...simulationsOverrides,
+    },
+    simulationAnalysis: {
+      analyze: () => Promise.resolve({ simulation: roomDto, postCount: 0 }),
     },
     rooms: makeRoomService(roomsOverrides),
     roomMemberships: makeRoomMembershipService(roomMembershipsOverrides),
+    events: {
+      closeRoom: vi.fn(),
+      closeSubscriber: vi.fn(),
+    },
   } as unknown as AppServices;
 }
 
@@ -182,6 +191,33 @@ async function buildApp(
   await app.ready();
   return app;
 }
+
+describe("Room API compatibility operations", () => {
+  const apps: FastifyInstance[] = [];
+
+  afterEach(async () => {
+    await Promise.all(apps.splice(0).map((app) => app.close()));
+  });
+
+  it.each([
+    ["stop", "archived"],
+    ["resume", "active"],
+  ] as const)("POST /api/rooms/:id/%s updates lifecycle state", async (action, status) => {
+    const app = await buildApp(signedInUser);
+    apps.push(app);
+    const response = await app.inject({ method: "POST", url: `/api/rooms/room-1/${action}` });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ simulation: { id: "room-1", status } });
+  });
+
+  it("GET /api/rooms/:id/analysis returns the room analysis", async () => {
+    const app = await buildApp(signedInUser);
+    apps.push(app);
+    const response = await app.inject({ method: "GET", url: "/api/rooms/room-1/analysis" });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ analysis: { postCount: 0 } });
+  });
+});
 
 // ── GET /api/rooms/:id ────────────────────────────────────────────────────────
 
@@ -486,7 +522,8 @@ describe("POST /api/rooms/:id/archive", () => {
   });
 
   it("archives the room and returns the archived DTO", async () => {
-    const app = await buildApp(signedInUser);
+    const services = makeServices();
+    const app = await buildApp(signedInUser, services);
     apps.push(app);
 
     const response = await app.inject({
@@ -496,6 +533,7 @@ describe("POST /api/rooms/:id/archive", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ simulation: { status: "archived" } });
+    expect(services.events.closeRoom).toHaveBeenCalledWith("room-1");
   });
 
   it("maps RoomForbiddenError to 403", async () => {
@@ -805,7 +843,8 @@ describe("DELETE /api/rooms/:id/members/:mid", () => {
   });
 
   it("removes a member and returns the updated membership", async () => {
-    const app = await buildApp(signedInUser);
+    const services = makeServices();
+    const app = await buildApp(signedInUser, services);
     apps.push(app);
 
     const response = await app.inject({
@@ -815,6 +854,7 @@ describe("DELETE /api/rooms/:id/members/:mid", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ membership: { status: "removed" } });
+    expect(services.events.closeSubscriber).toHaveBeenCalledWith("room-1", "user-target");
   });
 
   it("maps CannotModifyOwnerError to 409", async () => {
@@ -888,7 +928,8 @@ describe("POST /api/rooms/:id/members/:mid/ban", () => {
   });
 
   it("bans a member and returns the updated membership", async () => {
-    const app = await buildApp(signedInUser);
+    const services = makeServices();
+    const app = await buildApp(signedInUser, services);
     apps.push(app);
 
     const response = await app.inject({
@@ -898,6 +939,7 @@ describe("POST /api/rooms/:id/members/:mid/ban", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ membership: { status: "banned" } });
+    expect(services.events.closeSubscriber).toHaveBeenCalledWith("room-1", "user-target");
   });
 
   it("maps CannotModifyOwnerError to 409", async () => {
@@ -1663,7 +1705,8 @@ describe("DELETE /api/rooms/:id/memberships/:memberId", () => {
   });
 
   it("removes the membership and returns 204", async () => {
-    const app = await buildApp(signedInUser);
+    const services = makeServices();
+    const app = await buildApp(signedInUser, services);
     apps.push(app);
 
     const response = await app.inject({
@@ -1672,6 +1715,7 @@ describe("DELETE /api/rooms/:id/memberships/:memberId", () => {
     });
 
     expect(response.statusCode).toBe(204);
+    expect(services.events.closeSubscriber).toHaveBeenCalledWith("room-1", "user-2");
   });
 
   it("maps RoomForbiddenError to 403", async () => {
@@ -1713,7 +1757,8 @@ describe("POST /api/rooms/:id/memberships/:memberId/ban", () => {
   });
 
   it("bans the member and returns 204", async () => {
-    const app = await buildApp(signedInUser);
+    const services = makeServices();
+    const app = await buildApp(signedInUser, services);
     apps.push(app);
 
     const response = await app.inject({
@@ -1722,6 +1767,7 @@ describe("POST /api/rooms/:id/memberships/:memberId/ban", () => {
     });
 
     expect(response.statusCode).toBe(204);
+    expect(services.events.closeSubscriber).toHaveBeenCalledWith("room-1", "user-2");
   });
 
   it("maps RoomForbiddenError to 403", async () => {

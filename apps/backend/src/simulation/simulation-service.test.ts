@@ -1,4 +1,4 @@
-import { GLOBAL_SIMULATION_ID, type PostDto } from "@brickr/shared";
+import type { PostDto } from "@brickr/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentService, GenerateRequest, GeneratedPost } from "../agents/agent-service.js";
 import type { CharacterRepository } from "../characters/character-repository.js";
@@ -11,7 +11,6 @@ import { EventHub } from "./event-hub.js";
 import type { InternalSseEvent, ThreadActivityEvent } from "./public-events.js";
 import type { SimulationRepository } from "./simulation-repository.js";
 import {
-  GlobalSimulationMutationError,
   PostNotFoundError,
   assertRoomReadable,
   SimulationForbiddenError,
@@ -337,7 +336,7 @@ function collectUntilCompleted(events: EventHub): {
   events.subscribe(SIMULATION.id, (event) => {
     received.push(event);
     if (event.type === "generation.completed") resolveCompleted?.(event);
-  });
+  }, () => undefined);
 
   return { received, completed };
 }
@@ -366,7 +365,7 @@ function collectUntilTerminal(events: EventHub): {
     if (event.type === "generation.completed" || event.type === "generation.failed") {
       resolveTerminal?.(event);
     }
-  });
+  }, () => undefined);
 
   return { received, terminal };
 }
@@ -678,7 +677,7 @@ describe("SimulationService thread events (§11.3)", () => {
 
   it("assembles the thread for a room subscriber", async () => {
     const harness = makeHarness({ characters: [] });
-    harness.events.subscribe(SIMULATION.id, vi.fn());
+    harness.events.subscribe(SIMULATION.id, vi.fn(), () => undefined);
 
     const post = await harness.service.submitUserPost(onlyUserPost);
 
@@ -741,53 +740,7 @@ describe("SimulationService ownership (CLAUDE.md §66.6)", () => {
   });
 });
 
-/**
- * The reserved global simulation is the feed. Managing it as a room would break
- * every screen at once, so it is refused in the service rather than only in the
- * UI, which an API call goes straight past (§8.2).
- */
-describe("SimulationService global feed protection (§8.2)", () => {
-  const GLOBAL: Simulation = {
-    id: GLOBAL_SIMULATION_ID,
-    title: "フィード",
-    status: "active",
-    scope: "global",
-    visibility: "public",
-    tags: [],
-    createdAt: new Date("2026-01-01T00:00:00Z"),
-    lastActivityAt: new Date("2026-01-01T00:00:00Z"),
-  };
 
-  const ADMIN: SimulationActor = { id: "admin-1", isAdmin: true };
-
-  it("refuses rename, stop and resume — for an admin too, since it has no owner", async () => {
-    const harness = makeHarness({ characters: [makeCharacter("alpha")], simulation: GLOBAL });
-
-    await expect(harness.service.rename(GLOBAL.id, "世界", ADMIN)).rejects.toBeInstanceOf(
-      GlobalSimulationMutationError,
-    );
-    await expect(harness.service.stop(GLOBAL.id, ADMIN)).rejects.toBeInstanceOf(
-      GlobalSimulationMutationError,
-    );
-    await expect(harness.service.resume(GLOBAL.id, ADMIN)).rejects.toBeInstanceOf(
-      GlobalSimulationMutationError,
-    );
-  });
-
-  it("still accepts posts, because posting into the feed is the point of the row", async () => {
-    const harness = makeHarness({ characters: [makeCharacter("alpha")], simulation: GLOBAL });
-
-    const post = await harness.service.submitUserPost({
-      roomId: GLOBAL.id,
-      authorId: USER_AUTHOR_ID,
-      content: "フィードへの投稿",
-      responderIds: [],
-    });
-
-    expect(post.roomId).toBe(GLOBAL.id);
-    expect(post.threadRootId).toBe(post.id);
-  });
-});
 
 describe("SimulationService token usage (CLAUDE.md §66.4)", () => {
   const USAGE = { inputTokens: 10, outputTokens: 5, totalTokens: 15 };

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { matchPath, useLocation, useNavigate } from "react-router-dom";
-import { GLOBAL_SIMULATION_ID } from "@brickr/shared";
+import { GLOBAL_ROOM_ID } from "@brickr/shared";
 
 import { castPath, roomListPath, settingsPath } from "../routes";
 import { useAuth } from "../features/auth/AuthContext";
@@ -85,7 +85,7 @@ function AppShellContent() {
     onComposeClick: () => {
       if (isFeedRoute) {
         composeController.request({
-          context: { mode: "new", simulationId: GLOBAL_SIMULATION_ID, roomLabel: "フィード" },
+          context: { mode: "new", simulationId: GLOBAL_ROOM_ID, roomLabel: "フィード" },
         });
       } else if (activeRoomId) {
         composeController.request({

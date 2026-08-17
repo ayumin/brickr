@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import type { SimulationSummaryDto } from "@brickr/shared";
+import type { RoomSummaryDto } from "@brickr/shared";
 
 import {
   api,
@@ -17,7 +17,7 @@ export type SelectedRoomState =
   | { status: "loading" }
   | { status: "denied" }
   | { status: "error"; message: string }
-  | { status: "ready"; simulation: SimulationSummaryDto };
+  | { status: "ready"; simulation: RoomSummaryDto };
 
 export type UseSelectedRoomResult = {
   state: SelectedRoomState;

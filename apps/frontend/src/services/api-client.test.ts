@@ -232,10 +232,51 @@ describe("api-client", () => {
     });
   });
 
+  describe("Room API paths", () => {
+    it("uses /api/rooms for every room-scoped operation", async () => {
+      fetchMock.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          simulation: { id: "room-1" },
+          analysis: { postCount: 0 },
+          posts: [],
+          threads: [],
+          nextCursor: null,
+          post: { id: "post-1" },
+          thread: { root: { id: "post-1" }, replies: [] },
+        }),
+      });
+
+      await api.createSimulation({ title: "Room" });
+      await api.getRoomFeed("room-1", "all");
+      await api.updateSimulation("room-1", { title: "Renamed" });
+      await api.getSimulationAnalysis("room-1");
+      await api.getSimulation("room-1");
+      await api.stopSimulation("room-1");
+      await api.resumeSimulation("room-1");
+      await api.getPosts("room-1");
+      await api.createPost("room-1", { content: "hello" });
+
+      const urls = fetchMock.mock.calls.map((call) => call[0] as string);
+      expect(urls).toEqual([
+        `${API_BASE_URL}/api/rooms`,
+        `${API_BASE_URL}/api/rooms/room-1/feed?filter=all`,
+        `${API_BASE_URL}/api/rooms/room-1`,
+        `${API_BASE_URL}/api/rooms/room-1/analysis`,
+        `${API_BASE_URL}/api/rooms/room-1`,
+        `${API_BASE_URL}/api/rooms/room-1/stop`,
+        `${API_BASE_URL}/api/rooms/room-1/resume`,
+        `${API_BASE_URL}/api/rooms/room-1/posts`,
+        `${API_BASE_URL}/api/rooms/room-1/posts`,
+      ]);
+      expect(urls.every((url) => !url.includes("/api/simulations"))).toBe(true);
+    });
+  });
+
   describe("simulationEventsUrl function", () => {
     it("should construct valid SSE URLs with proper encoding", () => {
       const url = simulationEventsUrl("test-simulation-123");
-      expect(url).toBe(`${API_BASE_URL}/api/simulations/test-simulation-123/events`);
+      expect(url).toBe(`${API_BASE_URL}/api/rooms/test-simulation-123/events`);
     });
 
     it("should properly encode special characters in simulation IDs", () => {
@@ -254,7 +295,7 @@ describe("api-client", () => {
       for (const id of maliciousIds) {
         const url = simulationEventsUrl(id);
         expect(url).toContain(encodeURIComponent(id));
-        expect(url).toContain("/api/simulations/");
+        expect(url).toContain("/api/rooms/");
         expect(url).not.toContain(id);
       }
     });

@@ -109,7 +109,7 @@ const roomSummarySchema = z.object({
   canManage: z.boolean(),
 });
 
-// The service returns { simulation: SimulationSummaryDto }; the response schema
+// The service returns { simulation: RoomSummaryDto }; the response schema
 // mirrors that shape for OpenAPI documentation.
 export const roomSummaryResponseSchema = z.object({
   simulation: roomSummarySchema,
@@ -255,6 +255,30 @@ export const deleteRoomOpenApiMeta = {
     "404": { $ref: "#/components/responses/NotFound" },
     "409": { $ref: "#/components/responses/Conflict" },
   },
+};
+
+export const stopRoomOpenApiMeta = {
+  operationId: "stopRoom",
+  tags: ["Rooms"] as string[],
+  summary: "Stop response generation in a room",
+  description: "Owner or administrator only.",
+  successDescription: "The stopped room",
+};
+
+export const resumeRoomOpenApiMeta = {
+  operationId: "resumeRoom",
+  tags: ["Rooms"] as string[],
+  summary: "Resume response generation in a room",
+  description: "Owner or administrator only.",
+  successDescription: "The resumed room",
+};
+
+export const analyzeRoomOpenApiMeta = {
+  operationId: "analyzeRoom",
+  tags: ["Rooms"] as string[],
+  summary: "Analyze posts in a room",
+  description: "Owner or administrator only.",
+  successDescription: "The room analysis",
 };
 
 export const listRoomsOpenApiMeta = {
@@ -558,6 +582,39 @@ buildOpenApiOperation(
 
 buildOpenApiOperation(
   {
+    method: "POST",
+    path: "/api/rooms/:id/stop",
+    auth: "required",
+    params: roomIdParams,
+    response: roomDtoResponseSchema,
+  },
+  stopRoomOpenApiMeta,
+);
+
+buildOpenApiOperation(
+  {
+    method: "POST",
+    path: "/api/rooms/:id/resume",
+    auth: "required",
+    params: roomIdParams,
+    response: roomDtoResponseSchema,
+  },
+  resumeRoomOpenApiMeta,
+);
+
+buildOpenApiOperation(
+  {
+    method: "GET",
+    path: "/api/rooms/:id/analysis",
+    auth: "required",
+    params: roomIdParams,
+    response: z.object({ analysis: z.unknown() }),
+  },
+  analyzeRoomOpenApiMeta,
+);
+
+buildOpenApiOperation(
+  {
     method: "DELETE",
     path: "/api/rooms/:id",
     auth: "required",
@@ -806,8 +863,46 @@ export function registerRoomsRoutes(app: FastifyInstance, services: AppServices)
     response: roomDtoResponseSchema,
     handler: async ({ user, params }) => {
       const simulation = await services.rooms.archive(params.id, user);
+      // Terminate every open SSE stream for this room (§11.1 visibility
+      // re-evaluation). Clients reconnect and receive a 404 — the correct
+      // answer for a stopped room they cannot read (§10.4).
+      services.events.closeRoom(params.id);
       return { simulation };
     },
+  }).register(app);
+
+  // Room lifecycle controls used by the room information panel.
+  defineRoute({
+    method: "POST",
+    path: "/api/rooms/:id/stop",
+    auth: "required",
+    params: roomIdParams,
+    response: roomDtoResponseSchema,
+    handler: async ({ user, params }) => ({
+      simulation: await services.simulations.stop(params.id, user),
+    }),
+  }).register(app);
+
+  defineRoute({
+    method: "POST",
+    path: "/api/rooms/:id/resume",
+    auth: "required",
+    params: roomIdParams,
+    response: roomDtoResponseSchema,
+    handler: async ({ user, params }) => ({
+      simulation: await services.simulations.resume(params.id, user),
+    }),
+  }).register(app);
+
+  defineRoute({
+    method: "GET",
+    path: "/api/rooms/:id/analysis",
+    auth: "required",
+    params: roomIdParams,
+    response: z.object({ analysis: z.unknown() }),
+    handler: async ({ user, params }) => ({
+      analysis: await services.simulationAnalysis.analyze(params.id, user),
+    }),
   }).register(app);
 
   // DELETE /api/rooms/:id — delete an archived room
@@ -914,6 +1009,9 @@ export function registerRoomsRoutes(app: FastifyInstance, services: AppServices)
     response: membershipResponseSchema,
     handler: async ({ user, params }) => {
       const membership = await services.roomMemberships.remove(params.id, params.mid, user);
+      if (membership.memberKind === "user") {
+        services.events.closeSubscriber(params.id, membership.memberId);
+      }
       return { membership };
     },
   }).register(app);
@@ -927,6 +1025,9 @@ export function registerRoomsRoutes(app: FastifyInstance, services: AppServices)
     response: membershipResponseSchema,
     handler: async ({ user, params }) => {
       const membership = await services.roomMemberships.ban(params.id, params.mid, user);
+      if (membership.memberKind === "user") {
+        services.events.closeSubscriber(params.id, membership.memberId);
+      }
       return { membership };
     },
   }).register(app);
@@ -1016,6 +1117,7 @@ export function registerRoomsRoutes(app: FastifyInstance, services: AppServices)
     response: z.object({}),
     handler: async ({ user, params, reply }) => {
       await services.rooms.removeMembership(params.id, params.memberId, user);
+      services.events.closeSubscriber(params.id, params.memberId);
       return reply.status(204).send();
     },
   }).register(app);
@@ -1029,6 +1131,7 @@ export function registerRoomsRoutes(app: FastifyInstance, services: AppServices)
     response: z.object({}),
     handler: async ({ user, params, reply }) => {
       await services.rooms.banMember(params.id, params.memberId, user);
+      services.events.closeSubscriber(params.id, params.memberId);
       return reply.status(204).send();
     },
   }).register(app);
