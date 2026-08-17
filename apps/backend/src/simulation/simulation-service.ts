@@ -326,18 +326,23 @@ export class SimulationService {
       throw new SimulationStoppedError(input.roomId);
     }
 
-    const roomActor = await toRoomActor(
-      this.deps.memberships,
-      input.roomId,
-      { id: input.authorId, isAdmin: input.isAdmin ?? false },
-      simulation.createdByUserId,
-    );
-    const caps = computeRoomCapabilities(
-      { visibility: simulation.visibility, status: simulation.status, scope: simulation.scope },
-      roomActor,
-    );
-    if (!caps.canPost) {
-      throw new RoomPostForbiddenError(input.roomId);
+    // The Feed room's canPost only checks isAuthenticated (no membership row
+    // exists to look up), so skip the query entirely for it — the same
+    // short-circuit `requireReadableSimulation` above already uses.
+    if (simulation.scope !== "global") {
+      const roomActor = await toRoomActor(
+        this.deps.memberships,
+        input.roomId,
+        { id: input.authorId, isAdmin: input.isAdmin ?? false },
+        simulation.createdByUserId,
+      );
+      const caps = computeRoomCapabilities(
+        { visibility: simulation.visibility, status: simulation.status, scope: simulation.scope },
+        roomActor,
+      );
+      if (!caps.canPost) {
+        throw new RoomPostForbiddenError(input.roomId);
+      }
     }
 
     await this.assertPostBelongsToRoom(input.replyTo, input.roomId);
@@ -763,9 +768,11 @@ export type { SimulationActor } from "./simulation.js";
 /**
  * Converts a `SimulationActor` to a `RoomActor` for the authorization service.
  *
- * Until the RoomMembership table is queried at this layer (issue #153), we
- * synthesise an owner membership from `createdByUserId` so the existing
- * ownership rule — creator and admin may read a stopped room — is preserved.
+ * Queries `RoomMembership` for the actor's real row in this room (issue #175)
+ * and only falls back to synthesising an owner membership from
+ * `createdByUserId` when no row exists — a legacy room created before
+ * `RoomMembership` existed (issue #152). A current room's owner always has a
+ * real row, granted in the same transaction as `RoomService.create`.
  *
  * A room with no owner (`createdByUserId` absent) matches no actor id, so only
  * an admin may manage it — mirrors the Character rule (§66.14).

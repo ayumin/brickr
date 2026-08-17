@@ -141,6 +141,7 @@ type Harness = {
   tokenUsageRecords: TokenUsageRecord[];
   /** Ids of the posts the thread payload was assembled for, in order. */
   threadActivityCalls: string[];
+  membershipRepository: RoomMembershipRepository;
 };
 
 /**
@@ -174,7 +175,9 @@ function makeHarness(options: HarnessOptions): Harness {
 
   // No memberships exist in these fixtures: every room here defaults to
   // `public`, where `canPost` only needs an authenticated author (§175).
-  const membershipRepository = { findOne: () => Promise.resolve(null) } as unknown as RoomMembershipRepository;
+  const membershipRepository = {
+    findOne: vi.fn(() => Promise.resolve(null)),
+  } as unknown as RoomMembershipRepository;
 
   const authorById = new Map(options.characters.map((character) => [character.id, character]));
 
@@ -349,6 +352,7 @@ function makeHarness(options: HarnessOptions): Harness {
     threadSnapshots,
     tokenUsageRecords,
     threadActivityCalls,
+    membershipRepository,
   };
 }
 
@@ -417,6 +421,41 @@ function collectUntilTerminal(events: EventHub): {
 
 afterEach(() => {
   vi.restoreAllMocks();
+});
+
+describe("SimulationService.submitUserPost — room authorization (issue #175)", () => {
+  it("rejects a non-member posting to a closed room", async () => {
+    const harness = makeHarness({
+      characters: [],
+      simulation: { ...SIMULATION, visibility: "closed", createdByUserId: "someone-else" },
+    });
+
+    await expect(
+      harness.service.submitUserPost({
+        roomId: SIMULATION.id,
+        authorId: USER_AUTHOR_ID,
+        content: "投稿できないはず",
+        responderIds: [],
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("posts to the Feed room without querying membership (review: MR !104)", async () => {
+    const harness = makeHarness({
+      characters: [],
+      simulation: { ...SIMULATION, scope: "global", createdByUserId: undefined },
+    });
+
+    const post = await harness.service.submitUserPost({
+      roomId: SIMULATION.id,
+      authorId: USER_AUTHOR_ID,
+      content: "フィードへの投稿",
+      responderIds: [],
+    });
+
+    expect(post.content).toBe("フィードへの投稿");
+    expect(harness.membershipRepository.findOne).not.toHaveBeenCalled();
+  });
 });
 
 describe("SimulationService orchestration", () => {
