@@ -1761,6 +1761,10 @@ MVP後に必要性を見ながら検討します。
 - API Keyをcodeへ書かない
 - 過剰な抽象化をしない
 - 将来の可能性だけを理由に複雑化しない
+- 暗黙のトリックより明示的な状態を選ぶ
+  - 固定IDによる取得後フィルタでなく、意味のあるcolumn（`Room.scope`など）でDBレベルに絞る
+  - `key`によるComponentの強制remountでなく、`loading`などの明示的なgateでrenderを制御する
+  - 同じ除外ルールを複数の呼び出し経路に書き写さず、定義箇所を一つにする
 
 ---
 
@@ -2145,3 +2149,51 @@ PUT  /api/application-settings   → isAdmin限定
 ```
 
 非AdminのUserに対しては、User Profile編集画面から`EnvironmentPanel`自体を表示しません。
+
+---
+
+# 67. エージェント運用上の注意
+
+GitLab Duo AgentやClaude Codeなどのエージェントに作業を任せる際に、実際に踏んだ落とし穴です。
+具体的な経緯は`docs/duo-sessions/`のセッション振り返りに記録しています。
+
+## 67.1 git操作はリポジトリルートから行う
+
+pnpm workspaceのmonorepoなので、`cd apps/backend && git diff`のようにサブディレクトリから
+git操作を行うと、そのパス配下だけが対象になり、変更があるのに空を返して混乱します。
+
+`git diff` / `git add` / `git commit`は常にリポジトリルートで実行してください。
+
+## 67.2 DBなし環境のPrismaテスト失敗は既知
+
+`pnpm --filter @brickr/backend db:generate`を実行していない環境では、backendの一部の
+テストファイルが次のエラーでロードに失敗します。
+
+```text
+Error: @prisma/client did not initialize yet. Please run "prisma generate" and try to import it again.
+```
+
+これは**変更内容とは無関係の既知の状態**です。テストが失敗しているのでなく、
+ファイルのロードに失敗しているだけなので、失敗ファイル数の増減だけを見て
+自分の変更を疑わないでください。
+
+判断に迷ったら、まず`pnpm --filter @brickr/backend db:generate`を実行してから再測定します。
+
+## 67.3 画像アセットの取得（バイナリ）はエージェントに任せない
+
+エージェントはバイナリ画像を見ることができず、Issueの添付ファイルもAPI経由では取得できません。
+ロゴやアイコンの差し替えをIssueへの画像添付だけで依頼すると、取得を試し続けて失敗します。
+
+先に人間がアセットをリポジトリへコミットし、Issueには
+
+```text
+docs/images/logo.svg に新しいロゴを追加済みなので、参照箇所を更新してください
+```
+
+のように**リポジトリ内のパス**を書いて依頼してください。
+
+## 67.4 同じコマンドを繰り返さない
+
+同じコマンドが2度同じ失敗を返したら、三度目を試す前に前提を疑ってください。
+アプローチを変えられない場合は、無限にリトライするのでなく、何ができなかったかを
+報告して作業を止めてください。
