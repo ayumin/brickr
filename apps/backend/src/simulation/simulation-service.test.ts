@@ -31,7 +31,6 @@ const SIMULATION: Simulation = {
   id: "sim-1",
   title: "test",
   status: "active",
-  scope: "room",
   visibility: "public",
   tags: [],
   createdAt: new Date("2026-01-01T00:00:00Z"),
@@ -248,13 +247,12 @@ function makeHarness(options: HarnessOptions): Harness {
       threadActivityCalls.push(post.id);
       return Promise.resolve({
         type: "thread.activity",
-        simulationId: post.roomId,
+        roomId: post.roomId,
         postId: post.id,
         room: {
           id: simulation.id,
           title: simulation.title,
           status: simulation.status,
-          scope: simulation.scope,
           visibility: simulation.visibility,
         },
         thread: {

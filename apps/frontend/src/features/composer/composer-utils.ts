@@ -19,14 +19,14 @@ export function appendMentionOnce(content: string, handle: string): string {
 /**
  * A reply/quote always targets the replied/quoted post's own room (§17.1),
  * never wherever the reader is currently looking — the unified feed has no
- * simulation of its own to post into.
+ * room of its own to post into.
  */
 export function composerContextForReply(post: PostDto): ComposerContext {
-  return { mode: "reply", simulationId: post.roomId, post };
+  return { mode: "reply", roomId: post.roomId, post };
 }
 
 export function composerContextForQuote(post: PostDto): ComposerContext {
-  return { mode: "quote", simulationId: post.roomId, post };
+  return { mode: "quote", roomId: post.roomId, post };
 }
 
 /** The composer dialog's header title (§17.2), one per mode. */

@@ -11,11 +11,8 @@ export type RoomNameDialogProps = {
 };
 
 /**
- * The room create/rename dialog (§19.1, §19.2) — the `SimulationNameDialog`
- * successor, migrated onto the shared `Dialog` shell for focus trap/Escape
- * (Issue #50/#51) and renamed to speak "ルーム" rather than "シミュレーション"
- * (CLAUDE.md's UI-facing naming rule; the internal `Simulation` domain name
- * is unaffected).
+ * The room create/rename dialog (§19.1, §19.2), built on the shared `Dialog`
+ * shell for focus trap and Escape handling (Issue #50/#51).
  *
  * Room creation is name-only by design (§19.1): the prototype's topic/cast/
  * temperature fields are all unimplemented in phase 1, and an input nobody's

@@ -13,7 +13,7 @@ export const STORAGE_KEYS = {
   /** `brickr-dark | brickr-light`. Absent means "follow the OS" (§7.3). */
   theme: "brickr.theme",
   /** The room to restore on the next visit; absent means the unified feed (§7.1). */
-  selectedSimulationId: "brickr.selectedSimulationId",
+  selectedRoomId: "brickr.selectedRoomId",
   /** `all | mine`, shared by the feed and by one room (§7.2). */
   feedFilter: "brickr.feedFilter",
 } as const;

@@ -72,7 +72,7 @@ export function ComposerForm({
     };
 
     try {
-      const { post, thread } = await api.createPost(context.simulationId, request);
+      const { post, thread } = await api.createPost(context.roomId, request);
       onPosted(post, thread);
     } catch (cause) {
       if (isUnauthorizedError(cause)) {

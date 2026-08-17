@@ -187,7 +187,7 @@ export function reduceFeed(state: FeedState, action: FeedAction): FeedState {
     case "disconnected":
       // Nothing can finish while disconnected, so in-flight activities would
       // otherwise linger as indicators that never resolve (mirrors
-      // simulation-event-state.ts's identical rule).
+      // room-event-state.ts's identical rule).
       return { ...state, connection: "disconnected", activeResponses: new Set() };
 
     case "dismissGenerationWarning":

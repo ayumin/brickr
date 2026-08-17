@@ -157,14 +157,14 @@ function makeServices(
 ): AppServices {
   return {
     simulations: {
-      get: () => Promise.resolve({ simulation: roomSummary }),
+      get: () => Promise.resolve({ room: roomSummary }),
       listRooms: () => Promise.resolve([]),
       stop: () => Promise.resolve({ ...roomDto, status: "archived" as const }),
       resume: () => Promise.resolve(roomDto),
       ...simulationsOverrides,
     },
     simulationAnalysis: {
-      analyze: () => Promise.resolve({ simulation: roomDto, postCount: 0 }),
+      analyze: () => Promise.resolve({ room: roomDto, postCount: 0 }),
     },
     rooms: makeRoomService(roomsOverrides),
     roomMemberships: makeRoomMembershipService(roomMembershipsOverrides),
@@ -207,7 +207,7 @@ describe("Room API compatibility operations", () => {
     apps.push(app);
     const response = await app.inject({ method: "POST", url: `/api/rooms/room-1/${action}` });
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({ simulation: { id: "room-1", status } });
+    expect(response.json()).toMatchObject({ room: { id: "room-1", status } });
   });
 
   it("GET /api/rooms/:id/analysis returns the room analysis", async () => {
@@ -255,7 +255,7 @@ describe("GET /api/rooms/:id", () => {
     const response = await app.inject({ method: "GET", url: "/api/rooms/room-1" });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ simulation: roomSummary });
+    expect(response.json()).toEqual({ room: roomSummary });
   });
 
   it("maps a DomainError from the service to its HTTP answer", async () => {
@@ -278,7 +278,7 @@ describe("GET /api/rooms/:id", () => {
     const services = makeServices({
       get: (_id: string, user: UserAccount) => {
         receivedUser = user;
-        return Promise.resolve({ simulation: roomSummary });
+        return Promise.resolve({ room: roomSummary });
       },
     });
     const app = await buildApp(signedInUser, services);
@@ -323,7 +323,7 @@ describe("POST /api/rooms", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({ simulation: { id: "room-1" } });
+    expect(response.json()).toMatchObject({ room: { id: "room-1" } });
   });
 
   it("creates a room without a title", async () => {
@@ -406,7 +406,7 @@ describe("PUT /api/rooms/:id", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({ simulation: { id: "room-1" } });
+    expect(response.json()).toMatchObject({ room: { id: "room-1" } });
   });
 
   it("answers 400 when title is missing", async () => {
@@ -532,7 +532,7 @@ describe("POST /api/rooms/:id/archive", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({ simulation: { status: "archived" } });
+    expect(response.json()).toMatchObject({ room: { status: "archived" } });
     expect(services.events.closeRoom).toHaveBeenCalledWith("room-1");
   });
 
@@ -1607,7 +1607,7 @@ describe("GET /api/rooms/:id/memberships", () => {
 
   it("returns memberships for the room owner", async () => {
     const services = makeServices(
-      { get: () => Promise.resolve({ simulation: { ...roomSummary, canManage: true } }) },
+      { get: () => Promise.resolve({ room: { ...roomSummary, canManage: true } }) },
       { listMemberships: () => Promise.resolve([membershipDto]) },
     );
     const app = await buildApp(signedInUser, services);
@@ -1621,7 +1621,7 @@ describe("GET /api/rooms/:id/memberships", () => {
 
   it("answers 403 for a non-owner", async () => {
     const services = makeServices({
-      get: () => Promise.resolve({ simulation: { ...roomSummary, canManage: false } }),
+      get: () => Promise.resolve({ room: { ...roomSummary, canManage: false } }),
     });
     const app = await buildApp(signedInUser, services);
     apps.push(app);

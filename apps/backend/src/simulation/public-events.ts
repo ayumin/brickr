@@ -10,7 +10,7 @@ import type { FeedRoom } from "../feed/feed-repository.js";
  */
 export type ThreadActivityEvent = {
   type: "thread.activity";
-  simulationId: string;
+  roomId: string;
   postId: string;
   room: FeedRoom;
   /** Capabilities as an anonymous reader would see them; recomputed per subscriber. */
@@ -19,7 +19,7 @@ export type ThreadActivityEvent = {
 
 export type ResponseStartedInternalEvent = {
   type: "response.started";
-  simulationId: string;
+  roomId: string;
   activityId: string;
   targetPostId: string;
   threadRootId: string;
@@ -27,7 +27,7 @@ export type ResponseStartedInternalEvent = {
 
 export type ResponseFinishedInternalEvent = {
   type: "response.finished";
-  simulationId: string;
+  roomId: string;
   activityId: string;
   targetPostId: string;
   threadRootId: string;
@@ -43,7 +43,7 @@ export type ResponseFinishedInternalEvent = {
  */
 export type GenerationCompletedEvent = {
   type: "generation.completed";
-  simulationId: string;
+  roomId: string;
   triggerPostId: string;
   generatedPostIds: string[];
 };
@@ -55,7 +55,7 @@ export type GenerationCompletedEvent = {
  */
 export type GenerationFailedEvent = {
   type: "generation.failed";
-  simulationId: string;
+  roomId: string;
   reason: string;
 };
 

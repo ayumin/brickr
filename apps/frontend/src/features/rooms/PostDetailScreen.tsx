@@ -65,26 +65,26 @@ export function PostDetailScreen({ postId }: { postId: string }) {
     if (state.status === "denied") navigate("/", { replace: true });
   }, [state.status, navigate]);
 
-  const simulationId = state.status === "ready" ? state.post.roomId : null;
+  const roomId = state.status === "ready" ? state.post.roomId : null;
 
   const userProfile = useUserProfile();
-  const events = useRoomPosts(simulationId ?? "", simulationId !== null);
+  const events = useRoomPosts(roomId ?? "", roomId !== null);
 
   // Whether the room is stopped, fetched separately from the post itself:
   // a stopped room's post detail still opens for its creator/admin (§10.8),
   // but posting/replying/quoting stays refused for everyone regardless (§19.3).
   const [canPost, setCanPost] = useState(false);
   useEffect(() => {
-    if (simulationId === null) return;
+    if (roomId === null) return;
     const controller = new AbortController();
     api
-      .getSimulation(simulationId, controller.signal)
-      .then(({ simulation }) => setCanPost(simulation.status !== "archived"))
+      .getRoom(roomId, controller.signal)
+      .then(({ room }) => setCanPost(room.status !== "archived"))
       .catch((cause: unknown) => {
         if (!isAbortError(cause)) setCanPost(false);
       });
     return () => controller.abort();
-  }, [simulationId]);
+  }, [roomId]);
 
   const openAuthor = useCallback(
     (authorId: string) => {
@@ -158,7 +158,7 @@ export function PostDetailScreen({ postId }: { postId: string }) {
       </div>
 
       {/* The replies/reposts this screen exists to show come from the room's
-          full post list (`useSimulationEvents`); surface a failure there
+          full post list (`useRoomPosts`); surface a failure there
           rather than silently rendering the post with none of its reactions. */}
       {events.error ? (
         <div className="px-4 pt-3">

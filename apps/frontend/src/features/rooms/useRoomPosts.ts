@@ -2,7 +2,7 @@ import { useCallback, useEffect, useReducer, useState } from "react";
 import type { FeedThreadDto, PostDto, SseEvent } from "@brickr/shared";
 
 import { api, isAbortError, toErrorMessage } from "../../services/api-client";
-import { subscribeToSimulationEvents } from "../../services/sse-client";
+import { subscribeToRoomEvents } from "../../services/sse-client";
 import { createRefreshScheduler } from "../../services/sse-refresh";
 import type { ConnectionState, ResponseActivity } from "../../types";
 import {
@@ -68,7 +68,7 @@ export function useRoomPosts(roomId: string, enabled = true): UseRoomPostsResult
       }
     };
 
-    const subscription = subscribeToSimulationEvents(roomId, {
+    const subscription = subscribeToRoomEvents(roomId, {
       onEvent: handleEvent,
       onOpen: () => { if (!cancelled) dispatch({ kind: "connection", connection: "open" }); },
       onError: () => { if (!cancelled) dispatch({ kind: "connection", connection: "reconnecting" }); },

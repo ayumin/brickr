@@ -1,4 +1,4 @@
-import type { RoomVisibility, RoomScope, RoomStatus } from "@brickr/shared";
+import type { RoomVisibility, RoomStatus } from "@brickr/shared";
 import type { UserAccount } from "../auth/user-account.js";
 
 /**
@@ -14,8 +14,6 @@ export type Simulation = {
   id: string;
   title: string | null;
   status: RoomStatus;
-  /** Internal only (§8.1). All rooms have scope `"room"`. */
-  scope: RoomScope;
   visibility: RoomVisibility;
   /** Free-form discovery tags used to match autonomous Cast interests. */
   tags: string[];

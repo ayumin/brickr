@@ -52,7 +52,6 @@ function makeRoom(overrides: Partial<Simulation> = {}): Simulation {
     id: "room-1",
     title: "Test Room",
     status: "active",
-    scope: "room",
     visibility: "public",
     createdAt: now,
     lastActivityAt: now,

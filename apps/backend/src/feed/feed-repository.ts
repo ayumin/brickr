@@ -1,9 +1,9 @@
-import type { RoomVisibility, RoomScope, RoomStatus } from "@brickr/shared";
+import type { RoomVisibility, RoomStatus } from "@brickr/shared";
 import { Prisma, type Db } from "../persistence/prisma.js";
 import { optionalField } from "../persistence/repository-mapping.js";
 import { toPost, type PostRow } from "../posts/post-repository.js";
 import type { Post } from "../posts/post.js";
-import { toSimulationScope, toSimulationStatus, toSimulationVisibility } from "../simulation/simulation-repository.js";
+import { toSimulationStatus, toSimulationVisibility } from "../simulation/simulation-repository.js";
 import type { FeedCursor } from "./feed-cursor.js";
 
 /**
@@ -16,7 +16,6 @@ export type FeedRoom = {
   id: string;
   title: string | null;
   status: RoomStatus;
-  scope: RoomScope;
   visibility: RoomVisibility;
   createdByUserId?: string;
 };
@@ -34,7 +33,7 @@ export type FeedMineScope = {
 
 export type FeedPageQuery = {
   /** One room, or every simulation when the unified feed asks (§10.1). */
-  simulationId?: string;
+  roomId?: string;
   mine?: FeedMineScope;
   cursor?: FeedCursor;
   /**
@@ -47,7 +46,7 @@ export type FeedPageQuery = {
    *
    * Used by the unified feed to filter out closed/private rooms the reader
    * cannot see (§10.1). Absent for a room-scoped feed, which already narrows
-   * by `simulationId`.
+   * by `roomId`.
    */
   visibleRoomIds?: string[];
 };
@@ -56,7 +55,6 @@ const ROOM_SELECT = {
   id: true,
   title: true,
   status: true,
-  scope: true,
   visibility: true,
   createdByUserId: true,
 } as const;
@@ -84,7 +82,7 @@ export class FeedRepository {
 
     if (query.cursor) conditions.push(afterCursor(query.cursor));
     if (query.mine) {
-      conditions.push(await this.concerningUser(query.mine, query.simulationId));
+      conditions.push(await this.concerningUser(query.mine, query.roomId));
     }
     // Restrict the global feed to rooms the reader may see (§10.1). When
     // `visibleRoomIds` is present the caller has already resolved which rooms
@@ -98,7 +96,7 @@ export class FeedRepository {
       where: {
         // A thread is identified by its root, so the feed reads roots only.
         replyTo: null,
-        ...(query.simulationId ? { roomId: query.simulationId } : {}),
+        ...(query.roomId ? { roomId: query.roomId } : {}),
         ...(conditions.length > 0 ? { AND: conditions } : {}),
       },
       include: { room: { select: ROOM_SELECT } },
@@ -112,7 +110,6 @@ export class FeedRepository {
         id: row.room.id,
         title: row.room.title,
         status: toSimulationStatus(row.room.status),
-        scope: toSimulationScope(row.room.scope),
         visibility: toSimulationVisibility(row.room.visibility),
         ...optionalField("createdByUserId", row.room.createdByUserId),
       },
@@ -330,9 +327,9 @@ export class FeedRepository {
    */
   private async concerningUser(
     mine: FeedMineScope,
-    simulationId?: string,
+    roomId?: string,
   ): Promise<Prisma.PostWhereInput> {
-    const room = simulationId === undefined ? {} : { roomId: simulationId };
+    const room = roomId === undefined ? {} : { roomId: roomId };
 
     const [answered, mentioned, quoted] = await Promise.all([
       // A reply whose parent I wrote. Having merely posted in the thread does

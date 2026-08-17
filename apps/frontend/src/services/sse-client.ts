@@ -8,7 +8,7 @@
 import { SSE_EVENT_TYPES } from "@brickr/shared";
 import type { SseEvent, SseEventType } from "@brickr/shared";
 
-import { feedEventsUrl, simulationEventsUrl } from "./api-client";
+import { feedEventsUrl, roomEventsUrl } from "./api-client";
 
 export type SseHandlers = {
   onEvent: (event: SseEvent) => void;
@@ -110,11 +110,11 @@ function subscribe(url: string, handlers: SseHandlers): SseSubscription {
   };
 }
 
-export function subscribeToSimulationEvents(
-  simulationId: string,
+export function subscribeToRoomEvents(
+  roomId: string,
   handlers: SseHandlers,
 ): SseSubscription {
-  return subscribe(simulationEventsUrl(simulationId), handlers);
+  return subscribe(roomEventsUrl(roomId), handlers);
 }
 
 /** Subscribes to the unified feed's stream — every room's public events, anonymised (§11.2). */

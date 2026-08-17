@@ -7,7 +7,7 @@ export type CharacterProfileProps = {
   avatarUrl?: string | null;
   /** Characters have one; the human user does not. */
   description?: string | null;
-  /** Number of posts this author has in the current simulation. */
+  /** Number of posts this author has in the current room. */
   postCount: number;
   onEdit?: () => void;
 };

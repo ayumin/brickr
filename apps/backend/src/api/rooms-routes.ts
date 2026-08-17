@@ -109,14 +109,14 @@ const roomSummarySchema = z.object({
   canManage: z.boolean(),
 });
 
-// The service returns { simulation: RoomSummaryDto }; the response schema
+// The service returns { room: RoomSummaryDto }; the response schema
 // mirrors that shape for OpenAPI documentation.
 export const roomSummaryResponseSchema = z.object({
-  simulation: roomSummarySchema,
+  room: roomSummarySchema,
 });
 
 const roomDtoResponseSchema = z.object({
-  simulation: roomDtoSchema,
+  room: roomDtoSchema,
 });
 
 // Room list entry: either a full summary or a restricted entry for closed rooms.
@@ -831,12 +831,12 @@ export function registerRoomsRoutes(app: FastifyInstance, services: AppServices)
     body: createRoomBodySchema,
     response: roomDtoResponseSchema,
     handler: async ({ user, body }) => {
-      const simulation = await services.rooms.create({
+      const room = await services.rooms.create({
         title: body.title ?? null,
         visibility: body.visibility,
         createdByUserId: user.id,
       });
-      return { simulation };
+      return { room };
     },
   }).register(app);
 
@@ -849,8 +849,8 @@ export function registerRoomsRoutes(app: FastifyInstance, services: AppServices)
     body: updateRoomBodySchema,
     response: roomDtoResponseSchema,
     handler: async ({ user, params, body }) => {
-      const simulation = await services.rooms.update(params.id, body, user);
-      return { simulation };
+      const room = await services.rooms.update(params.id, body, user);
+      return { room };
     },
   }).register(app);
 
@@ -862,12 +862,12 @@ export function registerRoomsRoutes(app: FastifyInstance, services: AppServices)
     params: roomIdParams,
     response: roomDtoResponseSchema,
     handler: async ({ user, params }) => {
-      const simulation = await services.rooms.archive(params.id, user);
+      const room = await services.rooms.archive(params.id, user);
       // Terminate every open SSE stream for this room (§11.1 visibility
       // re-evaluation). Clients reconnect and receive a 404 — the correct
       // answer for a stopped room they cannot read (§10.4).
       services.events.closeRoom(params.id);
-      return { simulation };
+      return { room };
     },
   }).register(app);
 
@@ -879,7 +879,7 @@ export function registerRoomsRoutes(app: FastifyInstance, services: AppServices)
     params: roomIdParams,
     response: roomDtoResponseSchema,
     handler: async ({ user, params }) => ({
-      simulation: await services.simulations.stop(params.id, user),
+      room: await services.simulations.stop(params.id, user),
     }),
   }).register(app);
 
@@ -890,7 +890,7 @@ export function registerRoomsRoutes(app: FastifyInstance, services: AppServices)
     params: roomIdParams,
     response: roomDtoResponseSchema,
     handler: async ({ user, params }) => ({
-      simulation: await services.simulations.resume(params.id, user),
+      room: await services.simulations.resume(params.id, user),
     }),
   }).register(app);
 
@@ -991,8 +991,8 @@ export function registerRoomsRoutes(app: FastifyInstance, services: AppServices)
     response: membershipsResponseSchema,
     handler: async ({ user, params }) => {
       // Only owner/admin may list memberships — enforced by canManage from the service
-      const simulation = await services.simulations.get(params.id, user);
-      if (!simulation.simulation.canManage) {
+      const roomResponse = await services.simulations.get(params.id, user);
+      if (!roomResponse.room.canManage) {
         throw new RoomForbiddenError(params.id);
       }
       const memberships = await services.rooms.listMemberships(params.id);

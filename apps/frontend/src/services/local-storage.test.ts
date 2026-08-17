@@ -58,17 +58,17 @@ describe("local storage helpers", () => {
   it("keeps every key in one registry, namespaced to the app", () => {
     expect(Object.values(STORAGE_KEYS)).toEqual([
       "brickr.theme",
-      "brickr.selectedSimulationId",
+      "brickr.selectedRoomId",
       "brickr.feedFilter",
     ]);
   });
 
   it("round-trips a value and clears it", () => {
-    writeStored(STORAGE_KEYS.selectedSimulationId, "room-1");
-    expect(readStored(STORAGE_KEYS.selectedSimulationId)).toBe("room-1");
+    writeStored(STORAGE_KEYS.selectedRoomId, "room-1");
+    expect(readStored(STORAGE_KEYS.selectedRoomId)).toBe("room-1");
 
-    clearStored(STORAGE_KEYS.selectedSimulationId);
-    expect(readStored(STORAGE_KEYS.selectedSimulationId)).toBeNull();
+    clearStored(STORAGE_KEYS.selectedRoomId);
+    expect(readStored(STORAGE_KEYS.selectedRoomId)).toBeNull();
   });
 
   it("treats a value outside the allowed set as absent", () => {

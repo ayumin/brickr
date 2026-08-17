@@ -9,7 +9,7 @@ import { toErrorMessage } from "../../services/api-client";
 import { RoomAnalysisPanel } from "./RoomAnalysisPanel";
 
 export type RoomInfoContentProps = {
-  simulation: RoomSummaryDto;
+  room: RoomSummaryDto;
   onOpenAnalysis: () => void;
   onRename: () => void;
   onStop: () => Promise<void>;
@@ -34,7 +34,7 @@ type ConfirmDialog =
  * は確認ダイアログ必須"). Delete is only available for archived rooms.
  */
 export function RoomInfoContent({
-  simulation,
+  room,
   onOpenAnalysis,
   onRename,
   onStop,
@@ -46,7 +46,7 @@ export function RoomInfoContent({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialog | null>(null);
-  const isStopped = simulation.status === "archived";
+  const isStopped = room.status === "archived";
 
   const run = async (operation: () => Promise<void>): Promise<void> => {
     setBusy(true);
@@ -72,14 +72,14 @@ export function RoomInfoContent({
   return (
     <div className="space-y-4 p-4">
       <div>
-        <h2 className="truncate text-base font-bold text-ink">{simulation.title ?? "無題のルーム"}</h2>
+        <h2 className="truncate text-base font-bold text-ink">{room.title ?? "無題のルーム"}</h2>
         <p className="mt-1 text-xs text-ink-faint">
-          作成者: {simulation.creator ? `@${simulation.creator.handle}` : "不明"}
+          作成者: {room.creator ? `@${room.creator.handle}` : "不明"}
         </p>
-        <p className="text-xs text-ink-faint">投稿数: {simulation.postCount.toLocaleString("ja-JP")}</p>
+        <p className="text-xs text-ink-faint">投稿数: {room.postCount.toLocaleString("ja-JP")}</p>
       </div>
 
-      {simulation.canManage ? (
+      {room.canManage ? (
         <button
           type="button"
           onClick={onOpenAnalysis}
@@ -90,7 +90,7 @@ export function RoomInfoContent({
         </button>
       ) : null}
 
-      {simulation.canManage ? (
+      {room.canManage ? (
         <div className="space-y-2 border-t border-line pt-4">
           <button
             type="button"
@@ -201,7 +201,7 @@ export function RoomInfoPanel(props: RoomInfoPanelProps) {
   return (
     <aside className="sticky top-0 hidden h-fit w-[280px] shrink-0 border-l border-line lg:block">
       <RoomInfoContent {...props} />
-      <RoomAnalysisPanel simulation={props.simulation} />
+      <RoomAnalysisPanel room={props.room} />
     </aside>
   );
 }

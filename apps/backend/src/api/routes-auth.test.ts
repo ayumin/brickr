@@ -153,7 +153,7 @@ function makeServices(): AppServices {
     },
     simulations: {
       list: () => Promise.resolve([]),
-      get: () => Promise.resolve({ simulation: { id: "s1" } }),
+      get: () => Promise.resolve({ room: { id: "s1" } }),
       requireReadableRoom: () => Promise.resolve({ id: "s1" }),
       create: () => Promise.resolve({ id: "s1" }),
       rename: () => Promise.resolve({ id: "s1" }),

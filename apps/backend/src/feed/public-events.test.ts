@@ -11,7 +11,6 @@ const ROOM: FeedRoom = {
   id: "room-1",
   title: "設計の部屋",
   status: "active",
-  scope: "room",
   visibility: "public",
   createdByUserId: "owner-1",
 };
@@ -58,7 +57,7 @@ function published(event: InternalSseEvent): PublishedInternalSseEvent {
 function threadActivity(): PublishedInternalSseEvent {
   return published({
     type: "thread.activity",
-    simulationId: ROOM.id,
+    roomId: ROOM.id,
     postId: "reply-1",
     room: ROOM,
     thread: thread(),
@@ -80,7 +79,7 @@ describe("toPublicEvent state changes", () => {
   it("passes minimal response activity state through", () => {
     const started = published({
       type: "response.started",
-      simulationId: ROOM.id,
+      roomId: ROOM.id,
       activityId: "activity-1",
       targetPostId: "root-1",
       threadRootId: "root-1",
@@ -97,7 +96,7 @@ describe("toPublicEvent state changes", () => {
     });
     const finished = published({
       type: "response.finished",
-      simulationId: ROOM.id,
+      roomId: ROOM.id,
       activityId: "activity-1",
       targetPostId: "root-1",
       threadRootId: "root-1",
@@ -119,11 +118,11 @@ describe("toPublicEvent state changes", () => {
     const internal: InternalSseEvent[] = [
       {
         type: "generation.completed",
-        simulationId: ROOM.id,
+        roomId: ROOM.id,
         triggerPostId: "root-1",
         generatedPostIds: ["post-2"],
       },
-      { type: "generation.failed", simulationId: ROOM.id, reason: "provider unavailable" },
+      { type: "generation.failed", roomId: ROOM.id, reason: "provider unavailable" },
     ];
 
     for (const event of internal) {

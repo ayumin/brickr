@@ -67,7 +67,6 @@ function room(id: string, overrides: Partial<Simulation> = {}): Simulation {
     id,
     title: id,
     status: "active",
-    scope: "room",
     visibility: "public",
     tags: [],
     createdAt: NOW,
@@ -371,16 +370,16 @@ describe("access matrix (§24.2)", () => {
 
     it("is summary-shaped, same as a room list entry, for the room info panel (§19.2)", async () => {
       const { body } = (await get(ROOM_OWNER, `/api/rooms/${ACTIVE_ROOM.id}`)) as {
-        body: { simulation: { postCount: number; creator: unknown; canManage: boolean } };
+        body: { room: { postCount: number; creator: unknown; canManage: boolean } };
       };
-      expect(body.simulation).toHaveProperty("postCount");
-      expect(body.simulation).toHaveProperty("creator");
-      expect(body.simulation.canManage).toBe(true);
+      expect(body.room).toHaveProperty("postCount");
+      expect(body.room).toHaveProperty("creator");
+      expect(body.room.canManage).toBe(true);
 
       const { body: asStranger } = (await get(NORMAL_USER, `/api/rooms/${ACTIVE_ROOM.id}`)) as {
-        body: { simulation: { canManage: boolean } };
+        body: { room: { canManage: boolean } };
       };
-      expect(asStranger.simulation.canManage).toBe(false);
+      expect(asStranger.room.canManage).toBe(false);
     });
   });
 

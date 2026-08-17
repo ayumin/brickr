@@ -46,7 +46,6 @@ const activeRoom: Simulation = {
   id: "room-1",
   title: "Integration Test Room",
   status: "active",
-  scope: "room",
   visibility: "public",
   tags: [],
   createdAt: NOW,
@@ -116,13 +115,12 @@ function threadActivityEvent(options: {
   const status = options.status ?? "active";
   return {
     type: "thread.activity",
-    simulationId: roomId,
+    roomId: roomId,
     postId,
     room: {
       id: roomId,
       title: "Integration Test Room",
       status,
-      scope: "room",
       visibility: "public",
       createdByUserId: "user-1",
     },
@@ -394,6 +392,6 @@ describe("Step 2 — SSE delivery via EventHub", () => {
     hub.publish("room-2", threadActivityEvent({ roomId: "room-2", postId: "post-room2" }));
 
     expect(feedEvents).toHaveLength(1);
-    expect(feedEvents[0]?.simulationId).toBe("room-2");
+    expect(feedEvents[0]?.roomId).toBe("room-2");
   });
 });

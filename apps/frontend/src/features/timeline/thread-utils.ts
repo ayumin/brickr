@@ -2,7 +2,7 @@
  * Derived-thread helpers.
  *
  * Pure functions over `PostDto[]` — no React, no fetch, no mutation of the
- * inputs. The frontend already holds every post in the simulation (REST
+ * inputs. The frontend already holds every post in the room (REST
  * hydration + SSE), so every view below is derived state rather than a new
  * endpoint.
  *

@@ -21,7 +21,6 @@ const ROOM: FeedRoom = {
   id: "room-1",
   title: "設計の部屋",
   status: "active",
-  scope: "room",
   visibility: "public",
   createdByUserId: "owner-1",
 };
@@ -32,7 +31,6 @@ const CLOSED_ROOM: FeedRoom = {
   id: "room-3",
   title: "クローズドルーム",
   status: "active",
-  scope: "room",
   visibility: "closed",
   createdByUserId: "owner-1",
 };
@@ -41,7 +39,6 @@ const PRIVATE_ROOM: FeedRoom = {
   id: "room-4",
   title: "プライベートルーム",
   status: "active",
-  scope: "room",
   visibility: "private",
   createdByUserId: "owner-1",
 };
@@ -90,7 +87,6 @@ function makeHarness(input: { posts: Post[]; rooms?: FeedRoom[]; memberRoomIds?:
           const room = rooms.get(id);
           if (!room) return false;
           if (room.visibility === "public" || room.visibility === "open") return true;
-          if (room.scope === "global") return true;
           // closed/private: only if the reader is in memberRoomIds.
           return userId !== null && input.memberRoomIds!.includes(id);
         });
@@ -104,7 +100,7 @@ function makeHarness(input: { posts: Post[]; rooms?: FeedRoom[]; memberRoomIds?:
     ),
     findThreadPage: vi.fn(
       (query: {
-        simulationId?: string;
+        roomId?: string;
         visibleRoomIds?: string[];
         mine?: { userId: string; handle: string };
         cursor?: { activityAt: Date; id: string };
@@ -113,7 +109,7 @@ function makeHarness(input: { posts: Post[]; rooms?: FeedRoom[]; memberRoomIds?:
         const { mine, cursor } = query;
 
         let page = roots.filter(
-          (root) => !query.simulationId || root.roomId === query.simulationId,
+          (root) => !query.roomId || root.roomId === query.roomId,
         );
         // Apply visibility filter when provided.
         if (query.visibleRoomIds !== undefined) {
@@ -215,7 +211,6 @@ function toSimulation(room: FeedRoom): Simulation {
     id: room.id,
     title: room.title,
     status: room.status,
-    scope: room.scope,
     visibility: room.visibility,
     tags: [],
     createdAt: at(0),
@@ -638,7 +633,7 @@ describe("FeedService room feed (§10.2, §10.4)", () => {
 
     expect(spies.findThreadPage).toHaveBeenCalledWith(
       expect.objectContaining({
-        simulationId: ROOM.id,
+        roomId: ROOM.id,
         mine: { userId: READER.id, handle: READER.handle },
       }),
     );
@@ -883,7 +878,7 @@ describe("FeedService.buildThreadActivity (§11.3)", () => {
     const activity = await service.buildThreadActivity(replies[2] as Post);
 
     expect(activity.type).toBe("thread.activity");
-    expect(activity.simulationId).toBe(ROOM.id);
+    expect(activity.roomId).toBe(ROOM.id);
     expect(activity.thread.root.id).toBe("root-1");
     // Same preview rule as a page: newest two, oldest first (§12.2).
     expect(activity.thread.latestReplies.map((entry) => entry.id)).toEqual([
@@ -926,7 +921,6 @@ describe("FeedService.buildThreadActivity (§11.3)", () => {
     expect(activity.room).toMatchObject({
       id: ROOM.id,
       status: "active",
-      scope: "room",
       createdByUserId: "owner-1",
     });
   });

@@ -82,7 +82,7 @@ export function useFeed(
 
   // Subscribed before the initial fetch runs below (effects fire in the order
   // they're declared), so a thread updated while the request is in flight is
-  // not lost - the same guarantee `useSimulationEvents` makes.
+  // not lost - the same guarantee `useRoomPosts` makes.
   useFeedEvents(scope, dispatch, enabled, refresh);
 
   useEffect(() => {

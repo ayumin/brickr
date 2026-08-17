@@ -9,9 +9,9 @@ import { clearSelectedRoomId, readSelectedRoomId } from "../features/rooms/selec
 import { decideSessionRestore } from "./session-restore";
 
 /**
- * Replaces the old `SimulationBootstrap` (§13.3): resolves the session, then
+ * Replaces the old `RoomBootstrap` (§13.3): resolves the session, then
  * - signed out: shows whatever the URL says (subject to each screen's own
- *   access check) - never creates a Simulation, never reads the stored room.
+ *   access check) - never creates a Room, never reads the stored room.
  * - signed in, explicit URL: honored as-is.
  * - signed in, landing on `/`: the stored room (if any) is checked exactly
  *   once, at launch, and restored via `replace` if still accessible; an
@@ -49,7 +49,7 @@ export function SessionGate({ children }: { children: ReactNode }) {
 
     const controller = new AbortController();
     api
-      .getSimulation(storedRoomId, controller.signal)
+      .getRoom(storedRoomId, controller.signal)
       .then(() => {
         navigate(roomPath(storedRoomId), { replace: true });
       })

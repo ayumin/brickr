@@ -42,11 +42,6 @@ enum MemberStatus {
 
 /// Visibility of a room to non-members.
 ///
-/// Schema management note: this project uses `prisma db push --accept-data-loss`
-/// (see docker-entrypoint.sh) rather than `prisma migrate dev`, so no migration
-/// file is generated. The `--accept-data-loss` flag instructs Prisma to issue the
-/// necessary `ALTER COLUMN ... TYPE "RoomVisibility" USING (visibility::text::"RoomVisibility")`
-/// DDL automatically when the schema is pushed to the database.
 enum RoomVisibility {
   /// Visible and joinable by anyone.
   public
@@ -127,10 +122,6 @@ model Room {
   title  String?
   /// "active" | "archived".
   status String  @default("active")
-  /// "global" | "room". Internal only, never a label on screen: the reserved
-  /// global row backs the unified feed (Brickr-ux-refine §8.1, §8.2).
-  scope  String  @default("room")
-
   // Extended room metadata (Phase-1 redesign).
   // These fields are schema scaffolding for a future phase; none of them are
   // read or enforced by the current application code.
@@ -164,7 +155,7 @@ model Room {
   createdByUser     UserProfile?     @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
 
   @@index([createdByUserId])
-  @@index([scope, status, lastActivityAt])
+  @@index([status, lastActivityAt])
   @@index([createdByUserId, status, lastActivityAt])
   @@map("rooms")
 }

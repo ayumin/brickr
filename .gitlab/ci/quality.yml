@@ -1,0 +1,109 @@
+.quality-change-rules:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - .gitlab-ci.yml
+        - .gitlab/ci/**/*
+        - apps/**/*
+        - packages/**/*
+        - e2e/**/*
+        - scripts/**/*
+        - docker-compose.yml
+        - package.json
+        - pnpm-lock.yaml
+        - playwright.config.ts
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes:
+        - .gitlab-ci.yml
+        - .gitlab/ci/**/*
+        - apps/**/*
+        - packages/**/*
+        - e2e/**/*
+        - scripts/**/*
+        - docker-compose.yml
+        - package.json
+        - pnpm-lock.yaml
+        - playwright.config.ts
+
+"quality:no-legacy-references":
+  extends: .quality-change-rules
+  stage: validate
+  image: node:22-bookworm-slim
+  before_script: []
+  needs: []
+  script:
+    - node scripts/check-no-legacy-refs.mjs
+
+"quality:empty-database":
+  extends:
+    - .backend-job
+    - .quality-change-rules
+  stage: test
+  services:
+    - name: postgres:17-alpine
+      alias: db
+  variables:
+    POSTGRES_USER: brickr
+    POSTGRES_PASSWORD: brickr
+    POSTGRES_DB: brickr_test
+    DATABASE_URL: postgresql://brickr:brickr@db:5432/brickr_test?schema=public
+    USE_MOCK_LLM: "true"
+  script:
+    - pnpm --filter @brickr/backend exec prisma migrate reset --force --skip-seed
+    - pnpm --filter @brickr/backend exec tsx prisma/seed.ts
+    - pnpm --filter @brickr/backend exec prisma migrate status
+
+"quality:e2e":
+  extends: .quality-change-rules
+  stage: e2e
+  image: mcr.microsoft.com/playwright:v1.55.0-noble
+  services:
+    - name: postgres:17-alpine
+      alias: db
+  variables:
+    POSTGRES_USER: brickr
+    POSTGRES_PASSWORD: brickr
+    POSTGRES_DB: brickr_e2e
+    DATABASE_URL: postgresql://brickr:brickr@db:5432/brickr_e2e?schema=public
+    USE_MOCK_LLM: "true"
+    ADMIN_EMAIL: admin@example.com
+    ADMIN_PASSWORD: brickr-e2e-password
+    ADMIN_HANDLE: admin
+    ADMIN_DISPLAY_NAME: E2E Admin
+    VITE_API_BASE_URL: http://127.0.0.1:3000
+  before_script:
+    - !reference [.node-setup, before_script]
+    - pnpm --filter @brickr/backend db:generate
+    - pnpm --filter @brickr/backend db:reset:raw
+  script:
+    - pnpm test:e2e
+  artifacts:
+    when: always
+    expire_in: 1 week
+    paths:
+      - playwright-report/
+      - test-results/
+
+"quality:worker-compose":
+  extends: .quality-change-rules
+  stage: e2e
+  image: docker:27.5.1-cli
+  services:
+    - name: docker:27.5.1-dind
+      alias: docker
+  variables:
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_CERTDIR: /certs
+    DOCKER_CERT_PATH: /certs/client
+    DOCKER_TLS_VERIFY: "1"
+    USE_MOCK_LLM: "true"
+  before_script: []
+  script:
+    - docker compose config --quiet
+    - docker compose up --build --detach db backend worker
+    - timeout 180 sh -c 'until [ "$(docker compose ps --status running --quiet worker | wc -l | tr -d " ")" = "2" ]; do sleep 3; done'
+    - timeout 180 sh -c 'until [ "$(docker compose ps --format json worker | grep -c healthy)" = "2" ]; do sleep 3; done'
+    - test "$(docker compose ps --status running --quiet worker | wc -l | tr -d ' ')" = "2"
+  after_script:
+    - docker compose logs --no-color backend worker || true
+    - docker compose down --volumes --remove-orphans || true

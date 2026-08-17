@@ -47,7 +47,7 @@ export class SimulationAnalysisService {
     const repostCount = posts.filter((post) => post.quoteOf !== null).length;
 
     return {
-      simulation: toSimulationDto(simulation),
+      room: toSimulationDto(simulation),
       summary: await this.summarize(posts),
       postCount: posts.length,
       authorCount: new Set(posts.map((post) => post.author.id)).size,

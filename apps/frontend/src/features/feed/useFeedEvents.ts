@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import type { Dispatch } from "react";
 import type { SseEvent, ThreadFeedSource } from "@brickr/shared";
 
-import { subscribeToFeedEvents, subscribeToSimulationEvents } from "../../services/sse-client";
+import { subscribeToFeedEvents, subscribeToRoomEvents } from "../../services/sse-client";
 import { createRefreshScheduler } from "../../services/sse-refresh";
 import type { FeedAction } from "./feed-reducer";
 
@@ -65,7 +65,7 @@ export function useFeedEvents(
     };
 
     const subscription =
-      roomId !== null ? subscribeToSimulationEvents(roomId, handlers) : subscribeToFeedEvents(handlers);
+      roomId !== null ? subscribeToRoomEvents(roomId, handlers) : subscribeToFeedEvents(handlers);
 
     return () => {
       refreshScheduler.cancel();
