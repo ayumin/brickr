@@ -104,7 +104,7 @@ EOF
 `--description "$(cat /tmp/desc.md)"`.** Do not assemble the string inline.
 
 Text inside double quotes is still shell-expanded, so a Markdown body
-containing backticks, `$`, or `\` breaks in a way that is easy to miss: the
+containing backticks or `$` breaks in a way that is easy to miss: the
 shell runs the backticked text as a command, emits errors such as
 `/bin/sh: 1: some-file.test.ts: not found`, and substitutes the empty result
 into the description. `glab` still exits 0 and still creates the merge request,
