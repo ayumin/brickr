@@ -1,6 +1,10 @@
 #!/bin/sh
 set -e
 
+# Both API and worker mount the development schema. Keep their generated
+# clients in sync even when the worker skips the one-time DB bootstrap.
+pnpm exec prisma generate
+
 if [ "${SKIP_DB_BOOTSTRAP:-false}" != "true" ]; then
   # The db service is healthy before we start, but the socket can still lag a
   # moment. Retry committed migrations rather than mutating schema ad hoc.
@@ -14,9 +18,6 @@ if [ "${SKIP_DB_BOOTSTRAP:-false}" != "true" ]; then
     attempt=$((attempt + 1))
     sleep 2
   done
-
-  # Bind-mounted development schemas can be newer than the generated client.
-  pnpm exec prisma generate
   pnpm exec tsx prisma/seed.ts
 fi
 
