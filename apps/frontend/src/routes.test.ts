@@ -32,7 +32,7 @@ describe("normalizeHandleParam", () => {
     expect(normalizeHandleParam("ab")).toBeNull();
   });
 
-  it("rejects every reserved word this app now routes above the /:handle catch-all", () => {
+  it("rejects every word in RESERVED_HANDLES (routed or not)", () => {
     for (const reserved of [
       "login", "characters", "simulations", "rooms", "cast", "settings", "posts",
       "profile", "appearance", "usage", "runtime", "users", "invites",
