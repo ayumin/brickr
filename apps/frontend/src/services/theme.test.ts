@@ -32,7 +32,6 @@ function stubBrowser(options: { prefersLight?: boolean; stored?: string } = {}) 
   const found = new Map<string, { attributes: Record<string, string> }>();
   const element = (): { attributes: Record<string, string> } => ({ attributes: {} });
   found.set('meta[name="theme-color"]', element());
-  found.set("#app-favicon", element());
 
   vi.stubGlobal("window", {
     localStorage: {
@@ -131,13 +130,11 @@ describe("applyTheme", () => {
     }
   });
 
-  it("switches the browser UI colour and the favicon with the theme", () => {
+  it("switches the browser UI colour with the theme", () => {
     applyTheme("brickr-dark");
     expect(browser.found.get('meta[name="theme-color"]')?.attributes.content).toBe("#100f13");
-    expect(browser.found.get("#app-favicon")?.attributes.href).toBe("/brickr-logo-dark.svg");
 
     applyTheme("brickr-light");
     expect(browser.found.get('meta[name="theme-color"]')?.attributes.content).toBe("#f7f5f3");
-    expect(browser.found.get("#app-favicon")?.attributes.href).toBe("/brickr-logo.svg");
   });
 });

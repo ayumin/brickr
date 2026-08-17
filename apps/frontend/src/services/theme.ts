@@ -79,12 +79,6 @@ export function applyTheme(theme: Theme): void {
   document
     .querySelector('meta[name="theme-color"]')
     ?.setAttribute("content", option.swatches[0]);
-  document
-    .querySelector("#app-favicon")
-    ?.setAttribute(
-      "href",
-      option.colorScheme === "dark" ? "/brickr-logo-dark.svg" : "/brickr-logo.svg",
-    );
   writeStored(STORAGE_KEYS.theme, theme);
 }
 

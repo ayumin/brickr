@@ -911,7 +911,7 @@ DBへ保存しない。OS初期値＋LocalStorageとする。既存テーマmigr
 
 ### 15.4 Logo
 
-既存 `apps/frontend/public/brickr-logo.svg` とdark版を使用する。プロトタイプのオレンジ四角形は採用しない。
+既存 `apps/frontend/public/brickr-logo.png` を使用する(Issue #173でチャットバブル型ロゴへ刷新、light/dark共通の単一画像で背景色スクエアは持たない)。プロトタイプのオレンジ四角形は採用しない。
 
 ## 16. フィードUI詳細
 
