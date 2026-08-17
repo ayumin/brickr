@@ -54,6 +54,7 @@ const room: Simulation = {
   title: "Room",
   status: "active",
   visibility: "public",
+  scope: "room",
   tags: [],
   createdAt: now,
   lastActivityAt: now,

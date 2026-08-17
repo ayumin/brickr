@@ -40,6 +40,16 @@ enum MemberStatus {
   banned
 }
 
+/// Internal room scope: distinguishes the global Feed room from user-created rooms.
+///
+/// Not exposed in public DTOs; used for internal filtering only.
+enum RoomScope {
+  /// The reserved Feed room — posts from the Feed screen go here.
+  global
+  /// User-created rooms.
+  room
+}
+
 /// Visibility of a room to non-members.
 ///
 enum RoomVisibility {
@@ -137,6 +147,10 @@ model Room {
   theme          String?        @map("theme")
   /// Whether Cast characters may join this room autonomously (unenforced scaffolding).
   castAutonomous Boolean        @default(true) @map("cast_autonomous")
+
+  /// Internal scope: global (Feed) or room (user-created).
+  /// Not exposed in public DTOs; used for internal filtering only.
+  scope          RoomScope      @default(room) @map("scope")
 
   /// Public to everyone, unlike Character ownership (§66.6). Null for rooms
   /// created before login existed, and for the reserved global row.

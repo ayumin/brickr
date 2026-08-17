@@ -35,6 +35,7 @@ function makeSummary(overrides: Partial<SimulationSummary> = {}): SimulationSumm
     title: "テストルーム",
     status: "active",
     visibility: "public",
+    scope: "room",
     tags: [],
     createdAt: BASE_DATE,
     lastActivityAt: BASE_DATE,

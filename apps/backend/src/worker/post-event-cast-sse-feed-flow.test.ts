@@ -47,6 +47,7 @@ const activeRoom: Simulation = {
   title: "Integration Test Room",
   status: "active",
   visibility: "public",
+  scope: "room",
   tags: [],
   createdAt: NOW,
   lastActivityAt: NOW,

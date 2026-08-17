@@ -212,6 +212,7 @@ function toSimulation(room: FeedRoom): Simulation {
     title: room.title,
     status: room.status,
     visibility: room.visibility,
+    scope: "room",
     tags: [],
     createdAt: at(0),
     lastActivityAt: at(0),

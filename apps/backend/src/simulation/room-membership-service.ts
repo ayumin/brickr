@@ -28,6 +28,7 @@ import {
   type SimulationActor,
 } from "./simulation-service.js";
 import { RoomNotFoundError, RoomArchivedError, RoomForbiddenError } from "./room-service.js";
+import { assertNotFeedRoom } from "./feed-room-guard.js";
 
 // ---------------------------------------------------------------------------
 // Domain errors
@@ -130,6 +131,7 @@ export class RoomMembershipService {
   async invite(input: InviteInput, actor: SimulationActor): Promise<RoomMembershipDto> {
     const room = await this.requireRoom(input.roomId);
     this.assertOwnerOrAdmin(room, actor, input.roomId);
+    assertNotFeedRoom(room);
 
     if (room.status === "archived") {
       throw new RoomArchivedError(input.roomId);
@@ -188,6 +190,7 @@ export class RoomMembershipService {
   ): Promise<RoomMembershipDto> {
     const room = await this.requireRoom(roomId);
     this.assertOwnerOrAdmin(room, actor, roomId);
+    assertNotFeedRoom(room);
 
     if (room.status === "archived") {
       throw new RoomArchivedError(roomId);
@@ -227,6 +230,7 @@ export class RoomMembershipService {
   ): Promise<RoomMembershipDto> {
     const room = await this.requireRoom(roomId);
     this.assertOwnerOrAdmin(room, actor, roomId);
+    assertNotFeedRoom(room);
 
     if (room.status === "archived") {
       throw new RoomArchivedError(roomId);
@@ -262,6 +266,7 @@ export class RoomMembershipService {
   ): Promise<RoomMembershipDto> {
     const room = await this.requireRoom(roomId);
     this.assertOwnerOrAdmin(room, actor, roomId);
+    assertNotFeedRoom(room);
 
     const membership = await this.requireMembership(membershipId, roomId);
 
@@ -300,6 +305,7 @@ export class RoomMembershipService {
   ): Promise<RoomMembershipDto> {
     const room = await this.requireRoom(roomId);
     this.assertOwnerOrAdmin(room, actor, roomId);
+    assertNotFeedRoom(room);
 
     if (room.status === "archived") {
       throw new RoomArchivedError(roomId);
@@ -327,6 +333,7 @@ export class RoomMembershipService {
   ): Promise<void> {
     const room = await this.requireRoom(roomId);
     this.assertOwnerOrAdmin(room, actor, roomId);
+    assertNotFeedRoom(room);
 
     const membership = await this.requireMembership(membershipId, roomId);
 

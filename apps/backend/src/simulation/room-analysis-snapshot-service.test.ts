@@ -37,6 +37,7 @@ const activeRoom: Simulation = {
   title: "テストルーム",
   status: "active",
   visibility: "public",
+  scope: "room",
   tags: [],
   createdAt: new Date("2026-08-16T00:00:00Z"),
   lastActivityAt: new Date("2026-08-16T00:00:00Z"),

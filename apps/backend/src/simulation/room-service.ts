@@ -26,6 +26,7 @@ import {
   type SimulationActor,
 } from "./simulation-service.js";
 import type { RoomDto } from "@brickr/shared";
+import { assertNotFeedRoom } from "./feed-room-guard.js";
 
 // ---------------------------------------------------------------------------
 // Domain errors
@@ -169,6 +170,7 @@ export class RoomService {
 
     const simulation = await this.requireRoom(id);
     this.assertOwnerOrAdmin(simulation, actor, id);
+    assertNotFeedRoom(simulation);
 
     if (simulation.status === "archived") {
       throw new RoomArchivedError(id);
@@ -188,6 +190,7 @@ export class RoomService {
   async archive(id: string, actor: SimulationActor): Promise<RoomDto> {
     const simulation = await this.requireRoom(id);
     this.assertOwnerOrAdmin(simulation, actor, id);
+    assertNotFeedRoom(simulation);
 
     const archived = await this.deps.simulations.updateStatus(id, "archived");
     return toSimulationDto(archived);
@@ -200,6 +203,7 @@ export class RoomService {
   async delete(id: string, actor: SimulationActor): Promise<void> {
     const simulation = await this.requireRoom(id);
     this.assertOwnerOrAdmin(simulation, actor, id);
+    assertNotFeedRoom(simulation);
 
     if (simulation.status !== "archived") {
       throw new RoomNotArchivedError(id);
@@ -240,6 +244,7 @@ export class RoomService {
    */
   async join(roomId: string, actor: SimulationActor): Promise<RoomMembershipDto> {
     const simulation = await this.requireRoom(roomId);
+    assertNotFeedRoom(simulation);
 
     if (simulation.status === "archived") {
       throw new RoomArchivedError(roomId);
@@ -294,6 +299,7 @@ export class RoomService {
   ): Promise<RoomMembershipDto> {
     const simulation = await this.requireRoom(roomId);
     this.assertOwnerOrAdmin(simulation, actor, roomId);
+    assertNotFeedRoom(simulation);
 
     if (simulation.status === "archived") {
       throw new RoomArchivedError(roomId);
@@ -345,6 +351,7 @@ export class RoomService {
   ): Promise<RoomMembershipDto> {
     const simulation = await this.requireRoom(roomId);
     this.assertOwnerOrAdmin(simulation, actor, roomId);
+    assertNotFeedRoom(simulation);
 
     if (simulation.status === "archived") {
       throw new RoomArchivedError(roomId);
@@ -371,6 +378,7 @@ export class RoomService {
   ): Promise<void> {
     const simulation = await this.requireRoom(roomId);
     this.assertOwnerOrAdmin(simulation, actor, roomId);
+    assertNotFeedRoom(simulation);
 
     if (simulation.status === "archived") {
       throw new RoomArchivedError(roomId);
@@ -397,6 +405,7 @@ export class RoomService {
   ): Promise<void> {
     const simulation = await this.requireRoom(roomId);
     this.assertOwnerOrAdmin(simulation, actor, roomId);
+    assertNotFeedRoom(simulation);
 
     if (simulation.status === "archived") {
       throw new RoomArchivedError(roomId);
@@ -438,6 +447,7 @@ export class RoomService {
       throw new CannotModifyOwnerError();
     }
   }
+
 }
 
 // ---------------------------------------------------------------------------

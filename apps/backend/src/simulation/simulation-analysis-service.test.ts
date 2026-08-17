@@ -108,6 +108,7 @@ describe("SimulationAnalysisService.analyze ownership (§66.6)", () => {
     title: null,
     status: "active",
     visibility: "public",
+    scope: "room",
     tags: [],
     createdAt: new Date("2026-08-10T00:00:00Z"),
     lastActivityAt: new Date("2026-08-10T00:00:00Z"),
