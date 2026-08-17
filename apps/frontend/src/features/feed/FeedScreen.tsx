@@ -1,10 +1,13 @@
 import { useCallback, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { type FeedFilter } from "@brickr/shared";
+import { DEFAULT_ROOM_ID, DEFAULT_ROOM_TITLE, type FeedFilter } from "@brickr/shared";
 
+import { Avatar } from "../../components/Avatar";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { Spinner } from "../../components/Spinner";
 import { useAuth } from "../auth/AuthContext";
+import { useComposeController } from "../composer/ComposeContext";
+import { useUserProfile } from "../../hooks/useUserProfile";
 import { handlePath, postPath } from "../../routes";
 import { readFeedFilter, writeFeedFilter } from "../rooms/feed-filter-storage";
 import { FeedHeader } from "./FeedHeader";
@@ -17,16 +20,29 @@ const GLOBAL_FEED_SCOPE = { kind: "all" } as const;
 /**
  * The unified feed (§5.1, §5.2, §16.1, §16.4).
  *
- * Read-only: posting and replying are only available from within a Room
- * (§168). `FeedThreadList` (shared with `RoomScreen`, §10.2) renders the
- * threads and owns the scroll-position correction (§12.4).
+ * Reply and quote are only available from within a Room (§168); a new
+ * top-level post from the feed itself goes to the always-seeded default room
+ * (`DEFAULT_ROOM_ID`) so posting never requires picking a room first.
+ * `FeedThreadList` (shared with `RoomScreen`, §10.2) renders the threads and
+ * owns the scroll-position correction (§12.4).
  */
 export function FeedScreen() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const userProfile = useUserProfile();
+  const composeController = useComposeController();
   const [filter, setFilter] = useState<FeedFilter>(readFeedFilter);
 
   const feed = useFeed(GLOBAL_FEED_SCOPE, filter);
+
+  const openComposer = useCallback(() => {
+    composeController.request({
+      context: { mode: "new", roomId: DEFAULT_ROOM_ID, roomLabel: DEFAULT_ROOM_TITLE },
+      onPosted: (_post, thread) => {
+        feed.upsertThread(thread);
+      },
+    });
+  }, [composeController, feed]);
 
   const handleFilterChange = useCallback((next: FeedFilter) => {
     writeFeedFilter(next);
@@ -69,6 +85,30 @@ export function FeedScreen() {
           filter={filter}
           onFilterChange={handleFilterChange}
         />
+
+        {/* Compose trigger — logged-in users only (§5.1). Opens the shared
+            composer dialog (§17) rather than an inline form; `openComposer`'s
+            `onPosted` upserts the new thread from the response immediately
+            (preserving any additional pages already loaded via "さらに読み込む")
+            - the SSE echo arriving shortly after is a no-op against the same
+            thread id. */}
+        {user ? (
+          <div className="flex items-center gap-3 border-b border-line px-4 py-3">
+            <Avatar
+              handle={userProfile.profile.handle}
+              displayName={userProfile.profile.displayName}
+              avatarUrl={userProfile.profile.avatarUrl}
+              size="md"
+            />
+            <button
+              type="button"
+              onClick={openComposer}
+              className="min-w-0 flex-1 rounded-full border border-line bg-surface px-4 py-2.5 text-left text-sm text-ink-faint transition hover:border-accent/50"
+            >
+              {"いま何が起きてる？　@ でキャストを指名"}
+            </button>
+          </div>
+        ) : null}
       </div>
 
       {/* SSE reconnecting indicator (§16.4) */}

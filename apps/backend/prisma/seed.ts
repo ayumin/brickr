@@ -1,3 +1,5 @@
+import { DEFAULT_ROOM_ID, DEFAULT_ROOM_TITLE } from "@brickr/shared";
+
 import { CHARACTER_SEEDS } from "../src/characters/character-seeds.js";
 import { MODEL_PROFILE_SEEDS } from "../src/model-profiles/model-profile-seeds.js";
 import { prisma, type DbTransaction } from "../src/persistence/prisma.js";
@@ -82,6 +84,30 @@ async function main(): Promise<void> {
     displayName: env.admin.displayName,
   });
   console.log(describeAdminBootstrap(outcome));
+
+  // --- Default room -----------------------------------------------------------
+  //
+  // The unified feed's embedded composer posts new top-level threads into this
+  // room directly, so posting from the feed never requires picking a room
+  // first. An ordinary public room in every other respect - unowned, like the
+  // demo rooms below.
+
+  await prisma.room.upsert({
+    where: { id: DEFAULT_ROOM_ID },
+    create: {
+      id: DEFAULT_ROOM_ID,
+      title: DEFAULT_ROOM_TITLE,
+      status: "active",
+      visibility: "public",
+      createdByUserId: null,
+    },
+    update: {
+      title: DEFAULT_ROOM_TITLE,
+      status: "active",
+      visibility: "public",
+    },
+  });
+  console.log("seeded default room");
 
   // --- Demo rooms -----------------------------------------------------------
   //
