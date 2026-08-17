@@ -10,6 +10,7 @@ import type { ThreadContext, ThreadService } from "../posts/thread-service.js";
 import { EventHub } from "./event-hub.js";
 import type { InternalSseEvent, ThreadActivityEvent } from "./public-events.js";
 import type { SimulationRepository } from "./simulation-repository.js";
+import type { RoomMembership, RoomMembershipRepository } from "./room-membership-repository.js";
 import {
   PostNotFoundError,
   assertRoomReadable,
@@ -41,19 +42,59 @@ const SIMULATION: Simulation = {
 
 const OWNER: SimulationActor = { id: USER_AUTHOR_ID, isAdmin: false };
 
-describe("assertRoomReadable membership rollout", () => {
+/** A membership repository that answers `findOne` from a fixed in-memory list. */
+function makeMembershipsFake(rows: RoomMembership[] = []): RoomMembershipRepository {
+  return {
+    findOne: (roomId: string, memberKind: string, memberId: string) =>
+      Promise.resolve(
+        rows.find(
+          (row) => row.roomId === roomId && row.memberKind === memberKind && row.memberId === memberId,
+        ) ?? null,
+      ),
+  } as unknown as RoomMembershipRepository;
+}
+
+describe("assertRoomReadable — real membership lookup (issue #175)", () => {
   const nonOwner: SimulationActor = { id: "other-user", isAdmin: false };
 
-  it("does not reject an active closed room before membership lookup is wired", () => {
-    expect(() =>
-      assertRoomReadable({ ...SIMULATION, visibility: "closed" }, nonOwner),
-    ).not.toThrow();
+  it("rejects a non-member from an active closed room", async () => {
+    await expect(
+      assertRoomReadable(makeMembershipsFake(), { ...SIMULATION, visibility: "closed" }, nonOwner),
+    ).rejects.toThrow(SimulationNotFoundError);
   });
 
-  it("continues to hide an archived room from a non-owner", () => {
-    expect(() =>
-      assertRoomReadable({ ...SIMULATION, visibility: "closed", status: "archived" }, nonOwner),
-    ).toThrow(SimulationNotFoundError);
+  it("admits an active member of an active closed room", async () => {
+    const memberships = makeMembershipsFake([
+      {
+        id: "mem-1",
+        roomId: SIMULATION.id,
+        memberKind: "user",
+        memberId: nonOwner.id,
+        role: "member",
+        status: "active",
+        createdAt: new Date("2026-01-01T00:00:00Z"),
+        updatedAt: new Date("2026-01-01T00:00:00Z"),
+      },
+    ]);
+    await expect(
+      assertRoomReadable(memberships, { ...SIMULATION, visibility: "closed" }, nonOwner),
+    ).resolves.not.toThrow();
+  });
+
+  it("continues to hide an archived room from a non-owner", async () => {
+    await expect(
+      assertRoomReadable(
+        makeMembershipsFake(),
+        { ...SIMULATION, visibility: "closed", status: "archived" },
+        nonOwner,
+      ),
+    ).rejects.toThrow(SimulationNotFoundError);
+  });
+
+  it("still admits the legacy owner (no membership row, createdByUserId match)", async () => {
+    await expect(
+      assertRoomReadable(makeMembershipsFake(), { ...SIMULATION, visibility: "private" }, OWNER),
+    ).resolves.not.toThrow();
   });
 });
 
@@ -130,6 +171,10 @@ function makeHarness(options: HarnessOptions): Harness {
     findAll: (): Promise<Character[]> =>
       options.findAllCharacters ? options.findAllCharacters() : Promise.resolve(options.characters),
   } as unknown as CharacterRepository;
+
+  // No memberships exist in these fixtures: every room here defaults to
+  // `public`, where `canPost` only needs an authenticated author (§175).
+  const membershipRepository = { findOne: () => Promise.resolve(null) } as unknown as RoomMembershipRepository;
 
   const authorById = new Map(options.characters.map((character) => [character.id, character]));
 
@@ -278,6 +323,7 @@ function makeHarness(options: HarnessOptions): Harness {
   const events = new EventHub();
   const service = new SimulationService({
     simulations: simulationRepository,
+    memberships: membershipRepository,
     posts: postService,
     characters: characterRepository,
     threads: threadService,

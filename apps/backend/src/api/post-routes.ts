@@ -34,6 +34,7 @@ export function registerPostRoutes(app: FastifyInstance, services: AppServices):
       const post = await services.simulations.submitUserPost({
         roomId: params.id,
         authorId: user.id,
+        isAdmin: user.isAdmin,
         content: body.content,
         imageUrl: body.imageUrl,
         responderIds: body.responderIds ?? [],

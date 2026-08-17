@@ -57,7 +57,7 @@ function room(
   visibility: RoomVisibility,
   status: "active" | "archived" = "active",
 ): RoomForAuth {
-  return { visibility, status, createdByUserId: "owner-user" };
+  return { visibility, status, createdByUserId: "owner-user", scope: "room" };
 }
 
 // Shorthand for the full capability set.

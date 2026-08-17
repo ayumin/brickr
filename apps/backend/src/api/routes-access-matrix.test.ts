@@ -226,8 +226,14 @@ function makeServices(): { services: AppServices; listedFor: string[] } {
     userProfileRepository,
   );
 
+  // All fixture rooms are `public` (§175's canView/canPost never need a real
+  // row there), so "no membership" is a safe, correct fake for every scenario
+  // this file exercises.
+  const memberships = { findOne: () => Promise.resolve(null) };
+
   const simulations = new SimulationService({
     simulations: simulationRepository,
+    memberships,
     posts: postService,
   } as unknown as ConstructorParameters<typeof SimulationService>[0]);
 
@@ -235,6 +241,7 @@ function makeServices(): { services: AppServices; listedFor: string[] } {
     {} as never,
     postService,
     simulationRepository,
+    memberships as never,
   );
 
   const profiles = new ProfileService(

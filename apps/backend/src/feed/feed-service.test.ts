@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { PostService } from "../posts/post-service.js";
 import type { Post } from "../posts/post.js";
 import type { SimulationRepository } from "../simulation/simulation-repository.js";
+import type { RoomMembershipRepository } from "../simulation/room-membership-repository.js";
 import { SimulationNotFoundError } from "../simulation/simulation-service.js";
 import type { Simulation } from "../simulation/simulation.js";
 import type { FeedRepository, FeedRoom, FeedThreadRow } from "./feed-repository.js";
@@ -95,9 +96,6 @@ function makeHarness(input: { posts: Post[]; rooms?: FeedRoom[]; memberRoomIds?:
       // Default: all rooms visible.
       return Promise.resolve(allRoomIds);
     }),
-    hasActiveRoomMembership: vi.fn((roomId: string, userId: string) =>
-      Promise.resolve(userId.length > 0 && (input.memberRoomIds ?? allRoomIds).includes(roomId)),
-    ),
     findThreadPage: vi.fn(
       (query: {
         roomId?: string;
@@ -186,8 +184,40 @@ function makeHarness(input: { posts: Post[]; rooms?: FeedRoom[]; memberRoomIds?:
     },
   } as unknown as SimulationRepository;
 
+  // Backs `assertRoomReadable`'s real membership lookup (issue #175). Queried
+  // for every room regardless of visibility, so its default (no `memberRoomIds`
+  // given) is "no membership row" rather than "everyone is a member" — the
+  // room's creator still gets in via `toRoomActor`'s createdByUserId fallback,
+  // exactly as a real, freshly-created room's owner row would (a role: "member"
+  // fake row here would incorrectly outrank that fallback and fail the
+  // ownership check).
+  const memberships = {
+    findOne: vi.fn((roomId: string, _memberKind: string, memberId: string) => {
+      const isMember = memberId.length > 0 && (input.memberRoomIds ?? []).includes(roomId);
+      return Promise.resolve(
+        isMember
+          ? {
+              id: `mem-${roomId}-${memberId}`,
+              roomId,
+              memberKind: "user" as const,
+              memberId,
+              role: "member" as const,
+              status: "active" as const,
+              createdAt: at(0),
+              updatedAt: at(0),
+            }
+          : null,
+      );
+    }),
+  };
+
   return {
-    service: new FeedService(feed as unknown as FeedRepository, posts, simulations),
+    service: new FeedService(
+      feed as unknown as FeedRepository,
+      posts,
+      simulations,
+      memberships as unknown as RoomMembershipRepository,
+    ),
     spies: feed,
   };
 }
@@ -674,8 +704,8 @@ describe("FeedService room feed (§10.2, §10.4)", () => {
     expect(page.threads).toHaveLength(1);
   });
 
-  it("opens a closed room for an administrator without querying membership", async () => {
-    const { service, spies } = makeHarness({
+  it("opens a closed room for an administrator regardless of membership", async () => {
+    const { service } = makeHarness({
       posts: [post({ id: "root-1", roomId: CLOSED_ROOM.id })],
       rooms: [CLOSED_ROOM],
       memberRoomIds: [],
@@ -687,7 +717,6 @@ describe("FeedService room feed (§10.2, §10.4)", () => {
     });
 
     expect(page.threads).toHaveLength(1);
-    expect(spies.hasActiveRoomMembership).not.toHaveBeenCalled();
   });
 
   it("checks only the requested closed room's membership", async () => {
@@ -699,7 +728,6 @@ describe("FeedService room feed (§10.2, §10.4)", () => {
 
     await service.getRoomFeed(CLOSED_ROOM.id, { reader: READER, filter: "all" });
 
-    expect(spies.hasActiveRoomMembership).toHaveBeenCalledWith(CLOSED_ROOM.id, READER.id);
     expect(spies.findVisibleRoomIds).not.toHaveBeenCalled();
   });
 

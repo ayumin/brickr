@@ -9,6 +9,7 @@ import { optionalField } from "../persistence/repository-mapping.js";
 import type { PostService } from "../posts/post-service.js";
 import type { Post } from "../posts/post.js";
 import type { SimulationRepository } from "../simulation/simulation-repository.js";
+import type { RoomMembershipRepository } from "../simulation/room-membership-repository.js";
 import {
   assertRoomReadable,
   isSimulationOwnerOrAdmin,
@@ -86,6 +87,7 @@ export class FeedService {
     private readonly feed: FeedRepository,
     private readonly posts: PostService,
     private readonly simulations: SimulationRepository,
+    private readonly memberships: RoomMembershipRepository,
   ) {}
 
   /**
@@ -131,6 +133,9 @@ export class FeedService {
    *
    * Enforces visibility for closed/private rooms: a reader who is not an active
    * member receives a 404, indistinguishable from a room that does not exist.
+   * Delegates entirely to `assertRoomReadable` (issue #175), which now backs
+   * this by a real `RoomMembership` lookup instead of the ad-hoc membership
+   * check this method used to run separately afterward.
    */
   async assertRoomFeedReadable(
     roomId: string,
@@ -138,22 +143,7 @@ export class FeedService {
   ): Promise<void> {
     const simulation = await this.simulations.findById(roomId);
     if (!simulation) throw new SimulationNotFoundError(roomId);
-    assertRoomReadable(simulation, reader);
-
-    // Public/open rooms are readable without a membership. Owners and admins
-    // retain the same bypass used by the rest of the room authorization flow.
-    // For closed/private rooms, query only this room's membership instead of
-    // materialising every room visible to the reader.
-    if (
-      simulation.status === "active" &&
-      (simulation.visibility === "closed" || simulation.visibility === "private") &&
-      !isSimulationOwnerOrAdmin(simulation, reader)
-    ) {
-      const isMember = await this.feed.hasActiveRoomMembership(roomId, reader.id);
-      if (!isMember) {
-        throw new SimulationNotFoundError(roomId);
-      }
-    }
+    await assertRoomReadable(this.memberships, simulation, reader);
   }
 
   /**

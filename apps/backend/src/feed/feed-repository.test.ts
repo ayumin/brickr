@@ -250,31 +250,6 @@ describe("FeedRepository.findVisibleRoomIds (§10.1)", () => {
   });
 });
 
-describe("FeedRepository.hasActiveRoomMembership", () => {
-  it("checks one room and one user's active membership", async () => {
-    const { db, spies } = makeDb();
-    spies.room.findFirst.mockResolvedValueOnce({ id: "room-closed" });
-
-    await expect(
-      new FeedRepository(db).hasActiveRoomMembership("room-closed", "user-1"),
-    ).resolves.toBe(true);
-
-    expect(spies.room.findFirst).toHaveBeenCalledWith({
-      where: {
-        id: "room-closed",
-        memberships: {
-          some: {
-            memberId: "user-1",
-            memberKind: "user",
-            status: "active",
-          },
-        },
-      },
-      select: { id: true },
-    });
-  });
-});
-
 describe("FeedRepository mine filter (§12.3)", () => {
   it("collects the threads that concern the reader in three queries, not one per thread", async () => {
     const { db, calls, spies } = makeDb({ threadIds: ["root-7", "root-8"] });
