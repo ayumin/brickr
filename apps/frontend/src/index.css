@@ -172,34 +172,6 @@ html[data-theme="brickr-light"] {
   --color-warn: #8a5a10;
 }
 
-/*
- * The logo ships as two files rather than one recoloured asset (§15.4), so the
- * theme picks which one is visible. The prototype's orange square is not used.
- */
-.brand-logo {
-  background-color: #000;
-}
-
-.brand-logo__light {
-  display: none;
-}
-
-.brand-logo__dark {
-  display: block;
-}
-
-html[data-theme="brickr-light"] .brand-logo {
-  background-color: #fff;
-}
-
-html[data-theme="brickr-light"] .brand-logo__light {
-  display: block;
-}
-
-html[data-theme="brickr-light"] .brand-logo__dark {
-  display: none;
-}
-
 body {
   margin: 0;
   min-height: 100dvh;

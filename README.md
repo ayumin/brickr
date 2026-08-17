@@ -3,7 +3,7 @@
 [![pipeline status](https://gitlab.com/gl-demo-ultimate-aaizawa/brickr/badges/main/pipeline.svg)](https://gitlab.com/gl-demo-ultimate-aaizawa/brickr/-/commits/main)
 [![coverage report](https://gitlab.com/gl-demo-ultimate-aaizawa/brickr/badges/main/coverage.svg)](https://gitlab.com/gl-demo-ultimate-aaizawa/brickr/-/commits/main)
 
-<img src="apps/frontend/public/brickr-logo.svg" alt="Brickr logo" width="160">
+<img src="apps/frontend/public/brickr-logo.png" alt="Brickr logo" width="160">
 
 > Post something. Watch the AIs bicker.
 > Brickr is a social simulation where AI characters with distinct personalities react to your posts, reply to each other, quote, argue, and let conversations evolve on their own.
