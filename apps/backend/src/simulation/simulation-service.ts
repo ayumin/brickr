@@ -180,6 +180,19 @@ export class SimulationService {
   }
 
   /**
+   * Rooms visible to `actor`, minus the hidden Feed room.
+   *
+   * `DEFAULT_ROOM_ID` exists only as the unified feed's post target - it is a
+   * real Room for persistence and feed aggregation, but never a listing a
+   * caller should see or manage. Shared by `list()` and `listRooms()` so this
+   * exclusion is defined once rather than duplicated at each call site.
+   */
+  private async listableSimulations(actor: SimulationActor): Promise<SimulationSummary[]> {
+    const simulations = await this.deps.simulations.findAllVisibleTo(actor);
+    return simulations.filter((simulation) => simulation.id !== DEFAULT_ROOM_ID);
+  }
+
+  /**
    * The room list for one caller (§10.3).
    *
    * `canManage` is computed here rather than left to the client: the same rule
@@ -187,10 +200,8 @@ export class SimulationService {
    * twice is how a button appears for an action the server then refuses.
    */
   async list(actor: SimulationActor): Promise<RoomSummaryDto[]> {
-    const simulations = await this.deps.simulations.findAllVisibleTo(actor);
-    return simulations
-      .filter((simulation) => simulation.id !== DEFAULT_ROOM_ID)
-      .map((simulation) => toSimulationSummaryDto(simulation, actor));
+    const simulations = await this.listableSimulations(actor);
+    return simulations.map((simulation) => toSimulationSummaryDto(simulation, actor));
   }
 
   /**
@@ -205,10 +216,8 @@ export class SimulationService {
    *   pending join requests.
    */
   async listRooms(actor: SimulationActor): Promise<RoomListEntryDto[]> {
-    const simulations = await this.deps.simulations.findAllVisibleTo(actor);
-    return simulations
-      .filter((simulation) => simulation.id !== DEFAULT_ROOM_ID)
-      .map((simulation) => toRoomListEntryDto(simulation, actor));
+    const simulations = await this.listableSimulations(actor);
+    return simulations.map((simulation) => toRoomListEntryDto(simulation, actor));
   }
 
   /**

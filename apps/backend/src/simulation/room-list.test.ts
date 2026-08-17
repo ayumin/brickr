@@ -65,6 +65,16 @@ describe("SimulationService Room list", () => {
       expect.objectContaining({ id: ordinaryRoom.id }),
     ]);
   });
+
+  it("keeps the logical Feed room out of the plain Room summary list too", async () => {
+    const feedRoom = makeSummary({ id: DEFAULT_ROOM_ID, title: "フィード" });
+    const ordinaryRoom = makeSummary({ id: "room-visible", title: "表示するルーム" });
+    const service = makeListService([feedRoom, ordinaryRoom]);
+
+    await expect(service.list(ADMIN)).resolves.toEqual([
+      expect.objectContaining({ id: ordinaryRoom.id }),
+    ]);
+  });
 });
 
 // ---------------------------------------------------------------------------
