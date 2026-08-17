@@ -42,7 +42,7 @@ const forbidden = [
   {
     label: "raw Tailwind palette colour (use a semantic token instead)",
     pattern:
-      /\b(?:bg|text|border|ring|decoration|accent)-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d{2,3}\b/,
+      /\b(?:bg|text|border|ring|decoration|accent|from|to)-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d{2,3}\b/,
   },
 ];
 
