@@ -100,6 +100,15 @@ export function SettingsShell({ onProfileUpdated }: { onProfileUpdated?: (profil
 
           {section === "profile" ? (
             <ProfileSettings
+              // Remounts once the real profile lands (`id` goes "" → the
+              // account id): `ProfileSettings`'s fields are plain `useState`
+              // seeded from `profile` on first mount only, so without this key
+              // a fetch that resolves after mount (a fresh page load or a fast
+              // navigation into /settings/profile) would leave `avatarUrl` at
+              // its placeholder value of `undefined` — indistinguishable from
+              // "no avatar" — and saving would then wipe a real avatar via the
+              // repository's ?? null fallback.
+              key={userProfile.profile.id}
               profile={userProfile.profile}
               onSaved={(saved) => {
                 userProfile.setProfile(saved);
