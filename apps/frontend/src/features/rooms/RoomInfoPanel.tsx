@@ -6,6 +6,7 @@ import { ErrorBanner } from "../../components/ErrorBanner";
 import { Icon } from "../../components/Icon";
 import { Spinner } from "../../components/Spinner";
 import { toErrorMessage } from "../../services/api-client";
+import { RoomAnalysisPanel } from "./RoomAnalysisPanel";
 
 export type RoomInfoContentProps = {
   simulation: RoomSummaryDto;
@@ -200,6 +201,7 @@ export function RoomInfoPanel(props: RoomInfoPanelProps) {
   return (
     <aside className="sticky top-0 hidden h-fit w-[280px] shrink-0 border-l border-line lg:block">
       <RoomInfoContent {...props} />
+      <RoomAnalysisPanel simulation={props.simulation} />
     </aside>
   );
 }

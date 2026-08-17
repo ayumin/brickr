@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { Dialog } from "../../components/Dialog";
+import { RoomAnalysisPanel } from "./RoomAnalysisPanel";
 import { RoomInfoContent, type RoomInfoContentProps } from "./RoomInfoPanel";
 
 export type RoomInfoSheetProps = RoomInfoContentProps & {
@@ -30,6 +31,7 @@ export function RoomInfoSheet({ onClose, ...content }: RoomInfoSheetProps) {
       placement="bottom-sheet"
     >
       <RoomInfoContent {...content} onBusyChange={setBusy} />
+      <RoomAnalysisPanel simulation={content.simulation} />
     </Dialog>
   );
 }

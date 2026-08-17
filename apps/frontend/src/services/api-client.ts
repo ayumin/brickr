@@ -42,6 +42,8 @@ import type {
   PublicProfileResponse,
   ResetPasswordResponse,
   RestoreCharacterResponse,
+  RoomAnalysisSnapshotDto,
+  RoomAnalysisSnapshotResponse,
   RoomListResponse,
   RoomMembershipDto,
   SaveCharacterRequest,
@@ -52,6 +54,7 @@ import type {
   RoomAnalysisResponse,
   RoomDto,
   RoomResponse,
+  UpdateRoomAnalysisSnapshotResponse,
   UpdateRoomRequest,
   UserCharactersResponse,
   UserDetailResponse,
@@ -770,6 +773,36 @@ export const api = {
       signal ? { signal } : {},
     );
     return data.inviteCodes;
+  },
+
+  /**
+   * Returns the current analysis snapshot for a room (issue #166).
+   * Active members, the owner, and admins may view.
+   * Throws 404 when no snapshot has been generated yet.
+   */
+  async getRoomSnapshot(
+    roomId: string,
+    signal?: AbortSignal,
+  ): Promise<RoomAnalysisSnapshotDto> {
+    const data = await request<RoomAnalysisSnapshotResponse>(
+      `/api/rooms/${encodeURIComponent(roomId)}/snapshot`,
+      signal ? { signal } : {},
+    );
+    return data.snapshot;
+  },
+
+  /**
+   * Generates or updates the analysis snapshot for a room (issue #166).
+   * Owner/admin only. Returns `updated: false` when nothing has changed.
+   */
+  async updateRoomSnapshot(
+    roomId: string,
+    signal?: AbortSignal,
+  ): Promise<{ snapshot: RoomAnalysisSnapshotDto; updated: boolean }> {
+    return request<UpdateRoomAnalysisSnapshotResponse>(
+      `/api/rooms/${encodeURIComponent(roomId)}/snapshot`,
+      { method: "POST", ...(signal ? { signal } : {}) },
+    );
   },
 };
 
