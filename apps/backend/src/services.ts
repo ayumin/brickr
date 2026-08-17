@@ -118,10 +118,16 @@ export async function buildServices(db: Db, logger: SimulationLogger): Promise<A
   // Built before the simulation service, which publishes the thread payload the
   // feed assembles (§11.3). The dependency runs one way: the feed knows about
   // simulations, never the other way round.
-  const feed = new FeedService(new FeedRepository(db), postService, simulationRepository);
+  const feed = new FeedService(
+    new FeedRepository(db),
+    postService,
+    simulationRepository,
+    roomMembershipRepository,
+  );
 
   const simulations = new SimulationService({
     simulations: simulationRepository,
+    memberships: roomMembershipRepository,
     posts: postService,
     characters: characterRepository,
     threads: threadService,

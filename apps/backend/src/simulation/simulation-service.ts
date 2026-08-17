@@ -26,6 +26,7 @@ import { computeRoomCapabilities, type RoomActor } from "./room-authorization.js
 import { selectCascadeResponders, selectResponders } from "./responder-selector.js";
 import type { UserProfile } from "../user-profile/user-profile.js";
 import type { SimulationRepository } from "./simulation-repository.js";
+import type { RoomMembershipRepository } from "./room-membership-repository.js";
 import {
   type Simulation,
   type SimulationActor,
@@ -39,6 +40,8 @@ export type SubmitUserPostInput = {
   roomId: string;
   /** Account id of the signed-in author. Required: posting needs a session (#34). */
   authorId: string;
+  /** Whether the author is an administrator (bypasses room membership checks). Defaults to false. */
+  isAdmin?: boolean;
   content: string;
   imageUrl?: string;
   responderIds: string[];
@@ -72,6 +75,7 @@ export type ThreadActivitySource = {
 
 export type SimulationServiceDeps = {
   simulations: SimulationRepository;
+  memberships: RoomMembershipRepository;
   posts: PostService;
   characters: CharacterRepository;
   threads: ThreadService;
@@ -118,6 +122,15 @@ export class PostNotFoundError extends DomainError {
   }
 }
 
+/** A non-member (or banned actor) may not post into this room's visibility (issue #175). */
+export class RoomPostForbiddenError extends DomainError {
+  readonly httpStatus = 403;
+  readonly errorCode = "forbidden" as const;
+  constructor(id: string) {
+    super(`not allowed to post in room "${id}"`);
+  }
+}
+
 /**
  * Whether this actor may read one room (§10.2, §10.4).
  *
@@ -129,29 +142,21 @@ export class PostNotFoundError extends DomainError {
  *   does not exist for anyone else. Note that this is about reading a room; the
  *   posts themselves remain visible to everybody through the unified feed, which
  *   is deliberately the only place they show up (§10.1).
- * - Closed/private membership enforcement is intentionally deferred until the
- *   service can load the actor's RoomMembership (#153). Applying the capability
- *   result without that row would incorrectly hide the room from real members.
+ * - Closed/private rooms are readable only by their active members (or the
+ *   owner/an admin), backed by a real `RoomMembership` lookup (issue #175,
+ *   closing out the gap #153 deferred).
  *
  * Shared by the room feed, the room detail and the room's post list, so a caller
  * cannot reach through one endpoint what another would refuse.
  */
-export function assertRoomReadable(
-  simulation: Pick<Simulation, "id" | "status" | "visibility" | "createdByUserId">,
+export async function assertRoomReadable(
+  memberships: RoomMembershipRepository,
+  simulation: Pick<Simulation, "id" | "status" | "visibility" | "createdByUserId" | "scope">,
   actor: SimulationActor,
-): void {
-  // Until #153 supplies real membership snapshots, retain the existing access
-  // behaviour for active rooms. Otherwise every non-owner member of a closed or
-  // private room would be represented as a non-member and receive a false 404.
-  if (simulation.status !== "archived") return;
-
-  // Convert the SimulationActor to a RoomActor for the authorization check.
-  // The RoomMembership table exists but is not yet queried here; we synthesise
-  // an owner membership from `createdByUserId` so the existing ownership rule
-  // (creator and admin may read a stopped room) is preserved (§10.4, issue #152).
-  const roomActor: RoomActor = toRoomActor(actor, simulation.createdByUserId);
+): Promise<void> {
+  const roomActor = await toRoomActor(memberships, simulation.id, actor, simulation.createdByUserId);
   const caps = computeRoomCapabilities(
-    { visibility: simulation.visibility, status: simulation.status },
+    { visibility: simulation.visibility, status: simulation.status, scope: simulation.scope },
     roomActor,
   );
 
@@ -228,7 +233,7 @@ export class SimulationService {
    */
   async get(id: string, actor: SimulationActor): Promise<RoomResponse> {
     const simulation = await this.requireSimulationSummary(id);
-    assertRoomReadable(simulation, actor);
+    await assertRoomReadable(this.deps.memberships, simulation, actor);
     return { room: toSimulationSummaryDto(simulation, actor) };
   }
 
@@ -242,7 +247,7 @@ export class SimulationService {
    */
   async requireReadableRoom(id: string, actor: SimulationActor): Promise<Simulation> {
     const simulation = await this.requireSimulation(id);
-    assertRoomReadable(simulation, actor);
+    await assertRoomReadable(this.deps.memberships, simulation, actor);
     return simulation;
   }
 
@@ -257,15 +262,24 @@ export class SimulationService {
    * about whether a post's own thread (post detail, §10.8) can be reconstructed,
    * which must work the same way regardless of which simulation a post lives in.
    *
-   * Closed/private membership enforcement is deferred to #153. Enforcing it
-   * before loading RoomMembership would hide posts from legitimate members.
+   * Closed/private rooms require an active membership (or ownership/admin),
+   * backed by a real `RoomMembership` lookup (issue #175, closing out #153) —
+   * except the Feed room, which has no membership rows and is never refused.
    */
   async requireReadableSimulation(id: string, actor: SimulationActor): Promise<Simulation> {
     const simulation = await this.requireSimulation(id);
-    if (simulation.status !== "archived") return simulation;
-    const roomActor: RoomActor = toRoomActor(actor, simulation.createdByUserId);
+    // The Feed room is deliberately never refused here (see the doc comment
+    // above): it has no membership rows, and computeRoomCapabilities's Feed-room
+    // branch would otherwise report canView: false for everyone.
+    if (simulation.scope === "global") return simulation;
+    const roomActor = await toRoomActor(
+      this.deps.memberships,
+      simulation.id,
+      actor,
+      simulation.createdByUserId,
+    );
     const caps = computeRoomCapabilities(
-      { visibility: simulation.visibility, status: simulation.status },
+      { visibility: simulation.visibility, status: simulation.status, scope: simulation.scope },
       roomActor,
     );
     if (!caps.canView) {
@@ -310,6 +324,25 @@ export class SimulationService {
     const simulation = await this.requireSimulation(input.roomId);
     if (simulation.status === "archived") {
       throw new SimulationStoppedError(input.roomId);
+    }
+
+    // The Feed room's canPost only checks isAuthenticated (no membership row
+    // exists to look up), so skip the query entirely for it — the same
+    // short-circuit `requireReadableSimulation` above already uses.
+    if (simulation.scope !== "global") {
+      const roomActor = await toRoomActor(
+        this.deps.memberships,
+        input.roomId,
+        { id: input.authorId, isAdmin: input.isAdmin ?? false },
+        simulation.createdByUserId,
+      );
+      const caps = computeRoomCapabilities(
+        { visibility: simulation.visibility, status: simulation.status, scope: simulation.scope },
+        roomActor,
+      );
+      if (!caps.canPost) {
+        throw new RoomPostForbiddenError(input.roomId);
+      }
     }
 
     await this.assertPostBelongsToRoom(input.replyTo, input.roomId);
@@ -735,17 +768,36 @@ export type { SimulationActor } from "./simulation.js";
 /**
  * Converts a `SimulationActor` to a `RoomActor` for the authorization service.
  *
- * Until the RoomMembership table is queried at this layer (issue #153), we
- * synthesise an owner membership from `createdByUserId` so the existing
- * ownership rule — creator and admin may read a stopped room — is preserved.
+ * Queries `RoomMembership` for the actor's real row in this room (issue #175)
+ * and only falls back to synthesising an owner membership from
+ * `createdByUserId` when no row exists — a legacy room created before
+ * `RoomMembership` existed (issue #152). A current room's owner always has a
+ * real row, granted in the same transaction as `RoomService.create`.
  *
  * A room with no owner (`createdByUserId` absent) matches no actor id, so only
  * an admin may manage it — mirrors the Character rule (§66.14).
  */
-export function toRoomActor(
+export async function toRoomActor(
+  memberships: RoomMembershipRepository,
+  roomId: string,
   actor: SimulationActor,
   createdByUserId: string | undefined | null,
-): RoomActor {
+): Promise<RoomActor> {
+  const membership = await memberships.findOne(roomId, "user", actor.id);
+  if (membership) {
+    return {
+      kind: "user",
+      userId: actor.id,
+      isAdmin: actor.isAdmin,
+      membership: { memberKind: membership.memberKind, role: membership.role, status: membership.status },
+    };
+  }
+
+  // No membership row: only reached for rooms created before RoomMembership
+  // existed (issue #152) — `RoomService.create` grants the creator a real
+  // owner membership in the same transaction, so a current room always has
+  // one. Synthesise the ownership rule from `createdByUserId` so the original
+  // creator (and only them) keeps read/manage access to their legacy room.
   const isOwner = createdByUserId != null && actor.id === createdByUserId;
   return {
     kind: "user",

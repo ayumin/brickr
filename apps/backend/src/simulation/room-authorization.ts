@@ -14,6 +14,7 @@
  * | canView     | all    | all  | member | member  |
  * | canPost     | user*  | user*| member | member  |
  * | canJoin     | user   | user†| invite | invite  |
+ * | canLeave    | member (not owner) | member (not owner) | member (not owner) | member (not owner) |
  * | canInvite   | owner  | owner| owner  | owner   |
  * | canManage   | owner/admin | owner/admin | owner/admin | owner/admin |
  *
@@ -30,9 +31,17 @@
  *   canDiscover controls whether the title may be exposed in discovery.
  *   canViewMetadata covers the room's full metadata and currently follows
  *   canView, so non-members of closed/private rooms receive neither.
+ *
+ * Feed room (scope: 'global', issue #175): the reserved Feed room has no
+ * membership rows at all — every authenticated actor is a logical member for
+ * posting purposes, but none of the membership-management capabilities apply
+ * (there is nothing to join, leave, invite into, or manage). This is checked
+ * before every other rule below, including the admin bypass: an admin cannot
+ * manage or delete the Feed room either (issue #174).
  */
 
 import type { MemberKind, MemberRole, MembershipStatus, RoomVisibility } from "@brickr/shared";
+import type { RoomScope } from "./simulation.js";
 
 // ---------------------------------------------------------------------------
 // Actor types
@@ -86,6 +95,12 @@ export type RoomForAuth = {
   /** "active" | "archived" */
   status: string;
   createdByUserId?: string | null;
+  /**
+   * 'global' for the reserved Feed room, 'room' for all user-created rooms
+   * (issue #174). Required rather than optional so a caller cannot forget to
+   * pass it and silently skip Feed-room handling below.
+   */
+  scope: RoomScope;
 };
 
 // ---------------------------------------------------------------------------
@@ -103,6 +118,8 @@ export type RoomCapabilities = {
   canPost: boolean;
   /** Whether the actor may request to join (or auto-join) the room. */
   canJoin: boolean;
+  /** Whether the actor may leave the room (active member, not the owner). */
+  canLeave: boolean;
   /** Whether the actor may invite others to the room. */
   canInvite: boolean;
   /** Whether the actor may rename/stop/resume/analyse the room. */
@@ -158,6 +175,21 @@ export function computeRoomCapabilities(
   room: RoomForAuth,
   actor: RoomActor,
 ): RoomCapabilities {
+  // The Feed room has no membership rows and cannot be managed by anyone,
+  // including an admin (issue #174) — check this before the admin bypass below.
+  if (room.scope === "global") {
+    return {
+      canDiscover: false,
+      canView: false,
+      canViewMetadata: false,
+      canPost: isAuthenticated(actor),
+      canJoin: false,
+      canLeave: false,
+      canInvite: false,
+      canManage: false,
+    };
+  }
+
   const admin = isAdmin(actor);
   const owner = isOwner(actor);
   const member = isActiveMember(actor);
@@ -176,6 +208,7 @@ export function computeRoomCapabilities(
       canViewMetadata: true,
       canPost: !archived,
       canJoin: !adminHasActiveMembership && !adminHasPendingMembership && !archived,
+      canLeave: adminHasActiveMembership && !owner && !archived,
       canInvite: !archived,
       canManage: true,
     };
@@ -243,6 +276,12 @@ export function computeRoomCapabilities(
     canJoin = false;
   }
 
+  // canLeave: an active member may leave, except the owner — an owner leaving
+  // would strand the room without one, so ownership transfer (not implemented
+  // yet) would need to happen first. Archived rooms freeze membership changes,
+  // same as every other mutation in this matrix.
+  const canLeave = member && !owner && !archived;
+
   // canInvite: only the room owner (or admin, handled above).
   const canInvite = owner && !archived;
 
@@ -255,6 +294,7 @@ export function computeRoomCapabilities(
     canViewMetadata,
     canPost,
     canJoin,
+    canLeave,
     canInvite,
     canManage,
   };
@@ -288,6 +328,13 @@ export function canPost(room: RoomForAuth, actor: RoomActor): boolean {
  */
 export function canJoin(room: RoomForAuth, actor: RoomActor): boolean {
   return computeRoomCapabilities(room, actor).canJoin;
+}
+
+/**
+ * Convenience: can this actor leave the room?
+ */
+export function canLeave(room: RoomForAuth, actor: RoomActor): boolean {
+  return computeRoomCapabilities(room, actor).canLeave;
 }
 
 /**
