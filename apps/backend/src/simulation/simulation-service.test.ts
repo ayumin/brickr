@@ -336,7 +336,7 @@ function collectUntilCompleted(events: EventHub): {
   events.subscribe(SIMULATION.id, (event) => {
     received.push(event);
     if (event.type === "generation.completed") resolveCompleted?.(event);
-  });
+  }, () => undefined);
 
   return { received, completed };
 }
@@ -365,7 +365,7 @@ function collectUntilTerminal(events: EventHub): {
     if (event.type === "generation.completed" || event.type === "generation.failed") {
       resolveTerminal?.(event);
     }
-  });
+  }, () => undefined);
 
   return { received, terminal };
 }
@@ -677,7 +677,7 @@ describe("SimulationService thread events (§11.3)", () => {
 
   it("assembles the thread for a room subscriber", async () => {
     const harness = makeHarness({ characters: [] });
-    harness.events.subscribe(SIMULATION.id, vi.fn());
+    harness.events.subscribe(SIMULATION.id, vi.fn(), () => undefined);
 
     const post = await harness.service.submitUserPost(onlyUserPost);
 

@@ -863,6 +863,10 @@ export function registerRoomsRoutes(app: FastifyInstance, services: AppServices)
     response: roomDtoResponseSchema,
     handler: async ({ user, params }) => {
       const simulation = await services.rooms.archive(params.id, user);
+      // Terminate every open SSE stream for this room (§11.1 visibility
+      // re-evaluation). Clients reconnect and receive a 404 — the correct
+      // answer for a stopped room they cannot read (§10.4).
+      services.events.closeRoom(params.id);
       return { simulation };
     },
   }).register(app);
@@ -1005,6 +1009,9 @@ export function registerRoomsRoutes(app: FastifyInstance, services: AppServices)
     response: membershipResponseSchema,
     handler: async ({ user, params }) => {
       const membership = await services.roomMemberships.remove(params.id, params.mid, user);
+      if (membership.memberKind === "user") {
+        services.events.closeSubscriber(params.id, membership.memberId);
+      }
       return { membership };
     },
   }).register(app);
@@ -1018,6 +1025,9 @@ export function registerRoomsRoutes(app: FastifyInstance, services: AppServices)
     response: membershipResponseSchema,
     handler: async ({ user, params }) => {
       const membership = await services.roomMemberships.ban(params.id, params.mid, user);
+      if (membership.memberKind === "user") {
+        services.events.closeSubscriber(params.id, membership.memberId);
+      }
       return { membership };
     },
   }).register(app);
@@ -1107,6 +1117,7 @@ export function registerRoomsRoutes(app: FastifyInstance, services: AppServices)
     response: z.object({}),
     handler: async ({ user, params, reply }) => {
       await services.rooms.removeMembership(params.id, params.memberId, user);
+      services.events.closeSubscriber(params.id, params.memberId);
       return reply.status(204).send();
     },
   }).register(app);
@@ -1120,6 +1131,7 @@ export function registerRoomsRoutes(app: FastifyInstance, services: AppServices)
     response: z.object({}),
     handler: async ({ user, params, reply }) => {
       await services.rooms.banMember(params.id, params.memberId, user);
+      services.events.closeSubscriber(params.id, params.memberId);
       return reply.status(204).send();
     },
   }).register(app);
