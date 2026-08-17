@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { matchPath, useLocation, useNavigate } from "react-router-dom";
-import { GLOBAL_ROOM_ID } from "@brickr/shared";
 
 import { castPath, roomListPath, settingsPath } from "../routes";
 import { useAuth } from "../features/auth/AuthContext";
@@ -67,7 +66,9 @@ function AppShellContent() {
     currentUser: user,
     sessionLoading: loading,
     activeItem: activeItemFor(location.pathname),
-    showComposeButton: isFeedRoute || activeRoomId !== null,
+    // Compose is only available from within a Room (§168): the feed is
+    // read-only, so the button is hidden there.
+    showComposeButton: activeRoomId !== null,
     onOpenFeed: () => {
       clearSelectedRoomId();
       navigate("/");
@@ -76,18 +77,8 @@ function AppShellContent() {
     onOpenRooms: () => navigate(roomListPath()),
     onOpenSettings: () =>
       navigate(settingsPath("profile"), { state: { returnTo: location.pathname } }),
-    // The nav's "投稿する" is the only compose entry point reachable while
-    // signed out (§14.1) - `request` itself decides whether that means
-    // opening the composer or deferring to the auth dialog (§18.2). Mirrors
-    // `showComposeButton`'s own condition exactly, rather than falling back
-    // to some default destination: the button this handler belongs to is
-    // never rendered for any other route, so there is no third case here.
     onComposeClick: () => {
-      if (isFeedRoute) {
-        composeController.request({
-          context: { mode: "new", simulationId: GLOBAL_ROOM_ID, roomLabel: "フィード" },
-        });
-      } else if (activeRoomId) {
+      if (activeRoomId) {
         composeController.request({
           context: { mode: "new", simulationId: activeRoomId, roomLabel: "ルーム" },
         });

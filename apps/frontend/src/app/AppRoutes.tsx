@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
+import { Route, Routes, useParams } from "react-router-dom";
 
 import { castPath, normalizeHandleParam, roomListPath } from "../routes";
 import { CastManagementScreen } from "../features/cast/CastManagementScreen";
@@ -6,19 +6,12 @@ import { RoomListScreen } from "../features/rooms/RoomListScreen";
 import { PostDetailScreen } from "../features/rooms/PostDetailScreen";
 import { PublicProfileScreen } from "../features/profile/PublicProfileScreen";
 import { SettingsShell } from "../features/settings/SettingsShell";
-import { SimulationAnalysis } from "../features/simulation/SimulationAnalysis";
-import { legacyRedirectTarget } from "./legacy-redirects";
-
-function LegacyRedirect() {
-  const location = useLocation();
-  const target = legacyRedirectTarget(location.pathname);
-  return target ? <Navigate to={target} replace /> : <NotFoundScreen />;
-}
+import { RoomAnalysisScreen } from "../features/rooms/RoomAnalysisScreen";
 
 function RoomAnalysisRoute() {
   const { roomId } = useParams<{ roomId: string }>();
   if (!roomId) return <NotFoundScreen />;
-  return <SimulationAnalysis simulationId={roomId} />;
+  return <RoomAnalysisScreen roomId={roomId} />;
 }
 
 function HandleRoute() {
@@ -56,10 +49,6 @@ export function AppRoutes() {
       <Route path="/rooms/:roomId/analysis" element={<RoomAnalysisRoute />} />
       <Route path="/settings/:section" element={<SettingsShell />} />
       <Route path="/posts/:postId" element={<PostRoute />} />
-
-      <Route path="/characters" element={<LegacyRedirect />} />
-      <Route path="/simulations" element={<LegacyRedirect />} />
-      <Route path="/simulations/:id/analysis" element={<LegacyRedirect />} />
 
       <Route path="/:handle" element={<HandleRoute />} />
       <Route path="*" element={<NotFoundScreen />} />
