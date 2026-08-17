@@ -87,7 +87,7 @@ const CASES: Array<{ error: Error; status: number; code: string }> = [
   { error: new RoomJoinNotAllowedError("room-1"), status: 403, code: "room_join_not_allowed" },
   { error: new RoomAlreadyMemberError("room-1"), status: 409, code: "room_already_member" },
   { error: new RoomMemberBannedError("room-1"), status: 403, code: "room_member_banned" },
-  { error: new UserNotFoundError(), status: 404, code: "user_not_found" },
+  { error: new UserNotFoundError("missing-user"), status: 404, code: "user_not_found" },
 
   // Membership management errors (issue #154)
   { error: new MembershipNotFoundError("mem-1"), status: 404, code: "membership_not_found" },

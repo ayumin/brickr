@@ -28,7 +28,10 @@ import type { ScheduledEvent } from "../scheduled-events/scheduled-event.js";
 import type { Simulation } from "../simulation/simulation.js";
 import { EventHub } from "../simulation/event-hub.js";
 import { processEvent, type EventProcessorDeps } from "./event-processor.js";
-import type { PublishedInternalSseEvent } from "../simulation/public-events.js";
+import type {
+  InternalSseEvent,
+  PublishedInternalSseEvent,
+} from "../simulation/public-events.js";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -106,6 +109,61 @@ const characterRespondEvent: ScheduledEvent = {
   createdAt: NOW,
   updatedAt: NOW,
 };
+
+const feedCapabilities = {
+  canOpenAuthor: true,
+  canOpenRoom: true,
+  canOpenThread: true,
+  canReply: true,
+  canQuote: true,
+  canLoadMoreReplies: false,
+};
+
+function threadActivityEvent(options: {
+  roomId?: string;
+  postId?: string;
+  status?: "active" | "archived";
+} = {}): InternalSseEvent {
+  const roomId = options.roomId ?? "room-1";
+  const postId = options.postId ?? "post-cast-1";
+  const status = options.status ?? "active";
+  return {
+    type: "thread.activity",
+    simulationId: roomId,
+    postId,
+    room: {
+      id: roomId,
+      title: "Integration Test Room",
+      status,
+      scope: "room",
+      visibility: "public",
+      createdByUserId: "user-1",
+    },
+    thread: {
+      root: {
+        id: "post-user-1",
+        roomId,
+        author: { id: "user-1", handle: "user_1", displayName: "User" },
+        content: "Hello, Cast!",
+        mentions: [],
+        replyTo: null,
+        quoteOf: null,
+        quotedPost: null,
+        createdAt: NOW.toISOString(),
+      },
+      room: { id: roomId, title: "Integration Test Room" },
+      latestReplies: [],
+      replyCount: 1,
+      lastActivityAt: NOW.toISOString(),
+      capabilities: {
+        ...feedCapabilities,
+        canOpenRoom: status === "active",
+        canReply: status === "active",
+        canQuote: status === "active",
+      },
+    },
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Step 1: ScheduledEvent creation (deduplication guard)
@@ -310,38 +368,10 @@ describe("Step 4 — SSE delivery via EventHub", () => {
       "user-1",
     );
 
-    hub.publish("room-1", {
-      type: "thread.activity",
-      simulationId: "room-1",
-      postId: "post-cast-1",
-      room: {
-        id: "room-1",
-        title: "Integration Test Room",
-        status: "active",
-        visibility: "public",
-        createdByUserId: "user-1",
-      },
-      thread: {
-        root: {
-          id: "post-user-1",
-          roomId: "room-1",
-          authorId: "user-1",
-          content: "Hello, Cast!",
-          createdAt: NOW.toISOString(),
-          capabilities: { canReply: true, canQuote: true },
-          latestReplies: [],
-          replyCount: 1,
-          quoteOf: null,
-        },
-        latestReplies: [],
-        replyCount: 1,
-        capabilities: { canReply: true, canQuote: true },
-      },
-    });
+    hub.publish("room-1", threadActivityEvent());
 
     expect(received).toHaveLength(1);
-    expect(received[0]?.type).toBe("thread.activity");
-    expect(received[0]?.postId).toBe("post-cast-1");
+    expect(received[0]).toMatchObject({ type: "thread.activity", postId: "post-cast-1" });
   });
 
   it("publish delivers to the global feed subscriber as well", () => {
@@ -352,34 +382,7 @@ describe("Step 4 — SSE delivery via EventHub", () => {
     hub.subscribe("room-1", (e) => roomEvents.push(e), () => {}, "user-1");
     hub.subscribeAll((e) => feedEvents.push(e));
 
-    hub.publish("room-1", {
-      type: "thread.activity",
-      simulationId: "room-1",
-      postId: "post-cast-1",
-      room: {
-        id: "room-1",
-        title: "Integration Test Room",
-        status: "active",
-        visibility: "public",
-        createdByUserId: "user-1",
-      },
-      thread: {
-        root: {
-          id: "post-user-1",
-          roomId: "room-1",
-          authorId: "user-1",
-          content: "Hello, Cast!",
-          createdAt: NOW.toISOString(),
-          capabilities: { canReply: true, canQuote: true },
-          latestReplies: [],
-          replyCount: 1,
-          quoteOf: null,
-        },
-        latestReplies: [],
-        replyCount: 1,
-        capabilities: { canReply: true, canQuote: true },
-      },
-    });
+    hub.publish("room-1", threadActivityEvent());
 
     // Both the room subscriber and the global feed subscriber receive the event.
     expect(roomEvents).toHaveLength(1);
@@ -393,37 +396,8 @@ describe("Step 4 — SSE delivery via EventHub", () => {
     const received: PublishedInternalSseEvent[] = [];
     hub.subscribeAll((e) => received.push(e));
 
-    const baseEvent = {
-      type: "thread.activity" as const,
-      simulationId: "room-1",
-      postId: "post-1",
-      room: {
-        id: "room-1",
-        title: "Room",
-        status: "active" as const,
-        visibility: "public" as const,
-        createdByUserId: "user-1",
-      },
-      thread: {
-        root: {
-          id: "post-1",
-          roomId: "room-1",
-          authorId: "user-1",
-          content: "hi",
-          createdAt: NOW.toISOString(),
-          capabilities: { canReply: true, canQuote: true },
-          latestReplies: [],
-          replyCount: 0,
-          quoteOf: null,
-        },
-        latestReplies: [],
-        replyCount: 0,
-        capabilities: { canReply: true, canQuote: true },
-      },
-    };
-
-    hub.publish("room-1", baseEvent);
-    hub.publish("room-1", { ...baseEvent, postId: "post-2" });
+    hub.publish("room-1", threadActivityEvent({ postId: "post-1" }));
+    hub.publish("room-1", threadActivityEvent({ postId: "post-2" }));
 
     expect(received).toHaveLength(2);
     expect(received[0]?.eventId).not.toBe(received[1]?.eventId);
@@ -474,34 +448,13 @@ describe("Step 5 — Feed visibility after room archival", () => {
     hub.closeRoom("room-1");
 
     // Any subsequent publish to the room reaches nobody (no subscribers).
-    hub.publish("room-1", {
-      type: "thread.activity",
-      simulationId: "room-1",
-      postId: "post-after-archive",
-      room: {
-        id: "room-1",
-        title: "Room",
+    hub.publish(
+      "room-1",
+      threadActivityEvent({
+        postId: "post-after-archive",
         status: "archived",
-        visibility: "public",
-        createdByUserId: "user-owner",
-      },
-      thread: {
-        root: {
-          id: "post-after-archive",
-          roomId: "room-1",
-          authorId: "cast-1",
-          content: "late reply",
-          createdAt: NOW.toISOString(),
-          capabilities: { canReply: false, canQuote: false },
-          latestReplies: [],
-          replyCount: 0,
-          quoteOf: null,
-        },
-        latestReplies: [],
-        replyCount: 0,
-        capabilities: { canReply: false, canQuote: false },
-      },
-    });
+      }),
+    );
 
     // The subscriber was closed before the publish, so it received nothing.
     expect(received).toHaveLength(0);
@@ -516,34 +469,7 @@ describe("Step 5 — Feed visibility after room archival", () => {
     hub.closeRoom("room-1");
 
     // A different room publishes — the global feed subscriber still receives it.
-    hub.publish("room-2", {
-      type: "thread.activity",
-      simulationId: "room-2",
-      postId: "post-room2",
-      room: {
-        id: "room-2",
-        title: "Other Room",
-        status: "active",
-        visibility: "public",
-        createdByUserId: "user-2",
-      },
-      thread: {
-        root: {
-          id: "post-room2",
-          roomId: "room-2",
-          authorId: "user-2",
-          content: "hello from room 2",
-          createdAt: NOW.toISOString(),
-          capabilities: { canReply: true, canQuote: true },
-          latestReplies: [],
-          replyCount: 0,
-          quoteOf: null,
-        },
-        latestReplies: [],
-        replyCount: 0,
-        capabilities: { canReply: true, canQuote: true },
-      },
-    });
+    hub.publish("room-2", threadActivityEvent({ roomId: "room-2", postId: "post-room2" }));
 
     expect(feedEvents).toHaveLength(1);
     expect(feedEvents[0]?.simulationId).toBe("room-2");
