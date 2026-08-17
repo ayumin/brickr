@@ -129,8 +129,8 @@ steps:
 When an incompatible Prisma schema change cannot be applied to existing
 staging data, open a `main` pipeline and run the optional manual job
 `staging:database-reset`. GitLab shows a second confirmation before starting
-the destructive operation. The job only appears in pipelines whose merge
-changes `apps/backend/prisma/schema.prisma` or a file under
+the destructive operation. The job only appears in `main` pipelines whose
+commits change `apps/backend/prisma/schema.prisma` or a file under
 `apps/backend/prisma/migrations/`, so unrelated fixes never schedule it.
 
 The job temporarily starts the currently configured backend image with
