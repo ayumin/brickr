@@ -8,10 +8,13 @@
  * Repository-level tests (findAllVisibleTo visibility query) live in
  * simulation-repository.test.ts alongside the other repository tests.
  */
-import { describe, expect, it } from "vitest";
+import { DEFAULT_ROOM_ID } from "@brickr/shared";
+import { describe, expect, it, vi } from "vitest";
 import {
+  SimulationService,
   toRoomListEntryDto,
   type SimulationActor,
+  type SimulationServiceDeps,
 } from "./simulation-service.js";
 import type { SimulationSummary } from "./simulation.js";
 
@@ -43,6 +46,26 @@ function makeSummary(overrides: Partial<SimulationSummary> = {}): SimulationSumm
     ...overrides,
   };
 }
+
+function makeListService(summaries: SimulationSummary[]): SimulationService {
+  return new SimulationService({
+    simulations: {
+      findAllVisibleTo: vi.fn(() => Promise.resolve(summaries)),
+    },
+  } as unknown as SimulationServiceDeps);
+}
+
+describe("SimulationService Room list", () => {
+  it("keeps the logical Feed room out of the Room list", async () => {
+    const feedRoom = makeSummary({ id: DEFAULT_ROOM_ID, title: "フィード" });
+    const ordinaryRoom = makeSummary({ id: "room-visible", title: "表示するルーム" });
+    const service = makeListService([feedRoom, ordinaryRoom]);
+
+    await expect(service.listRooms(ADMIN)).resolves.toEqual([
+      expect.objectContaining({ id: ordinaryRoom.id }),
+    ]);
+  });
+});
 
 // ---------------------------------------------------------------------------
 // toRoomListEntryDto — public rooms

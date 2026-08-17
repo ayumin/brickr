@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
-import type {
-  ResponseOutcome,
-  RoomDto,
-  RoomListEntryDto,
-  RoomResponse,
-  RoomSummaryDto,
+import {
+  DEFAULT_ROOM_ID,
+  type ResponseOutcome,
+  type RoomDto,
+  type RoomListEntryDto,
+  type RoomResponse,
+  type RoomSummaryDto,
 } from "@brickr/shared";
 import type { AgentService, GeneratedPost } from "../agents/agent-service.js";
 import type { CharacterRepository } from "../characters/character-repository.js";
@@ -187,7 +188,9 @@ export class SimulationService {
    */
   async list(actor: SimulationActor): Promise<RoomSummaryDto[]> {
     const simulations = await this.deps.simulations.findAllVisibleTo(actor);
-    return simulations.map((simulation) => toSimulationSummaryDto(simulation, actor));
+    return simulations
+      .filter((simulation) => simulation.id !== DEFAULT_ROOM_ID)
+      .map((simulation) => toSimulationSummaryDto(simulation, actor));
   }
 
   /**
@@ -203,7 +206,9 @@ export class SimulationService {
    */
   async listRooms(actor: SimulationActor): Promise<RoomListEntryDto[]> {
     const simulations = await this.deps.simulations.findAllVisibleTo(actor);
-    return simulations.map((simulation) => toRoomListEntryDto(simulation, actor));
+    return simulations
+      .filter((simulation) => simulation.id !== DEFAULT_ROOM_ID)
+      .map((simulation) => toRoomListEntryDto(simulation, actor));
   }
 
   /**
