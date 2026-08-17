@@ -1,32 +1,35 @@
-import type { RoomAnalysisSnapshotDto, SimulationSummaryDto } from "@brickr/shared";
+import type { RoomAnalysisSnapshotDto, RoomSummaryDto } from "@brickr/shared";
 
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { Icon } from "../../components/Icon";
 import { Spinner } from "../../components/Spinner";
-import { useRoomAnalysisSnapshot } from "./useRoomAnalysisSnapshot";
+import {
+  useRoomAnalysisSnapshot,
+  type RoomAnalysisSnapshotState,
+} from "./useRoomAnalysisSnapshot";
 
 // ---------------------------------------------------------------------------
 // Summary parsing
 // ---------------------------------------------------------------------------
 
-type ParsedSummary = {
+export type ParsedSummary = {
   overallTopics: string;
   postOverview: string;
   highEngagementTopics: string;
   lowEngagementTopics: string;
 };
 
-function parseSummary(raw: string | null): ParsedSummary | null {
+export function parseSummary(raw: string | null): ParsedSummary | null {
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as unknown;
     if (
       typeof parsed === "object" &&
       parsed !== null &&
-      "overallTopics" in parsed &&
-      "postOverview" in parsed &&
-      "highEngagementTopics" in parsed &&
-      "lowEngagementTopics" in parsed
+      typeof (parsed as Record<string, unknown>).overallTopics === "string" &&
+      typeof (parsed as Record<string, unknown>).postOverview === "string" &&
+      typeof (parsed as Record<string, unknown>).highEngagementTopics === "string" &&
+      typeof (parsed as Record<string, unknown>).lowEngagementTopics === "string"
     ) {
       return parsed as ParsedSummary;
     }
@@ -104,8 +107,24 @@ function SnapshotDisplay({ snapshot }: { snapshot: RoomAnalysisSnapshotDto }) {
 // ---------------------------------------------------------------------------
 
 export type RoomAnalysisPanelProps = {
-  simulation: SimulationSummaryDto;
+  simulation: RoomSummaryDto;
 };
+
+export function canUpdateRoomAnalysis(options: {
+  isOwner: boolean;
+  isArchived: boolean;
+  updating: boolean;
+  state: RoomAnalysisSnapshotState;
+}): boolean {
+  const { isOwner, isArchived, updating, state } = options;
+  return (
+    isOwner &&
+    !isArchived &&
+    !updating &&
+    state.status !== "loading" &&
+    !(state.status === "ready" && state.snapshot.status === "pending")
+  );
+}
 
 /**
  * Room analysis snapshot panel (issue #170).
@@ -117,7 +136,7 @@ export type RoomAnalysisPanelProps = {
  * - Shows running/failed/last-successful states appropriately.
  */
 export function RoomAnalysisPanel({ simulation }: RoomAnalysisPanelProps) {
-  const { state, updating, updateError, dismissUpdateError, update } =
+  const { state, updating, updateError, updateOutcome, dismissUpdateError, update } =
     useRoomAnalysisSnapshot(simulation.id);
 
   const isOwner = simulation.canManage;
@@ -125,12 +144,7 @@ export function RoomAnalysisPanel({ simulation }: RoomAnalysisPanelProps) {
 
   // Owners can update when: not archived, not currently updating, and either
   // there's no snapshot yet or the snapshot is not "pending".
-  const canUpdate =
-    isOwner &&
-    !isArchived &&
-    !updating &&
-    state.status !== "loading" &&
-    !(state.status === "ready" && state.snapshot.status === "pending");
+  const canUpdate = canUpdateRoomAnalysis({ isOwner, isArchived, updating, state });
 
   return (
     <section className="border-t border-line p-4">
@@ -166,6 +180,14 @@ export function RoomAnalysisPanel({ simulation }: RoomAnalysisPanelProps) {
             onDismiss={dismissUpdateError}
           />
         </div>
+      ) : null}
+
+      {updateOutcome ? (
+        <p className="mb-3 text-xs text-ink-muted" role="status">
+          {updateOutcome === "updated"
+            ? "分析結果を更新しました。"
+            : "新しい投稿がないため、分析結果は更新されませんでした。"}
+        </p>
       ) : null}
 
       {state.status === "loading" ? (

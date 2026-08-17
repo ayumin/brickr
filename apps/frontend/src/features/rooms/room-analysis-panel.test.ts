@@ -12,64 +12,11 @@
  */
 import { describe, expect, it } from "vitest";
 import type { RoomAnalysisSnapshotDto } from "@brickr/shared";
-
-// ---------------------------------------------------------------------------
-// parseSummary — extracted for testing
-// ---------------------------------------------------------------------------
-
-type ParsedSummary = {
-  overallTopics: string;
-  postOverview: string;
-  highEngagementTopics: string;
-  lowEngagementTopics: string;
-};
-
-function parseSummary(raw: string | null): ParsedSummary | null {
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (
-      typeof parsed === "object" &&
-      parsed !== null &&
-      "overallTopics" in parsed &&
-      "postOverview" in parsed &&
-      "highEngagementTopics" in parsed &&
-      "lowEngagementTopics" in parsed
-    ) {
-      return parsed as ParsedSummary;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// canUpdate — the condition that enables the update button
-// ---------------------------------------------------------------------------
-
-type SnapshotState =
-  | { status: "loading" }
-  | { status: "forbidden" }
-  | { status: "none" }
-  | { status: "ready"; snapshot: RoomAnalysisSnapshotDto }
-  | { status: "error"; message: string };
-
-function canUpdate(opts: {
-  isOwner: boolean;
-  isArchived: boolean;
-  updating: boolean;
-  state: SnapshotState;
-}): boolean {
-  const { isOwner, isArchived, updating, state } = opts;
-  return (
-    isOwner &&
-    !isArchived &&
-    !updating &&
-    state.status !== "loading" &&
-    !(state.status === "ready" && state.snapshot.status === "pending")
-  );
-}
+import {
+  canUpdateRoomAnalysis as canUpdate,
+  parseSummary,
+} from "./RoomAnalysisPanel";
+import { toRoomAnalysisUpdateResult } from "./useRoomAnalysisSnapshot";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -125,6 +72,18 @@ describe("parseSummary", () => {
   it("returns null when required fields are missing", () => {
     expect(parseSummary(JSON.stringify({ overallTopics: "only one field" }))).toBeNull();
   });
+
+  it.each([null, 42, { nested: true }, ["unexpected"]])(
+    "returns null when a required value is not a string: %j",
+    (invalidValue) => {
+      expect(parseSummary(JSON.stringify({
+        overallTopics: invalidValue,
+        postOverview: "overview",
+        highEngagementTopics: "high",
+        lowEngagementTopics: "low",
+      }))).toBeNull();
+    },
+  );
 
   it("returns null for an empty string", () => {
     expect(parseSummary("")).toBeNull();
@@ -253,24 +212,31 @@ describe("canUpdate — archived room", () => {
 // ---------------------------------------------------------------------------
 
 describe("no-change scenario", () => {
-  it("snapshot state remains ready when update returns updated: false", () => {
-    // When the server returns updated: false, the snapshot DTO is the same
-    // completed snapshot. The UI should still show the existing snapshot.
+  it("surfaces unchanged while keeping the returned snapshot ready", () => {
     const snapshot = makeSnapshot();
-    const state: SnapshotState = { status: "ready", snapshot };
+    const result = toRoomAnalysisUpdateResult({ snapshot, updated: false });
 
-    // The update button should still be enabled (owner can retry later).
+    expect(result).toEqual({
+      state: { status: "ready", snapshot },
+      outcome: "unchanged",
+    });
+
     expect(
       canUpdate({
         isOwner: true,
         isArchived: false,
         updating: false,
-        state,
+        state: result.state,
       }),
     ).toBe(true);
+  });
 
-    // The summary should still parse correctly.
-    expect(parseSummary(snapshot.summary)).not.toBeNull();
+  it("surfaces regenerated snapshots as updated", () => {
+    const snapshot = makeSnapshot();
+    expect(toRoomAnalysisUpdateResult({ snapshot, updated: true })).toEqual({
+      state: { status: "ready", snapshot },
+      outcome: "updated",
+    });
   });
 });
 
