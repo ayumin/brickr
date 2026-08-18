@@ -308,7 +308,9 @@ describe("processCastJoinRequests — private room", () => {
     if (results[0]?.outcome === "skipped") {
       expect(results[0].reason).toMatch(/invitation/i);
     }
-    // No membership should be created for a private room.
+    // Private rooms short-circuit before candidate loading or LLM work.
+    expect(deps.characters.findAll).not.toHaveBeenCalled();
+    expect(deps.llm.generate).not.toHaveBeenCalled();
     expect(deps.memberships.create).not.toHaveBeenCalled();
   });
 });

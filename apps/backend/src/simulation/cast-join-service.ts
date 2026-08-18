@@ -9,7 +9,7 @@
  *        public  → immediate active membership
  *        open    → pending membership (owner approval required)
  *        closed  → pending membership (invitation-only, but Cast may request)
- *        private → pending membership (invitation-only, but Cast may request)
+ *        private → autonomous join skipped (owner invitation required)
  *   4. Enforce the per-room pending-Cast limit and the ban exclusion.
  *   5. Produce a `character.join.welcome` post after a Cast becomes active.
  *
@@ -186,6 +186,12 @@ export async function processCastJoinRequests(
     return [{ outcome: "skipped", reason: "room not found or archived" }];
   }
 
+  // Private rooms are invitation-only. Short-circuit before loading/scoring
+  // candidates or spending LLM budget on a decision that cannot be applied.
+  if (room.visibility === "private") {
+    return [{ outcome: "skipped", reason: "private room requires an invitation" }];
+  }
+
   // Load all non-deleted characters.
   const allCharacters = await deps.characters.findAll();
 
@@ -258,13 +264,6 @@ async function processSingleCandidate(
 
   // Apply visibility rules.
   const { visibility } = room;
-
-  // Private rooms are invitation-only: Casts must not autonomously create a
-  // pending membership. Only an explicit owner invitation may bring a Cast in
-  // (issue #177).
-  if (visibility === "private") {
-    return { outcome: "skipped", reason: "private room requires an invitation" };
-  }
 
   try {
     if (visibility === "public") {

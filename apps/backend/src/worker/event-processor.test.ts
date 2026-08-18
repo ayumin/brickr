@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { AgentService } from "../agents/agent-service.js";
 import type { Character } from "../characters/character.js";
 import type { Post } from "../posts/post.js";
 import type { ScheduledEvent } from "../scheduled-events/scheduled-event.js";
@@ -78,7 +79,9 @@ const event: ScheduledEvent = {
   updatedAt: now,
 };
 
-function makeDeps(generate: () => Promise<unknown>) {
+type GenerateRequest = Parameters<AgentService["generate"]>[0];
+
+function makeDeps(generate: (request: GenerateRequest) => Promise<unknown>) {
   const publish = vi.fn(() => Promise.resolve(triggerPost));
   const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
   const scheduledEventsCreate = vi.fn(() => Promise.resolve(null));
@@ -142,6 +145,33 @@ describe("processEvent character.respond", () => {
 
     await expect(processEvent(event, deps)).resolves.toBeUndefined();
     expect(publish).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses the full character list to resolve handles for previous Cast authors", async () => {
+    const departed = { ...character, id: "character-departed", handle: "former_cast" };
+    const departedPost = {
+      ...triggerPost,
+      id: "post-departed",
+      authorId: departed.id,
+    };
+    const resolvedHandles: string[] = [];
+    const { deps } = makeDeps((request) => {
+      resolvedHandles.push(request.resolveHandle(departed.id));
+      return Promise.resolve({
+        content: "reply",
+        action: "reply",
+        providerId: "mock",
+        model: "test",
+      });
+    });
+    deps.characters.findAll = vi.fn(() => Promise.resolve([character, departed]));
+    deps.threads.getCurrentThread = vi.fn(() =>
+      Promise.resolve({ target: triggerPost, posts: [departedPost, triggerPost] }),
+    );
+
+    await processEvent(event, deps);
+
+    expect(resolvedHandles).toEqual(["former_cast"]);
   });
 });
 

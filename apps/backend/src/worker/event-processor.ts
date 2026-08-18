@@ -152,7 +152,7 @@ async function handleCharacterRespond(
 
   // Resolve the eligible Cast for this room: all active Casts for the Feed
   // room, or only active-membership Casts for a regular room (issue #177).
-  const allCharacters = await deps.castResolver.resolveRespondingCasts({
+  const eligibleCharacters = await deps.castResolver.resolveRespondingCasts({
     roomId,
     roomScope: simulation.scope,
   });
@@ -162,7 +162,7 @@ async function handleCharacterRespond(
   const explicitIds = characterId ? [characterId] : [];
 
   const { all: responders } = selectResponders({
-    characters: allCharacters,
+    characters: eligibleCharacters,
     mentionedHandles: triggerPost.mentions,
     explicitIds,
     excludeIds: [triggerPost.authorId],
@@ -176,6 +176,10 @@ async function handleCharacterRespond(
     deps.logger.info({ eventId: event.id }, "no responders selected — skipping");
     return;
   }
+
+  // Eligibility and transcript identity are separate concerns. Include
+  // non-Cast/previous Cast authors so old posts still resolve their handles.
+  const allCharacters = await deps.characters.findAll();
 
   // Load the thread context once; each character reads the same snapshot.
   const thread = await deps.threads.getCurrentThread(triggerPost.id);
