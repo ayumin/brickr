@@ -55,6 +55,8 @@ export class CastParticipationResolver {
     const activeCastIds = await this.membershipRepo.findActiveCastIds(ctx.roomId);
     if (activeCastIds.length === 0) return [];
 
+    // `findByIds` applies `deletedAt: null`, so soft-deleted characters are
+    // excluded here just as they are in `findAll()` above.
     return this.characterRepo.findByIds(activeCastIds);
   }
 }

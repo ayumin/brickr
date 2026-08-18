@@ -146,6 +146,22 @@ describe("CastParticipationResolver — Regular Room (scope: room)", () => {
     expect(result).toEqual([]);
   });
 
+  it("excludes soft-deleted characters even when they hold an active membership row", async () => {
+    // charA is soft-deleted; findByIds applies deletedAt: null and omits it.
+    // Only charB (non-deleted) should be returned.
+    const resolver = makeResolver(
+      [charA, charB],
+      ["char-a", "char-b"],
+      [charB], // findByIds returns only the non-deleted character
+    );
+    const result = await resolver.resolveRespondingCasts({
+      roomId: "room-1",
+      roomScope: "room",
+    });
+
+    expect(result).toEqual([charB]);
+  });
+
   it("queries memberships with the correct roomId", async () => {
     const membershipRepo: Pick<RoomMembershipRepository, "findActiveCastIds"> = {
       findActiveCastIds: vi.fn().mockResolvedValue(["char-a"]),
