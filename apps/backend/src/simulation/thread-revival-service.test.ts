@@ -84,9 +84,9 @@ function makeDeps(overrides: Partial<ThreadRevivalDeps> = {}): ThreadRevivalDeps
     characters: {
       findAll: vi.fn(() => Promise.resolve([eagerCharacter])),
     } as unknown as ThreadRevivalDeps["characters"],
-    memberships: {
-      findActiveCastIds: vi.fn(() => Promise.resolve([eagerCharacter.id])),
-    } as unknown as ThreadRevivalDeps["memberships"],
+    castResolver: {
+      resolveRespondingCasts: vi.fn(() => Promise.resolve([eagerCharacter])),
+    } as unknown as ThreadRevivalDeps["castResolver"],
     posts: {
       findById: vi.fn(() => Promise.resolve(dormantPost)),
       findDormantThreadRoots: vi.fn(() => Promise.resolve([dormantPost])),
@@ -161,9 +161,9 @@ describe("reviveThread", () => {
 
   it("returns skipped when no active Cast members exist", async () => {
     const deps = makeDeps({
-      memberships: {
-        findActiveCastIds: vi.fn(() => Promise.resolve([])),
-      } as unknown as ThreadRevivalDeps["memberships"],
+      castResolver: {
+        resolveRespondingCasts: vi.fn(() => Promise.resolve([])),
+      } as unknown as ThreadRevivalDeps["castResolver"],
     });
 
     const result = await reviveThread("room-1", deps);

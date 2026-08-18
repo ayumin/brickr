@@ -24,6 +24,7 @@ import type { ScheduledEventRepository } from "../scheduled-events/scheduled-eve
 import type { ScheduledEvent } from "../scheduled-events/scheduled-event.js";
 import type { SimulationRepository } from "../simulation/simulation-repository.js";
 import type { RoomMembershipRepository } from "../simulation/room-membership-repository.js";
+import type { CastParticipationResolver } from "../simulation/cast-participation-resolver.js";
 import { resolveActionTargets, selectAction } from "../simulation/action-selector.js";
 import { selectResponders } from "../simulation/responder-selector.js";
 import {
@@ -44,6 +45,8 @@ export type EventProcessorDeps = {
   llm: LLMClient;
   providers: LLMProviderRegistry;
   scheduledEvents: ScheduledEventRepository;
+  /** Resolves which Cast characters are eligible to respond in a given room (issue #177). */
+  castResolver: CastParticipationResolver;
   logger: WorkerLogger;
 };
 
@@ -147,15 +150,19 @@ async function handleCharacterRespond(
     return;
   }
 
-  // Load all characters for responder selection.
-  const allCharacters = await deps.characters.findAll();
+  // Resolve the eligible Cast for this room: all active Casts for the Feed
+  // room, or only active-membership Casts for a regular room (issue #177).
+  const eligibleCharacters = await deps.castResolver.resolveRespondingCasts({
+    roomId,
+    roomScope: simulation.scope,
+  });
 
   // If a specific character is targeted, use only that one; otherwise select
   // responders the same way the simulation service does.
   const explicitIds = characterId ? [characterId] : [];
 
   const { all: responders } = selectResponders({
-    characters: allCharacters,
+    characters: eligibleCharacters,
     mentionedHandles: triggerPost.mentions,
     explicitIds,
     excludeIds: [triggerPost.authorId],
@@ -169,6 +176,10 @@ async function handleCharacterRespond(
     deps.logger.info({ eventId: event.id }, "no responders selected — skipping");
     return;
   }
+
+  // Eligibility and transcript identity are separate concerns. Include
+  // non-Cast/previous Cast authors so old posts still resolve their handles.
+  const allCharacters = await deps.characters.findAll();
 
   // Load the thread context once; each character reads the same snapshot.
   const thread = await deps.threads.getCurrentThread(triggerPost.id);
@@ -366,10 +377,10 @@ async function handleThreadRevive(
   const result = await reviveThread(roomId, {
     simulations: deps.simulations,
     characters: deps.characters,
-    memberships: deps.memberships,
     posts: deps.posts,
     threads: deps.threads,
     agents: deps.agents,
+    castResolver: deps.castResolver,
     targetPostId: event.postId ?? event.threadRootId ?? undefined,
   });
 
@@ -413,9 +424,9 @@ async function handleRoomReview(
 
   const result = await reviewRoom(roomId, {
     simulations: deps.simulations,
-    memberships: deps.memberships,
     posts: deps.posts,
     scheduledEvents: deps.scheduledEvents,
+    castResolver: deps.castResolver,
     logger: deps.logger,
   });
 

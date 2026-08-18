@@ -33,6 +33,7 @@ import {
   type SimulationActor,
   type SimulationSummary,
 } from "./simulation.js";
+import { CastParticipationResolver } from "./cast-participation-resolver.js";
 
 /** Hard ceiling on character posts generated from one user post. */
 const MAX_POSTS_PER_SUBMISSION = 24;
@@ -88,6 +89,8 @@ export type SimulationServiceDeps = {
   threadActivity: ThreadActivitySource;
   /** Optional: when present, token usage is recorded against the provider budget (issue #162). */
   llmBudget?: LLMBudgetService;
+  /** Resolves which Cast characters are eligible to respond in a given room (issue #177). */
+  castResolver: CastParticipationResolver;
 };
 
 export class SimulationNotFoundError extends DomainError {
@@ -373,7 +376,7 @@ export class SimulationService {
     // `runGeneration` reports its own outcome and does not reject; this `.catch`
     // is a last resort so a failure in the reporting itself cannot become an
     // unhandled rejection.
-    void this.runGeneration(post, input.responderIds).catch(() => undefined);
+    void this.runGeneration(post, input.responderIds, simulation.scope).catch(() => undefined);
 
     return post;
   }
@@ -381,15 +384,24 @@ export class SimulationService {
   // -- generation -----------------------------------------------------------
 
   /** Publishes exactly one of `generation.completed` / `generation.failed` per run. */
-  private async runGeneration(triggerPost: Post, explicitIds: string[]): Promise<void> {
+  private async runGeneration(
+    triggerPost: Post,
+    explicitIds: string[],
+    roomScope: Simulation["scope"],
+  ): Promise<void> {
     const generatedIds: string[] = [];
     const budget = { remaining: MAX_POSTS_PER_SUBMISSION };
 
     try {
-      const all = await this.deps.characters.findAll();
+      // Resolve the eligible Cast for this room: all active Casts for the Feed
+      // room, or only active-membership Casts for a regular room (issue #177).
+      const eligibleCharacters = await this.deps.castResolver.resolveRespondingCasts({
+        roomId: triggerPost.roomId,
+        roomScope,
+      });
 
       const { all: responders } = selectResponders({
-        characters: all,
+        characters: eligibleCharacters,
         mentionedHandles: triggerPost.mentions,
         explicitIds,
         excludeIds: [triggerPost.authorId],
@@ -397,10 +409,17 @@ export class SimulationService {
         maxResponders: this.deps.options.maxResponders,
       });
 
+      // Eligibility and transcript identity are separate concerns. Include
+      // non-Cast/previous Cast authors so old posts still resolve their handles.
+      const allCharacters = responders.length > 0
+        ? await this.deps.characters.findAll()
+        : [];
+
       await this.processTarget({
         target: triggerPost,
         responders,
-        allCharacters: all,
+        eligibleCharacters,
+        allCharacters,
         depth: 0,
         generatedIds,
         budget,
@@ -435,14 +454,23 @@ export class SimulationService {
   private async processTarget(input: {
     target: Post;
     responders: Character[];
+    eligibleCharacters: Character[];
     allCharacters: Character[];
     depth: number;
     generatedIds: string[];
     budget: { remaining: number };
     billingUserId: string;
   }): Promise<void> {
-    const { target, responders, allCharacters, depth, generatedIds, budget, billingUserId } =
-      input;
+    const {
+      target,
+      responders,
+      eligibleCharacters,
+      allCharacters,
+      depth,
+      generatedIds,
+      budget,
+      billingUserId,
+    } = input;
     if (responders.length === 0 || budget.remaining <= 0) return;
 
     const slice = responders.slice(0, budget.remaining);
@@ -474,7 +502,7 @@ export class SimulationService {
       const author = result.item;
 
       const followers = selectCascadeResponders({
-        allCharacters,
+        allCharacters: eligibleCharacters,
         producedPost,
         author,
         depth,
@@ -485,6 +513,7 @@ export class SimulationService {
         this.processTarget({
           target: producedPost,
           responders: followers,
+          eligibleCharacters,
           allCharacters,
           depth: depth + 1,
           generatedIds,

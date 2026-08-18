@@ -24,10 +24,10 @@
 import { randomUUID } from "node:crypto";
 import type { ScheduledEventRepository } from "../scheduled-events/scheduled-event-repository.js";
 import type { SimulationRepository } from "./simulation-repository.js";
-import type { RoomMembershipRepository } from "./room-membership-repository.js";
 import type { PostService } from "../posts/post-service.js";
 import type { Clock } from "./thread-revival-service.js";
 import { DORMANT_THRESHOLD_MS } from "./thread-revival-service.js";
+import type { CastParticipationResolver } from "./cast-participation-resolver.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -51,9 +51,10 @@ const REVIVAL_SCHEDULE_DELAY_MS = 30_000; // 30 seconds
 
 export type RoomReviewDeps = {
   simulations: SimulationRepository;
-  memberships: RoomMembershipRepository;
   posts: PostService;
   scheduledEvents: ScheduledEventRepository;
+  /** Resolves which Cast characters are eligible to respond in a given room (issue #177). */
+  castResolver: CastParticipationResolver;
   logger: {
     warn: (obj: Record<string, unknown>, message: string) => void;
   };
@@ -91,10 +92,14 @@ export async function reviewRoom(
     return { revivalsScheduled: 0, skippedReason: "room not found or archived" };
   }
 
-  // Check whether there are any active Cast members. Without Cast, there is
-  // nothing to revive threads with.
-  const activeCastIds = await deps.memberships.findActiveCastIds(roomId);
-  if (activeCastIds.length === 0) {
+  // Check whether there are any eligible Cast members. Without Cast, there is
+  // nothing to revive threads with. Uses the resolver so Feed rooms (which
+  // have no membership rows) are handled correctly (issue #177).
+  const eligibleCast = await deps.castResolver.resolveRespondingCasts({
+    roomId,
+    roomScope: room.scope,
+  });
+  if (eligibleCast.length === 0) {
     return { revivalsScheduled: 0, skippedReason: "no active Cast members in room" };
   }
 

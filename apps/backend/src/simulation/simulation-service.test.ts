@@ -123,6 +123,8 @@ function makeCharacter(id: string, overrides: Partial<Character> = {}): Characte
 
 type HarnessOptions = {
   characters: Character[];
+  /** Eligible responders; defaults to all characters. */
+  respondingCharacters?: Character[];
   /** Defaults to an ordinary room owned by `USER_AUTHOR_ID`. */
   simulation?: Simulation;
   generate?: (request: GenerateRequest) => Promise<GeneratedPost>;
@@ -335,6 +337,14 @@ function makeHarness(options: HarnessOptions): Harness {
     },
   };
 
+  // The cast resolver returns all characters for the test room. Tests use
+  // explicit responder IDs so the resolver's output is the full candidate pool
+  // from which explicit IDs are looked up.
+  const castResolver = {
+    resolveRespondingCasts: (): Promise<Character[]> =>
+      Promise.resolve(options.respondingCharacters ?? options.characters),
+  } as unknown as import("./cast-participation-resolver.js").CastParticipationResolver;
+
   const events = new EventHub();
   const service = new SimulationService({
     simulations: simulationRepository,
@@ -354,6 +364,7 @@ function makeHarness(options: HarnessOptions): Harness {
     logger,
     tokenUsage,
     threadActivity,
+    castResolver,
   });
 
   return {
@@ -503,6 +514,38 @@ describe("SimulationService.submitUserPost — room authorization (issue #175)",
 });
 
 describe("SimulationService orchestration", () => {
+  it("uses the full character list to resolve handles for previous Cast authors", async () => {
+    const active = makeCharacter("active");
+    const departed = makeCharacter("departed", { handle: "former_cast" });
+    const harness = makeHarness({
+      characters: [active, departed],
+      respondingCharacters: [active],
+    });
+    harness.posts.push({
+      id: "departed-post",
+      roomId: SIMULATION.id,
+      authorId: departed.id,
+      content: "以前の投稿",
+      mentions: [],
+      replyTo: null,
+      quoteOf: null,
+      threadRootId: "departed-post",
+      threadActivityAt: new Date("2025-12-31T23:59:00Z"),
+      createdAt: new Date("2025-12-31T23:59:00Z"),
+    });
+    const stream = collectUntilCompleted(harness.events);
+
+    await harness.service.submitUserPost({
+      roomId: SIMULATION.id,
+      authorId: USER_AUTHOR_ID,
+      content: "hello",
+      responderIds: [active.id],
+    });
+    await stream.completed;
+
+    expect(harness.generationCalls[0]?.resolveHandle(departed.id)).toBe("former_cast");
+  });
+
   it("persists and streams the user post before generating the character response", async () => {
     vi.spyOn(Math, "random").mockReturnValue(0);
     const alpha = makeCharacter("alpha");
