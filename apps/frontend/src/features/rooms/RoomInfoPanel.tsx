@@ -162,7 +162,7 @@ export function RoomInfoContent({
       ) : null}
 
       {/* Leave room — for active non-owner members (issue #178) */}
-      {!room.canManage && (room.capabilities?.canLeave ?? false) ? (
+      {(room.capabilities?.canLeave ?? false) ? (
         <div className="border-t border-line pt-4">
           <LeaveRoomButton room={room} onLeft={() => onLeft?.()} />
         </div>
