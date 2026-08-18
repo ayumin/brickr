@@ -335,6 +335,14 @@ function makeHarness(options: HarnessOptions): Harness {
     },
   };
 
+  // The cast resolver returns all characters for the test room. Tests use
+  // explicit responder IDs so the resolver's output is the full candidate pool
+  // from which explicit IDs are looked up.
+  const castResolver = {
+    resolveRespondingCasts: (): Promise<Character[]> =>
+      options.findAllCharacters ? options.findAllCharacters() : Promise.resolve(options.characters),
+  } as unknown as import("./cast-participation-resolver.js").CastParticipationResolver;
+
   const events = new EventHub();
   const service = new SimulationService({
     simulations: simulationRepository,
@@ -354,6 +362,7 @@ function makeHarness(options: HarnessOptions): Harness {
     logger,
     tokenUsage,
     threadActivity,
+    castResolver,
   });
 
   return {

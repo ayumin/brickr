@@ -207,6 +207,9 @@ describe("Step 1 — processEvent generates and publishes the Cast reply", () =>
       },
       providers: { preferred: () => null },
       scheduledEvents: { create: vi.fn(() => Promise.resolve(null)) },
+      castResolver: {
+        resolveRespondingCasts: () => Promise.resolve([character]),
+      },
       logger,
       ...overrides,
     } as unknown as EventProcessorDeps;

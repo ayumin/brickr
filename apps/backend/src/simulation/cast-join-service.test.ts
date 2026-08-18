@@ -295,7 +295,7 @@ describe("processCastJoinRequests — closed room", () => {
 });
 
 describe("processCastJoinRequests — private room", () => {
-  it("creates a pending membership (invitation-only, Cast may request)", async () => {
+  it("skips autonomous join for private rooms (invitation-only, issue #177)", async () => {
     const deps = makeDeps({
       simulations: {
         findById: vi.fn().mockResolvedValue(makeRoom({ visibility: "private" })),
@@ -304,7 +304,12 @@ describe("processCastJoinRequests — private room", () => {
     const results = await processCastJoinRequests("room-1", deps);
 
     expect(results).toHaveLength(1);
-    expect(results[0]?.outcome).toBe("pending");
+    expect(results[0]?.outcome).toBe("skipped");
+    if (results[0]?.outcome === "skipped") {
+      expect(results[0].reason).toMatch(/invitation/i);
+    }
+    // No membership should be created for a private room.
+    expect(deps.memberships.create).not.toHaveBeenCalled();
   });
 });
 

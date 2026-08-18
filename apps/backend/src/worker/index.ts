@@ -34,6 +34,7 @@ import { PostService } from "../posts/post-service.js";
 import { ThreadService } from "../posts/thread-service.js";
 import { ScheduledEventRepository } from "../scheduled-events/scheduled-event-repository.js";
 import type { ScheduledEvent } from "../scheduled-events/scheduled-event.js";
+import { CastParticipationResolver } from "../simulation/cast-participation-resolver.js";
 import { RoomMembershipRepository } from "../simulation/room-membership-repository.js";
 import { SimulationRepository } from "../simulation/simulation-repository.js";
 import { UserProfileRepository } from "../user-profile/user-profile-repository.js";
@@ -95,6 +96,11 @@ const threadService = new ThreadService(
   () => runtime.values.simulation.contextPostLimit,
 );
 
+const castResolver = new CastParticipationResolver(
+  characterRepository,
+  roomMembershipRepository,
+);
+
 const processorDeps = {
   simulations: simulationRepository,
   characters: characterRepository,
@@ -105,6 +111,7 @@ const processorDeps = {
   llm: llmClient,
   providers: providerRegistry,
   scheduledEvents: scheduledEventRepository,
+  castResolver,
   logger,
 };
 

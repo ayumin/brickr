@@ -28,6 +28,7 @@ import { PostService } from "./posts/post-service.js";
 import { ProfileRepository } from "./profiles/profile-repository.js";
 import { ProfileService } from "./profiles/profile-service.js";
 import { ThreadService } from "./posts/thread-service.js";
+import { CastParticipationResolver } from "./simulation/cast-participation-resolver.js";
 import { EventHub } from "./simulation/event-hub.js";
 import { RoomMembershipRepository } from "./simulation/room-membership-repository.js";
 import { RoomMembershipService } from "./simulation/room-membership-service.js";
@@ -125,6 +126,11 @@ export async function buildServices(db: Db, logger: SimulationLogger): Promise<A
     roomMembershipRepository,
   );
 
+  const castResolver = new CastParticipationResolver(
+    characterRepository,
+    roomMembershipRepository,
+  );
+
   const simulations = new SimulationService({
     simulations: simulationRepository,
     memberships: roomMembershipRepository,
@@ -141,6 +147,7 @@ export async function buildServices(db: Db, logger: SimulationLogger): Promise<A
     tokenUsage,
     threadActivity: feed,
     llmBudget,
+    castResolver,
   });
   const simulationAnalysis = new SimulationAnalysisService(
     simulationRepository,

@@ -52,6 +52,9 @@ function makeDeps(overrides: Partial<RoomReviewDeps> = {}): RoomReviewDeps {
     memberships: {
       findActiveCastIds: vi.fn(() => Promise.resolve(["char-1"])),
     } as unknown as RoomReviewDeps["memberships"],
+    castResolver: {
+      resolveRespondingCasts: vi.fn(() => Promise.resolve([{ id: "char-1" }])),
+    } as unknown as RoomReviewDeps["castResolver"],
     posts: {
       findDormantThreadRoots: vi.fn(() => Promise.resolve([dormantPost])),
     } as unknown as RoomReviewDeps["posts"],
@@ -97,9 +100,9 @@ describe("reviewRoom", () => {
 
   it("returns skipped when no active Cast members exist", async () => {
     const deps = makeDeps({
-      memberships: {
-        findActiveCastIds: vi.fn(() => Promise.resolve([])),
-      } as unknown as RoomReviewDeps["memberships"],
+      castResolver: {
+        resolveRespondingCasts: vi.fn(() => Promise.resolve([])),
+      } as unknown as RoomReviewDeps["castResolver"],
     });
 
     const result = await reviewRoom("room-1", deps);

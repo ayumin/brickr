@@ -259,6 +259,13 @@ async function processSingleCandidate(
   // Apply visibility rules.
   const { visibility } = room;
 
+  // Private rooms are invitation-only: Casts must not autonomously create a
+  // pending membership. Only an explicit owner invitation may bring a Cast in
+  // (issue #177).
+  if (visibility === "private") {
+    return { outcome: "skipped", reason: "private room requires an invitation" };
+  }
+
   try {
     if (visibility === "public") {
       // Immediate active membership.
@@ -271,7 +278,7 @@ async function processSingleCandidate(
       });
       return { outcome: "joined", characterId: character.id };
     } else {
-      // open / closed / private → pending (owner approval required).
+      // open / closed → pending (owner approval required).
       await deps.memberships.create({
         roomId: room.id,
         memberKind: "character",

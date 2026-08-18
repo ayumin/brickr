@@ -96,6 +96,9 @@ function makeDeps(generate: () => Promise<unknown>) {
       countActiveRoomsForCast: () => Promise.resolve(0),
       create: vi.fn(),
     },
+    castResolver: {
+      resolveRespondingCasts: () => Promise.resolve([character]),
+    },
     posts: {
       findById: () => Promise.resolve(triggerPost),
       findUsersByIds: () => Promise.resolve([]),

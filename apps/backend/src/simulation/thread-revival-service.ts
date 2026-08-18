@@ -28,6 +28,7 @@ import type { SimulationRepository } from "./simulation-repository.js";
 import type { RoomMembershipRepository } from "./room-membership-repository.js";
 import type { Rng } from "./responder-selector.js";
 import { resolveProfile, shouldReviveThread } from "./behavior-profiles.js";
+import type { CastParticipationResolver } from "./cast-participation-resolver.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -60,6 +61,8 @@ export type ThreadRevivalDeps = {
   posts: PostService;
   threads: ThreadService;
   agents: AgentService;
+  /** Resolves which Cast characters are eligible to respond in a given room (issue #177). */
+  castResolver: CastParticipationResolver;
   /** Injectable clock for deterministic tests. Defaults to `() => new Date()`. */
   clock?: Clock;
   /** Injectable Rng for deterministic tests. Defaults to `Math.random`. */
@@ -124,15 +127,18 @@ export async function reviveThread(
     targetPost = dormantRoots[0]!;
   }
 
-  // Load active Cast members for this room.
-  const activeCastIds = await deps.memberships.findActiveCastIds(roomId);
-  if (activeCastIds.length === 0) {
+  // Resolve the eligible Cast for this room: all active Casts for the Feed
+  // room, or only active-membership Casts for a regular room (issue #177).
+  const activeCast = await deps.castResolver.resolveRespondingCasts({
+    roomId,
+    roomScope: room.scope,
+  });
+  if (activeCast.length === 0) {
     return { outcome: "skipped", reason: "no active Cast members in room" };
   }
 
-  // Load all characters and filter to active Cast members.
+  // Load all characters for handle resolution (includes non-Cast authors).
   const allCharacters = await deps.characters.findAll();
-  const activeCast = allCharacters.filter((c) => activeCastIds.includes(c.id));
 
   // Shuffle the cast so we don't always pick the same character.
   const shuffled = shuffleArray(activeCast, rng);
