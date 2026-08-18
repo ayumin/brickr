@@ -1,5 +1,5 @@
 /**
- * Room lifecycle service (issue #151, #169).
+ * Room lifecycle service (issue #151, #169, #176).
  *
  * Handles:
  *   - Room creation with automatic owner membership
@@ -7,9 +7,12 @@
  *   - Archiving (owner/admin only)
  *   - Deletion of archived rooms (owner/admin only)
  *   - Owner-deactivation archive rule (called by UserAdminService on suspend)
- *   - User join requests (public: auto-join; open: pending approval)
- *   - User invite by handle (owner/admin only)
+ *   - User join requests (public: auto-join; open: pending(request))
+ *   - User invite by handle (owner/admin only; pending(invitation) for closed/private)
+ *   - Invitation accept/decline (invitee)
+ *   - Request withdrawal (requester)
  *   - Membership approval/rejection (owner/admin only)
+ *   - Self-leave (active member → left; owner cannot leave)
  */
 import type { RoomMembershipDto, RoomVisibility } from "@brickr/shared";
 import { DomainError } from "../domain-error.js";
@@ -109,6 +112,46 @@ export class RoomMembershipNotFoundError extends DomainError {
   readonly errorCode = "membership_not_found" as const;
   constructor() {
     super("membership not found");
+  }
+}
+
+export class InvitationNotFoundError extends DomainError {
+  readonly httpStatus = 404;
+  readonly errorCode = "invitation_not_found" as const;
+  constructor() {
+    super("no pending invitation found for this room");
+  }
+}
+
+export class RequestNotFoundError extends DomainError {
+  readonly httpStatus = 404;
+  readonly errorCode = "request_not_found" as const;
+  constructor() {
+    super("no pending join request found for this room");
+  }
+}
+
+export class CannotLeaveFeedRoomError extends DomainError {
+  readonly httpStatus = 403;
+  readonly errorCode = "cannot_leave_feed_room" as const;
+  constructor() {
+    super("cannot leave the Feed room");
+  }
+}
+
+export class NotAMemberError extends DomainError {
+  readonly httpStatus = 409;
+  readonly errorCode = "not_a_member" as const;
+  constructor(id: string) {
+    super(`not an active member of room "${id}"`);
+  }
+}
+
+export class OwnerCannotLeaveError extends DomainError {
+  readonly httpStatus = 403;
+  readonly errorCode = "owner_cannot_leave" as const;
+  constructor() {
+    super("the room owner cannot leave; transfer ownership or archive the room first");
   }
 }
 
@@ -233,10 +276,10 @@ export class RoomService {
   }
 
   /**
-   * Requests to join a room (issue #169).
+   * Requests to join a room (issue #169, #176).
    *
    * - public rooms: auto-join (active membership immediately)
-   * - open rooms: pending membership (owner approval required)
+   * - open rooms: pending(request) membership (owner approval required)
    * - closed/private rooms: invitation only — self-initiated join is rejected
    *
    * Banned members are always rejected. Already-active members get a 409.
@@ -275,22 +318,29 @@ export class RoomService {
     }
 
     // No existing membership: create one
-    const status = simulation.visibility === "public" ? "active" : "pending";
+    const isPublic = simulation.visibility === "public";
+    const status = isPublic ? "active" : "pending";
     const membership = await this.deps.memberships.create({
       roomId,
       memberKind: "user",
       memberId: actor.id,
       role: "member",
       status,
+      // For open rooms, record that this is a self-initiated request.
+      ...(isPublic ? {} : { origin: "request" as const }),
     });
     return toMembershipDto(membership);
   }
 
   /**
-   * Invites a user (by handle) to a room (issue #169).
+   * Invites a user (by handle) to a room (issue #169, #176).
    *
-   * Only the room owner or an admin may invite. The invited user gets an
-   * active membership immediately (invitation bypasses the pending flow).
+   * Only the room owner or an admin may invite.
+   * - public/open rooms: active membership immediately (owner bypasses the pending flow).
+   * - closed/private rooms: pending(invitation) membership — the invitee must accept.
+   *
+   * If the user already has a pending(request) membership, the owner's invite
+   * upgrades it to active immediately (owner approval on behalf of the invitee).
    */
   async inviteByHandle(
     roomId: string,
@@ -319,7 +369,7 @@ export class RoomService {
     if (existing) {
       if (existing.status === "banned") throw new RoomMemberBannedError(roomId);
       if (existing.status === "active") throw new RoomAlreadyMemberError(roomId);
-      // pending/left/removed: upgrade to active
+      // pending/left/removed: upgrade to active (owner approval)
       const updated = await this.deps.memberships.reinviteByMember(
         roomId,
         "user",
@@ -330,15 +380,131 @@ export class RoomService {
       return toMembershipDto(updated);
     }
 
+    // For closed/private rooms, create a pending(invitation) membership.
+    // For public/open rooms, create an active membership immediately.
+    const needsPendingInvitation =
+      simulation.visibility === "closed" || simulation.visibility === "private";
+
     const membership = await this.deps.memberships.create({
       roomId,
       memberKind: "user",
       memberId: userId,
       role: "member",
-      status: "active",
+      status: needsPendingInvitation ? "pending" : "active",
+      ...(needsPendingInvitation ? { origin: "invitation" as const } : {}),
       invitedById: actor.id,
     });
     return toMembershipDto(membership);
+  }
+
+  /**
+   * Accepts a pending invitation (invitee only, issue #176).
+   *
+   * The caller must have a pending(invitation) membership in the room.
+   * Transitions the membership to active.
+   */
+  async acceptInvitation(roomId: string, actor: SimulationActor): Promise<RoomMembershipDto> {
+    const simulation = await this.requireRoom(roomId);
+    assertNotFeedRoom(simulation);
+
+    if (simulation.status === "archived") {
+      throw new RoomArchivedError(roomId);
+    }
+
+    const membership = await this.deps.memberships.findOne(roomId, "user", actor.id);
+    if (
+      !membership ||
+      membership.status !== "pending" ||
+      membership.origin !== "invitation"
+    ) {
+      throw new InvitationNotFoundError();
+    }
+
+    const updated = await this.deps.memberships.updateStatusByMember(
+      roomId,
+      "user",
+      actor.id,
+      "active",
+    );
+    if (!updated) throw new RoomMembershipNotFoundError();
+    return toMembershipDto(updated);
+  }
+
+  /**
+   * Declines a pending invitation (invitee only, issue #176).
+   *
+   * The caller must have a pending(invitation) membership in the room.
+   * Deletes the membership row — no history is kept.
+   */
+  async declineInvitation(roomId: string, actor: SimulationActor): Promise<void> {
+    const simulation = await this.requireRoom(roomId);
+    assertNotFeedRoom(simulation);
+
+    const membership = await this.deps.memberships.findOne(roomId, "user", actor.id);
+    if (
+      !membership ||
+      membership.status !== "pending" ||
+      membership.origin !== "invitation"
+    ) {
+      throw new InvitationNotFoundError();
+    }
+
+    await this.deps.memberships.deleteById(membership.id);
+  }
+
+  /**
+   * Withdraws a pending join request (requester only, issue #176).
+   *
+   * The caller must have a pending(request) membership in the room.
+   * Deletes the membership row — the user may re-request immediately.
+   */
+  async withdrawRequest(roomId: string, actor: SimulationActor): Promise<void> {
+    const simulation = await this.requireRoom(roomId);
+    assertNotFeedRoom(simulation);
+
+    const membership = await this.deps.memberships.findOne(roomId, "user", actor.id);
+    if (
+      !membership ||
+      membership.status !== "pending" ||
+      membership.origin !== "request"
+    ) {
+      throw new RequestNotFoundError();
+    }
+
+    await this.deps.memberships.deleteById(membership.id);
+  }
+
+  /**
+   * Leaves a room (active member only, issue #176).
+   *
+   * - Feed rooms cannot be left.
+   * - The room owner cannot leave (must archive or transfer ownership first).
+   * - Transitions the membership from active → left.
+   */
+  async leave(roomId: string, actor: SimulationActor): Promise<void> {
+    const simulation = await this.requireRoom(roomId);
+
+    // Feed rooms are implicitly joined and cannot be left.
+    if (simulation.scope === "global") {
+      throw new CannotLeaveFeedRoomError();
+    }
+
+    const membership = await this.deps.memberships.findOne(roomId, "user", actor.id);
+    if (!membership || membership.status !== "active") {
+      throw new NotAMemberError(roomId);
+    }
+
+    if (membership.role === "owner") {
+      throw new OwnerCannotLeaveError();
+    }
+
+    const updated = await this.deps.memberships.updateStatusByMember(
+      roomId,
+      "user",
+      actor.id,
+      "left",
+    );
+    if (!updated) throw new RoomMembershipNotFoundError();
   }
 
   /**
@@ -462,6 +628,7 @@ function toMembershipDto(m: RoomMembership): RoomMembershipDto {
     memberId: m.memberId,
     role: m.role,
     status: m.status,
+    ...(m.origin ? { origin: m.origin } : {}),
     ...(m.invitedById ? { invitedById: m.invitedById } : {}),
     ...(m.invitedAt ? { invitedAt: m.invitedAt.toISOString() } : {}),
     createdAt: m.createdAt.toISOString(),

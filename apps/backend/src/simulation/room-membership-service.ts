@@ -91,6 +91,7 @@ function toDto(m: RoomMembership): RoomMembershipDto {
     memberId: m.memberId,
     role: m.role,
     status: m.status,
+    ...(m.origin ? { origin: m.origin } : {}),
     ...(m.invitedById ? { invitedById: m.invitedById } : {}),
     ...(m.invitedAt ? { invitedAt: m.invitedAt.toISOString() } : {}),
     createdAt: m.createdAt.toISOString(),

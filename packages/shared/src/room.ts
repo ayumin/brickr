@@ -14,6 +14,11 @@ export const MEMBERSHIP_STATUSES = ["active", "pending", "left", "removed", "ban
 
 export type MembershipStatus = (typeof MEMBERSHIP_STATUSES)[number];
 
+/** Origin of a pending membership: self-initiated request or owner-initiated invitation. */
+export const MEMBERSHIP_ORIGINS = ["request", "invitation"] as const;
+
+export type MembershipOrigin = (typeof MEMBERSHIP_ORIGINS)[number];
+
 /** Polymorphic member kind: distinguishes a real user from an AI character. */
 export const MEMBER_KINDS = ["user", "character"] as const;
 
@@ -223,6 +228,8 @@ export type RoomMembershipDto = {
   memberId: string;
   role: MemberRole;
   status: MembershipStatus;
+  /** Present when status is pending: distinguishes a self-initiated request from an owner invitation. */
+  origin?: MembershipOrigin;
   invitedById?: string;
   invitedAt?: string;
   createdAt: string;
