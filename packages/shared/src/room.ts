@@ -49,6 +49,28 @@ export type RoomDto = {
 };
 
 /**
+ * Server-computed capabilities for the current user in a room (issue #178).
+ *
+ * The server is the single source of truth for these — the client must not
+ * re-derive them from visibility/membership state, since that is how the two
+ * sides drift apart.
+ */
+export type RoomCapabilitiesDto = {
+  /** Whether the actor may read the room's posts and full metadata. */
+  canView: boolean;
+  /** Whether the actor may create posts in the room. */
+  canPost: boolean;
+  /** Whether the actor may request to join (or auto-join) the room. */
+  canJoin: boolean;
+  /** Whether the actor may leave the room (active member, not the owner). */
+  canLeave: boolean;
+  /** Whether the actor may invite others to the room. */
+  canInvite: boolean;
+  /** Whether the actor may rename/stop/resume/analyse the room. */
+  canManage: boolean;
+};
+
+/**
  * Who created a room, as the room list shows it (§10.3).
  *
  * Room ownership is public, unlike a character's (§66.6), so this travels with
@@ -80,6 +102,13 @@ export type RoomSummaryDto = RoomDto & {
    * Absent for non-owners.
    */
   pendingCount?: number;
+  /**
+   * Server-computed capabilities for the current user (issue #178).
+   *
+   * Present on the room detail endpoint (`GET /api/rooms/:id`). The client
+   * must not re-derive these from visibility/membership state.
+   */
+  capabilities?: RoomCapabilitiesDto;
 };
 
 /**
@@ -111,6 +140,24 @@ export type RoomListResponse = {
 
 export type CreateRoomRequest = {
   title?: string;
+  /** Visibility of the room. Defaults to `public` if omitted. Immutable after creation. */
+  visibility?: RoomVisibility;
+};
+
+/**
+ * A pending invitation as seen by the invitee (issue #178).
+ *
+ * Returned by `GET /api/rooms/:id/invitation` so the invitee can see
+ * enough context to decide whether to accept or decline.
+ */
+export type PendingInvitationDto = {
+  roomId: string;
+  roomTitle: string | null;
+  roomVisibility: RoomVisibility;
+  ownerHandle: string;
+  ownerDisplayName: string;
+  activeMemberCount: number;
+  invitedAt: string;
 };
 
 export type CreateRoomResponse = {

@@ -14,7 +14,7 @@
  *   - Membership approval/rejection (owner/admin only)
  *   - Self-leave (active member → left; owner cannot leave)
  */
-import type { RoomMembershipDto, RoomVisibility } from "@brickr/shared";
+import type { PendingInvitationDto, RoomMembershipDto, RoomVisibility } from "@brickr/shared";
 import { DomainError } from "../domain-error.js";
 import type { SimulationRepository } from "./simulation-repository.js";
 import type {
@@ -30,6 +30,7 @@ import {
 } from "./simulation-service.js";
 import type { RoomDto } from "@brickr/shared";
 import { assertNotFeedRoom } from "./feed-room-guard.js";
+import type { UserProfileRepository } from "../user-profile/user-profile-repository.js";
 
 // ---------------------------------------------------------------------------
 // Domain errors
@@ -179,6 +180,7 @@ export type RoomServiceDeps = {
   simulations: SimulationRepository;
   memberships: RoomMembershipRepository;
   handles?: HandleRepository;
+  userProfiles?: UserProfileRepository;
 };
 
 export class RoomService {
@@ -480,6 +482,51 @@ export class RoomService {
     }
 
     await this.deps.memberships.deleteById(membership.id);
+  }
+
+  /**
+   * Returns the caller's pending invitation for a room (issue #178).
+   *
+   * The caller must have a pending(invitation) membership in the room.
+   * Returns enough context for the invitee to decide whether to accept or decline.
+   */
+  async getInvitation(roomId: string, actor: SimulationActor): Promise<PendingInvitationDto> {
+    const simulation = await this.requireRoom(roomId);
+    assertNotFeedRoom(simulation);
+
+    const membership = await this.deps.memberships.findOne(roomId, "user", actor.id);
+    if (
+      !membership ||
+      membership.status !== "pending" ||
+      membership.origin !== "invitation"
+    ) {
+      throw new InvitationNotFoundError();
+    }
+
+    // Count active members
+    const allMemberships = await this.deps.memberships.findByRoom(roomId, "active");
+    const activeMemberCount = allMemberships.length;
+
+    // Look up the room owner's profile for display
+    let ownerHandle = "unknown";
+    let ownerDisplayName = "不明";
+    if (simulation.createdByUserId && this.deps.userProfiles) {
+      const ownerProfile = await this.deps.userProfiles.findById(simulation.createdByUserId);
+      if (ownerProfile) {
+        ownerHandle = ownerProfile.handle;
+        ownerDisplayName = ownerProfile.displayName;
+      }
+    }
+
+    return {
+      roomId: simulation.id,
+      roomTitle: simulation.title,
+      roomVisibility: simulation.visibility,
+      ownerHandle,
+      ownerDisplayName,
+      activeMemberCount,
+      invitedAt: (membership.invitedAt ?? membership.createdAt).toISOString(),
+    };
   }
 
   /**

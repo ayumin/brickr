@@ -7,6 +7,8 @@ import { Icon } from "../../components/Icon";
 import { Spinner } from "../../components/Spinner";
 import { toErrorMessage } from "../../services/api-client";
 import { RoomAnalysisPanel } from "./RoomAnalysisPanel";
+import { LeaveRoomButton } from "./LeaveRoomButton";
+import { PendingMembersPanel } from "./PendingMembersPanel";
 
 export type RoomInfoContentProps = {
   room: RoomSummaryDto;
@@ -16,6 +18,10 @@ export type RoomInfoContentProps = {
   onResume: () => Promise<void>;
   onArchive: () => Promise<void>;
   onDelete: () => Promise<void>;
+  /** Called after the user leaves the room so the parent can navigate away. */
+  onLeft?: () => void;
+  /** Called after a pending membership is approved/rejected so the parent can refresh. */
+  onMembershipChanged?: () => void;
   /** Lets `RoomInfoSheet` disable its `Dialog`'s backdrop/Escape close while a stop/resume request is in flight (CLAUDE.md §50). */
   onBusyChange?: (busy: boolean) => void;
 };
@@ -41,6 +47,8 @@ export function RoomInfoContent({
   onResume,
   onArchive,
   onDelete,
+  onLeft,
+  onMembershipChanged,
   onBusyChange,
 }: RoomInfoContentProps) {
   const [busy, setBusy] = useState(false);
@@ -137,6 +145,26 @@ export function RoomInfoContent({
               削除する
             </button>
           ) : null}
+        </div>
+      ) : null}
+
+      {/* Pending join requests — only for room owners (issue #178) */}
+      {room.canManage && (room.pendingCount ?? 0) > 0 ? (
+        <div className="border-t border-line pt-4">
+          <p className="mb-2 text-xs font-semibold text-ink">
+            参加申請 ({room.pendingCount})
+          </p>
+          <PendingMembersPanel
+            roomId={room.id}
+            onChanged={() => onMembershipChanged?.()}
+          />
+        </div>
+      ) : null}
+
+      {/* Leave room — for active non-owner members (issue #178) */}
+      {!room.canManage && (room.capabilities?.canLeave ?? false) ? (
+        <div className="border-t border-line pt-4">
+          <LeaveRoomButton room={room} onLeft={() => onLeft?.()} />
         </div>
       ) : null}
 
