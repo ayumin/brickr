@@ -29,7 +29,7 @@ describe("RoomMembershipRepository.findById", () => {
 });
 
 describe("RoomMembershipRepository.reinviteByMember", () => {
-  it("reactivates the membership and refreshes invitation audit fields", async () => {
+  it("reactivates the membership, clears its origin, and refreshes invitation audit fields", async () => {
     const update = vi.fn().mockResolvedValue({
       ...membershipRow,
       invitedById: "owner-2",
@@ -54,6 +54,7 @@ describe("RoomMembershipRepository.reinviteByMember", () => {
       },
       data: {
         status: "active",
+        origin: null,
         invitedById: "owner-2",
         invitedAt: expect.any(Date),
       },
