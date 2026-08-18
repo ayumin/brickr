@@ -272,6 +272,26 @@ docs: explain local database setup
 - Repository: Transaction、共有handle、Ownership、delete cascade/set-nullをFake Prismaで確認
 - Frontend helper: URL、Mention、Thread派生、ThemeなどをVitestで確認
 
+### 認可行列テスト
+
+`apps/backend/src/simulation/room-authorization.test.ts` および
+`apps/backend/src/simulation/room-authorization-matrix.test.ts`:
+- 各visibility × membership状態の組み合わせでcapabilitiesを検証
+- Feed Roomの論理membership合成を検証（`room-authorization-new-capabilities.test.ts`）
+
+### Membership状態遷移テスト
+
+`apps/backend/src/simulation/membership-lifecycle.test.ts`:
+- 許可された状態遷移が成功することを検証
+- 禁止された状態遷移が拒否されることを検証
+- 競合状態（同時申請等）の処理を検証
+
+### Cast参加resolverテスト
+
+`apps/backend/src/simulation/cast-participation-resolver.test.ts`:
+- Feed Room（scope: global）では全アクティブキャラクターを返すことを検証
+- 通常Room（scope: room）ではactive membershipを持つキャラクターのみを返すことを検証
+
 対象パッケージだけを検証する場合:
 
 ```bash
