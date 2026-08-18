@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { RoomMembershipDto } from "@brickr/shared";
 
-import { api, isAbortError } from "../../services/api-client";
+import { ApiError, api, isAbortError } from "../../services/api-client";
 import { useAuth } from "../auth/AuthContext";
 
 export type RoomMembershipState =
@@ -108,11 +108,13 @@ export function useMyMembershipState(room: {
 export function useMyInvitation(roomId: string): {
   hasInvitation: boolean;
   loading: boolean;
+  error: string | null;
   reload: () => void;
 } {
   const { user } = useAuth();
   const [hasInvitation, setHasInvitation] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
 
   const reload = useCallback(() => setReloadToken((v) => v + 1), []);
@@ -125,18 +127,24 @@ export function useMyInvitation(roomId: string): {
     }
     const controller = new AbortController();
     setLoading(true);
+    setError(null);
     api
       .getRoomInvitation(roomId, controller.signal)
       .then(() => {
         setHasInvitation(true);
       })
-      .catch(() => {
-        // 404 means no invitation — not an error
-        setHasInvitation(false);
+      .catch((cause: unknown) => {
+        if (isAbortError(cause)) return;
+        if (cause instanceof ApiError && cause.isNotFound) {
+          // 404 means no invitation — not an error
+          setHasInvitation(false);
+        } else {
+          setError(cause instanceof Error ? cause.message : "招待状の取得に失敗しました");
+        }
       })
       .finally(() => setLoading(false));
     return () => controller.abort();
   }, [roomId, user, reloadToken]);
 
-  return { hasInvitation, loading, reload };
+  return { hasInvitation, loading, error, reload };
 }
