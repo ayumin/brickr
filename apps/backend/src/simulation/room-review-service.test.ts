@@ -49,9 +49,6 @@ function makeDeps(overrides: Partial<RoomReviewDeps> = {}): RoomReviewDeps {
     simulations: {
       findById: vi.fn(() => Promise.resolve(room)),
     } as unknown as RoomReviewDeps["simulations"],
-    memberships: {
-      findActiveCastIds: vi.fn(() => Promise.resolve(["char-1"])),
-    } as unknown as RoomReviewDeps["memberships"],
     castResolver: {
       resolveRespondingCasts: vi.fn(() => Promise.resolve([{ id: "char-1" }])),
     } as unknown as RoomReviewDeps["castResolver"],

@@ -24,7 +24,6 @@
 import { randomUUID } from "node:crypto";
 import type { ScheduledEventRepository } from "../scheduled-events/scheduled-event-repository.js";
 import type { SimulationRepository } from "./simulation-repository.js";
-import type { RoomMembershipRepository } from "./room-membership-repository.js";
 import type { PostService } from "../posts/post-service.js";
 import type { Clock } from "./thread-revival-service.js";
 import { DORMANT_THRESHOLD_MS } from "./thread-revival-service.js";
@@ -52,7 +51,6 @@ const REVIVAL_SCHEDULE_DELAY_MS = 30_000; // 30 seconds
 
 export type RoomReviewDeps = {
   simulations: SimulationRepository;
-  memberships: RoomMembershipRepository;
   posts: PostService;
   scheduledEvents: ScheduledEventRepository;
   /** Resolves which Cast characters are eligible to respond in a given room (issue #177). */

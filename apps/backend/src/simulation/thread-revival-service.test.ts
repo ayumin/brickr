@@ -84,9 +84,6 @@ function makeDeps(overrides: Partial<ThreadRevivalDeps> = {}): ThreadRevivalDeps
     characters: {
       findAll: vi.fn(() => Promise.resolve([eagerCharacter])),
     } as unknown as ThreadRevivalDeps["characters"],
-    memberships: {
-      findActiveCastIds: vi.fn(() => Promise.resolve([eagerCharacter.id])),
-    } as unknown as ThreadRevivalDeps["memberships"],
     castResolver: {
       resolveRespondingCasts: vi.fn(() => Promise.resolve([eagerCharacter])),
     } as unknown as ThreadRevivalDeps["castResolver"],

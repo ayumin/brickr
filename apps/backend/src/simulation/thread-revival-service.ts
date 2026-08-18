@@ -25,7 +25,6 @@ import type { AgentService } from "../agents/agent-service.js";
 import type { PostService } from "../posts/post-service.js";
 import type { ThreadService } from "../posts/thread-service.js";
 import type { SimulationRepository } from "./simulation-repository.js";
-import type { RoomMembershipRepository } from "./room-membership-repository.js";
 import type { Rng } from "./responder-selector.js";
 import { resolveProfile, shouldReviveThread } from "./behavior-profiles.js";
 import type { CastParticipationResolver } from "./cast-participation-resolver.js";
@@ -57,7 +56,6 @@ export type Clock = () => Date;
 export type ThreadRevivalDeps = {
   simulations: SimulationRepository;
   characters: CharacterRepository;
-  memberships: RoomMembershipRepository;
   posts: PostService;
   threads: ThreadService;
   agents: AgentService;

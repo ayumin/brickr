@@ -377,7 +377,6 @@ async function handleThreadRevive(
   const result = await reviveThread(roomId, {
     simulations: deps.simulations,
     characters: deps.characters,
-    memberships: deps.memberships,
     posts: deps.posts,
     threads: deps.threads,
     agents: deps.agents,
@@ -425,7 +424,6 @@ async function handleRoomReview(
 
   const result = await reviewRoom(roomId, {
     simulations: deps.simulations,
-    memberships: deps.memberships,
     posts: deps.posts,
     scheduledEvents: deps.scheduledEvents,
     castResolver: deps.castResolver,
