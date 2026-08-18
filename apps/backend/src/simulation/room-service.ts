@@ -307,12 +307,20 @@ export class RoomService {
       }
       // left/removed: allow re-join by updating status
       const status = simulation.visibility === "public" ? "active" : "pending";
-      const updated = await this.deps.memberships.updateStatusByMember(
-        roomId,
-        "user",
-        actor.id,
-        status,
-      );
+      const updated = status === "pending"
+        ? await this.deps.memberships.updateStatusByMember(
+            roomId,
+            "user",
+            actor.id,
+            status,
+            "request",
+          )
+        : await this.deps.memberships.updateStatusByMember(
+            roomId,
+            "user",
+            actor.id,
+            status,
+          );
       if (!updated) throw new RoomNotFoundError(roomId);
       return toMembershipDto(updated);
     }

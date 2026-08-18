@@ -150,7 +150,7 @@ export class RoomMembershipRepository {
 
   /**
    * Updates the status of a single membership record identified by its id.
-   * Clears the `origin` field when transitioning away from `pending`.
+   * Records a supplied origin when entering `pending`, and clears it when leaving `pending`.
    * Returns the updated membership, or null if no row matched.
    */
   async updateStatus(
@@ -183,12 +183,18 @@ export class RoomMembershipRepository {
     memberKind: MemberKind,
     memberId: string,
     status: MembershipStatus,
+    origin?: MembershipOrigin,
   ): Promise<RoomMembership | null> {
     try {
       const row = await this.db.roomMembership.update({
         where: { roomId_memberKind_memberId: { roomId, memberKind, memberId } },
-        // Clear origin when leaving pending state; it is only meaningful while pending.
-        data: { status, ...(status !== "pending" ? { origin: null } : {}) },
+        // Set the pending flow's origin when supplied, or clear it when leaving pending.
+        data: {
+          status,
+          ...(status === "pending"
+            ? (origin ? { origin } : {})
+            : { origin: null }),
+        },
       });
       return toMembership(row);
     } catch (error) {
@@ -197,18 +203,25 @@ export class RoomMembershipRepository {
     }
   }
 
-  /** Reactivates a previous membership and refreshes its invitation audit data. */
+  /** Re-invites a previous membership and refreshes its invitation audit data. */
   async reinviteByMember(
     roomId: string,
     memberKind: MemberKind,
     memberId: string,
     invitedById: string,
+    status: MembershipStatus = "active",
+    origin?: MembershipOrigin,
   ): Promise<RoomMembership | null> {
     try {
       const row = await this.db.roomMembership.update({
         where: { roomId_memberKind_memberId: { roomId, memberKind, memberId } },
-        // Clear origin: the membership is now active, not pending.
-        data: { status: "active", origin: null, invitedById, invitedAt: new Date() },
+        data: {
+          status,
+          // Origin only has meaning while pending. Invitation callers supply it explicitly.
+          origin: status === "pending" ? (origin ?? null) : null,
+          invitedById,
+          invitedAt: new Date(),
+        },
       });
       return toMembership(row);
     } catch (error) {

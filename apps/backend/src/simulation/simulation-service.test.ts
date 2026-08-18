@@ -10,7 +10,11 @@ import type { ThreadContext, ThreadService } from "../posts/thread-service.js";
 import { EventHub } from "./event-hub.js";
 import type { InternalSseEvent, ThreadActivityEvent } from "./public-events.js";
 import type { SimulationRepository } from "./simulation-repository.js";
-import type { RoomMembership, RoomMembershipRepository } from "./room-membership-repository.js";
+import type {
+  CreateMembershipInput,
+  RoomMembership,
+  RoomMembershipRepository,
+} from "./room-membership-repository.js";
 import {
   PostNotFoundError,
   assertRoomReadable,
@@ -173,10 +177,18 @@ function makeHarness(options: HarnessOptions): Harness {
       options.findAllCharacters ? options.findAllCharacters() : Promise.resolve(options.characters),
   } as unknown as CharacterRepository;
 
-  // No memberships exist in these fixtures: every room here defaults to
-  // `public`, where `canPost` only needs an authenticated author (§175).
+  // No memberships exist initially. Public-room posts create one as part of
+  // the first-post auto-join flow.
   const membershipRepository = {
     findOne: vi.fn(() => Promise.resolve(null)),
+    create: vi.fn((input: CreateMembershipInput) =>
+      Promise.resolve({
+        id: "membership-1",
+        ...input,
+        createdAt: new Date("2026-01-01T00:00:00Z"),
+        updatedAt: new Date("2026-01-01T00:00:00Z"),
+      }),
+    ),
   } as unknown as RoomMembershipRepository;
 
   const authorById = new Map(options.characters.map((character) => [character.id, character]));
@@ -455,6 +467,38 @@ describe("SimulationService.submitUserPost — room authorization (issue #175)",
 
     expect(post.content).toBe("フィードへの投稿");
     expect(harness.membershipRepository.findOne).not.toHaveBeenCalled();
+  });
+
+  it("ignores only a unique-constraint race while auto-joining a public room", async () => {
+    const harness = makeHarness({ characters: [] });
+    vi.mocked(harness.membershipRepository.create).mockRejectedValueOnce(
+      Object.assign(new Error("already created"), { code: "P2002" }),
+    );
+
+    await expect(
+      harness.service.submitUserPost({
+        roomId: SIMULATION.id,
+        authorId: USER_AUTHOR_ID,
+        content: "同時投稿",
+        responderIds: [],
+      }),
+    ).resolves.toMatchObject({ content: "同時投稿" });
+  });
+
+  it("does not publish when public-room auto-join fails for another database reason", async () => {
+    const harness = makeHarness({ characters: [] });
+    const databaseError = new Error("database unavailable");
+    vi.mocked(harness.membershipRepository.create).mockRejectedValueOnce(databaseError);
+
+    await expect(
+      harness.service.submitUserPost({
+        roomId: SIMULATION.id,
+        authorId: USER_AUTHOR_ID,
+        content: "保存されない投稿",
+        responderIds: [],
+      }),
+    ).rejects.toBe(databaseError);
+    expect(harness.posts).toEqual([]);
   });
 });
 

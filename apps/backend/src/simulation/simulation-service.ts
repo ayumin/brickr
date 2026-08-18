@@ -14,6 +14,7 @@ import { DomainError } from "../domain-error.js";
 import type { TokenUsageService } from "../llm/token-usage-service.js";
 import type { LLMBudgetService } from "../llm/llm-budget-service.js";
 import type { ProviderId } from "../llm/provider.js";
+import { isUniqueConstraintError } from "../persistence/prisma.js";
 import { optionalField } from "../persistence/repository-mapping.js";
 import type { Post } from "../posts/post.js";
 import type { PostService } from "../posts/post-service.js";
@@ -754,7 +755,8 @@ export class SimulationService {
           role: "member",
           status: "active",
         });
-      } catch {
+      } catch (error) {
+        if (!isUniqueConstraintError(error)) throw error;
         // A concurrent post may have already created the membership; ignore
         // unique constraint violations and let the post proceed.
       }

@@ -119,8 +119,8 @@ function makeMembershipRepo(
     updateStatus: vi.fn((id, status) =>
       Promise.resolve(makeMembership({ id, status })),
     ),
-    updateStatusByMember: vi.fn((_roomId, _memberKind, memberId, status) =>
-      Promise.resolve(makeMembership({ memberId, status })),
+    updateStatusByMember: vi.fn((_roomId, _memberKind, memberId, status, origin) =>
+      Promise.resolve(makeMembership({ memberId, status, origin })),
     ),
     reinviteByMember: vi.fn((_roomId, _memberKind, memberId, invitedById) =>
       Promise.resolve(makeMembership({ memberId, status: "active", invitedById })),
@@ -849,6 +849,24 @@ describe("RoomService.join — origin field", () => {
     // origin should not be set for active memberships
     const call = (memberships.create as ReturnType<typeof vi.fn>).mock.calls[0]![0];
     expect(call.origin).toBeUndefined();
+  });
+
+  it("restores a previous open-room membership as pending(request)", async () => {
+    const { service, memberships } = makeService(
+      { findById: vi.fn(() => Promise.resolve(makeRoom({ visibility: "open" }))) },
+      { findOne: vi.fn(() => Promise.resolve(makeMembership({ status: "left" }))) },
+    );
+
+    const result = await service.join("room-1", OTHER);
+
+    expect(memberships.updateStatusByMember).toHaveBeenCalledWith(
+      "room-1",
+      "user",
+      OTHER.id,
+      "pending",
+      "request",
+    );
+    expect(result).toMatchObject({ status: "pending", origin: "request" });
   });
 });
 

@@ -60,6 +60,72 @@ describe("RoomMembershipRepository.reinviteByMember", () => {
       },
     });
   });
+
+  it("restores a closed-room user as a pending invitation", async () => {
+    const update = vi.fn().mockResolvedValue({
+      ...membershipRow,
+      status: "pending",
+      origin: "invitation",
+      invitedById: "owner-2",
+      invitedAt: new Date(),
+    });
+    const db = { roomMembership: { update } } as unknown as Db;
+
+    await new RoomMembershipRepository(db).reinviteByMember(
+      "room-1",
+      "user",
+      "user-1",
+      "owner-2",
+      "pending",
+      "invitation",
+    );
+
+    expect(update).toHaveBeenCalledWith({
+      where: {
+        roomId_memberKind_memberId: {
+          roomId: "room-1",
+          memberKind: "user",
+          memberId: "user-1",
+        },
+      },
+      data: {
+        status: "pending",
+        origin: "invitation",
+        invitedById: "owner-2",
+        invitedAt: expect.any(Date),
+      },
+    });
+  });
+});
+
+describe("RoomMembershipRepository.updateStatusByMember", () => {
+  it("records the origin when transitioning into pending", async () => {
+    const update = vi.fn().mockResolvedValue({
+      ...membershipRow,
+      status: "pending",
+      origin: "request",
+    });
+    const db = { roomMembership: { update } } as unknown as Db;
+
+    await new RoomMembershipRepository(db).updateStatusByMember(
+      "room-1",
+      "user",
+      "user-1",
+      "pending",
+      "request",
+    );
+
+    expect(update).toHaveBeenCalledWith({
+      where: {
+        roomId_memberKind_memberId: {
+          roomId: "room-1",
+          memberKind: "user",
+          memberId: "user-1",
+        },
+      },
+      data: { status: "pending", origin: "request" },
+    });
+  });
 });
 
 describe("RoomMembershipRepository.updateStatus", () => {
