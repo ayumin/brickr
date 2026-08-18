@@ -1,6 +1,7 @@
 /** Every machine-readable error code the API answers with. */
 export const API_ERROR_CODES = [
   "account_suspended",
+  "cannot_leave_feed_room",
   "cannot_modify_owner",
   "character_generation_failed",
   "email_conflict",
@@ -19,12 +20,16 @@ export const API_ERROR_CODES = [
   "invalid_query",
   "invalid_setting",
   "invalid_budget",
+  "invitation_not_found",
   "member_already_exists",
   "member_banned",
   "membership_not_found",
   // Room authorization producers are introduced by follow-up issues #151/#152.
   "membership_required",
+  "not_a_member",
   "not_found",
+  "owner_cannot_leave",
+  "request_not_found",
   "room_already_member",
   "room_archived",
   "room_join_not_allowed",

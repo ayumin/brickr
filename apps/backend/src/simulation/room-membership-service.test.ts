@@ -91,7 +91,18 @@ function makeMembershipRepo(
 ): RoomMembershipRepository {
   const findByRoom = overrides.findByRoom ?? vi.fn(() => Promise.resolve([]));
   return {
-    create: vi.fn(() => Promise.resolve(makeMembership())),
+    create: vi.fn((input) =>
+      Promise.resolve(
+        makeMembership({
+          memberKind: input.memberKind,
+          memberId: input.memberId,
+          role: input.role,
+          status: input.status,
+          origin: input.origin,
+          invitedById: input.invitedById,
+        }),
+      ),
+    ),
     findByRoom,
     findByMember: vi.fn(() => Promise.resolve([])),
     findOne: vi.fn(() => Promise.resolve(null)),
@@ -103,8 +114,8 @@ function makeMembershipRepo(
     updateStatusByMember: vi.fn((_roomId, _kind, _memberId, status) =>
       Promise.resolve(makeMembership({ status })),
     ),
-    reinviteByMember: vi.fn((_roomId, _kind, _memberId, invitedById) =>
-      Promise.resolve(makeMembership({ status: "active", invitedById, invitedAt: new Date() })),
+    reinviteByMember: vi.fn((_roomId, _kind, _memberId, invitedById, status = "active", origin) =>
+      Promise.resolve(makeMembership({ status, origin, invitedById, invitedAt: new Date() })),
     ),
     deleteById: vi.fn(() => Promise.resolve(true)),
     ...overrides,
@@ -162,6 +173,42 @@ describe("RoomMembershipService.invite", () => {
     );
   });
 
+  it("creates a pending(invitation) membership for a user in a closed room", async () => {
+    const { service, memberships } = makeService({
+      findById: vi.fn(() => Promise.resolve(makeRoom({ visibility: "closed" }))),
+    });
+
+    const result = await service.invite(
+      { roomId: "room-1", targetId: "user-target", targetKind: "user", inviterId: OWNER.id },
+      OWNER,
+    );
+
+    expect(memberships.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        memberKind: "user",
+        status: "pending",
+        origin: "invitation",
+        invitedById: OWNER.id,
+      }),
+    );
+    expect(result).toMatchObject({ status: "pending", origin: "invitation" });
+  });
+
+  it("keeps character invitations active in a closed room", async () => {
+    const { service, memberships } = makeService({
+      findById: vi.fn(() => Promise.resolve(makeRoom({ visibility: "closed" }))),
+    });
+
+    await service.invite(
+      { roomId: "room-1", targetId: "char-1", targetKind: "character", inviterId: OWNER.id },
+      OWNER,
+    );
+
+    expect(memberships.create).toHaveBeenCalledWith(
+      expect.objectContaining({ memberKind: "character", status: "active" }),
+    );
+  });
+
   it("re-invites a left member by updating to active", async () => {
     const { service, memberships } = makeService(undefined, {
       findOne: vi.fn(() => Promise.resolve(makeMembership({ status: "left" }))),
@@ -197,6 +244,28 @@ describe("RoomMembershipService.invite", () => {
       "user-target",
       OWNER.id,
     );
+  });
+
+  it("re-invites a previous user as pending(invitation) in a private room", async () => {
+    const { service, memberships } = makeService(
+      { findById: vi.fn(() => Promise.resolve(makeRoom({ visibility: "private" }))) },
+      { findOne: vi.fn(() => Promise.resolve(makeMembership({ status: "left" }))) },
+    );
+
+    const result = await service.invite(
+      { roomId: "room-1", targetId: "user-target", targetKind: "user", inviterId: OWNER.id },
+      OWNER,
+    );
+
+    expect(memberships.reinviteByMember).toHaveBeenCalledWith(
+      "room-1",
+      "user",
+      "user-target",
+      OWNER.id,
+      "pending",
+      "invitation",
+    );
+    expect(result).toMatchObject({ status: "pending", origin: "invitation" });
   });
 
   it("maps a concurrent invite unique constraint violation to MemberAlreadyExistsError", async () => {

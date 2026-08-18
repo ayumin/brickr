@@ -1,4 +1,4 @@
-import type { MemberKind, MemberRole, MembershipStatus } from "@brickr/shared";
+import type { MemberKind, MemberRole, MembershipOrigin, MembershipStatus } from "@brickr/shared";
 import {
   isRecordNotFoundError,
   type Db,
@@ -13,6 +13,8 @@ export type RoomMembership = {
   memberId: string;
   role: MemberRole;
   status: MembershipStatus;
+  /** Present when status is pending: distinguishes a self-initiated request from an owner invitation. */
+  origin?: MembershipOrigin;
   invitedById?: string;
   invitedAt?: Date;
   createdAt: Date;
@@ -26,6 +28,7 @@ type MembershipRow = {
   memberId: string;
   role: string;
   status: string;
+  origin: string | null;
   invitedById: string | null;
   invitedAt: Date | null;
   createdAt: Date;
@@ -40,6 +43,7 @@ function toMembership(row: MembershipRow): RoomMembership {
     memberId: row.memberId,
     role: row.role as MemberRole,
     status: row.status as MembershipStatus,
+    ...(row.origin ? { origin: row.origin as MembershipOrigin } : {}),
     ...optionalField("invitedById", row.invitedById),
     ...(row.invitedAt ? { invitedAt: row.invitedAt } : {}),
     createdAt: row.createdAt,
@@ -53,6 +57,8 @@ export type CreateMembershipInput = {
   memberId: string;
   role: MemberRole;
   status: MembershipStatus;
+  /** Required when status is pending: identifies whether this is a self-request or an owner invitation. */
+  origin?: MembershipOrigin;
   invitedById?: string;
 };
 
@@ -75,6 +81,7 @@ export class RoomMembershipRepository {
         memberId: input.memberId,
         role: input.role,
         status: input.status,
+        ...(input.origin ? { origin: input.origin } : {}),
         ...(input.invitedById ? { invitedById: input.invitedById } : {}),
       },
     });
@@ -143,6 +150,7 @@ export class RoomMembershipRepository {
 
   /**
    * Updates the status of a single membership record identified by its id.
+   * Records a supplied origin when entering `pending`, and clears it when leaving `pending`.
    * Returns the updated membership, or null if no row matched.
    */
   async updateStatus(
@@ -152,7 +160,8 @@ export class RoomMembershipRepository {
     try {
       const row = await this.db.roomMembership.update({
         where: { id },
-        data: { status },
+        // Clear origin when leaving pending state; it is only meaningful while pending.
+        data: { status, ...(status !== "pending" ? { origin: null } : {}) },
       });
       return toMembership(row);
     } catch (error) {
@@ -163,6 +172,7 @@ export class RoomMembershipRepository {
 
   /**
    * Updates the status of a membership identified by the (room, memberKind, memberId) triple.
+   * Clears the `origin` field when transitioning away from `pending`.
    * Returns the updated membership, or null if no row matched.
    *
    * Used by the Cast join flow to transition a membership from `pending` to
@@ -173,11 +183,18 @@ export class RoomMembershipRepository {
     memberKind: MemberKind,
     memberId: string,
     status: MembershipStatus,
+    origin?: MembershipOrigin,
   ): Promise<RoomMembership | null> {
     try {
       const row = await this.db.roomMembership.update({
         where: { roomId_memberKind_memberId: { roomId, memberKind, memberId } },
-        data: { status },
+        // Set the pending flow's origin when supplied, or clear it when leaving pending.
+        data: {
+          status,
+          ...(status === "pending"
+            ? (origin ? { origin } : {})
+            : { origin: null }),
+        },
       });
       return toMembership(row);
     } catch (error) {
@@ -186,17 +203,25 @@ export class RoomMembershipRepository {
     }
   }
 
-  /** Reactivates a previous membership and refreshes its invitation audit data. */
+  /** Re-invites a previous membership and refreshes its invitation audit data. */
   async reinviteByMember(
     roomId: string,
     memberKind: MemberKind,
     memberId: string,
     invitedById: string,
+    status: MembershipStatus = "active",
+    origin?: MembershipOrigin,
   ): Promise<RoomMembership | null> {
     try {
       const row = await this.db.roomMembership.update({
         where: { roomId_memberKind_memberId: { roomId, memberKind, memberId } },
-        data: { status: "active", invitedById, invitedAt: new Date() },
+        data: {
+          status,
+          // Origin only has meaning while pending. Invitation callers supply it explicitly.
+          origin: status === "pending" ? (origin ?? null) : null,
+          invitedById,
+          invitedAt: new Date(),
+        },
       });
       return toMembership(row);
     } catch (error) {

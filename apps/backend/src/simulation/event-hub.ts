@@ -153,6 +153,16 @@ export class EventHub {
     }
   }
 
+  /**
+   * Terminates every room-scoped stream owned by one authenticated subscriber.
+   *
+   * Alias for `closeSubscriber` — used by the leave flow (issue #176) to
+   * disconnect a user's SSE streams when they voluntarily leave a room.
+   */
+  disconnectUser(roomId: string, userId: string): void {
+    this.closeSubscriber(roomId, userId);
+  }
+
   subscriberCount(roomId: string): number {
     return this.bySimulation.get(roomId)?.size ?? 0;
   }

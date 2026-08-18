@@ -14,6 +14,7 @@ import { DomainError } from "../domain-error.js";
 import type { TokenUsageService } from "../llm/token-usage-service.js";
 import type { LLMBudgetService } from "../llm/llm-budget-service.js";
 import type { ProviderId } from "../llm/provider.js";
+import { isUniqueConstraintError } from "../persistence/prisma.js";
 import { optionalField } from "../persistence/repository-mapping.js";
 import type { Post } from "../posts/post.js";
 import type { PostService } from "../posts/post-service.js";
@@ -347,6 +348,15 @@ export class SimulationService {
 
     await this.assertPostBelongsToRoom(input.replyTo, input.roomId);
     await this.assertPostBelongsToRoom(input.quoteOf, input.roomId);
+
+    // Auto-join: for public rooms, ensure the posting user has an active
+    // membership before the post is saved (issue #176). This makes the first
+    // post in a public room atomically create the membership so the user
+    // appears in the member list immediately. left/removed actors are
+    // re-activated; banned actors are already blocked by canPost above.
+    if (simulation.scope !== "global" && simulation.visibility === "public") {
+      await this.ensurePublicRoomMembership(input.roomId, input.authorId);
+    }
 
     const post = await this.deps.posts.publish({
       roomId: input.roomId,
@@ -722,6 +732,39 @@ export class SimulationService {
     if (!post || post.roomId !== roomId) {
       throw new PostNotFoundError(postId);
     }
+  }
+
+  /**
+   * Ensures the posting user has an active membership in a public room (issue #176).
+   *
+   * Called before saving the post so the membership is visible immediately.
+   * - No existing row: creates an active membership (first post = auto-join).
+   * - left/removed: reactivates the membership (re-join on re-post).
+   * - active/pending: no-op (already a member or pending approval).
+   * - banned: already blocked by canPost above; this path is never reached.
+   */
+  private async ensurePublicRoomMembership(roomId: string, userId: string): Promise<void> {
+    const existing = await this.deps.memberships.findOne(roomId, "user", userId);
+    if (!existing) {
+      // First post: create an active membership.
+      try {
+        await this.deps.memberships.create({
+          roomId,
+          memberKind: "user",
+          memberId: userId,
+          role: "member",
+          status: "active",
+        });
+      } catch (error) {
+        if (!isUniqueConstraintError(error)) throw error;
+        // A concurrent post may have already created the membership; ignore
+        // unique constraint violations and let the post proceed.
+      }
+    } else if (existing.status === "left" || existing.status === "removed") {
+      // Re-post after leaving/being removed: reactivate.
+      await this.deps.memberships.updateStatusByMember(roomId, "user", userId, "active");
+    }
+    // active / pending: already handled; banned: blocked upstream.
   }
 }
 

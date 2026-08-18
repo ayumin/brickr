@@ -91,6 +91,7 @@ function toDto(m: RoomMembership): RoomMembershipDto {
     memberId: m.memberId,
     role: m.role,
     status: m.status,
+    ...(m.origin ? { origin: m.origin } : {}),
     ...(m.invitedById ? { invitedById: m.invitedById } : {}),
     ...(m.invitedAt ? { invitedAt: m.invitedAt.toISOString() } : {}),
     createdAt: m.createdAt.toISOString(),
@@ -119,9 +120,8 @@ export class RoomMembershipService {
    *   - closed / private: invitation creates a `pending` membership that the
    *     invitee must accept (or the owner approves on their behalf).
    *
-   * For simplicity in Phase 2, all owner invitations create `active` memberships
-   * immediately, regardless of visibility. The pending flow is for self-initiated
-   * join requests (issue #153).
+   * Character invitations remain active immediately because the accept/decline
+   * lifecycle currently applies only to users.
    *
    * Restrictions:
    *   - Archived rooms reject invitations.
@@ -137,6 +137,10 @@ export class RoomMembershipService {
       throw new RoomArchivedError(input.roomId);
     }
 
+    const needsPendingInvitation =
+      input.targetKind === "user" &&
+      (room.visibility === "closed" || room.visibility === "private");
+
     // Check for an existing membership row.
     const existing = await this.deps.memberships.findOne(
       input.roomId,
@@ -151,25 +155,35 @@ export class RoomMembershipService {
       if (existing.status === "active" || existing.status === "pending") {
         throw new MemberAlreadyExistsError();
       }
-      // left / removed: re-invite by updating to active.
-      const updated = await this.deps.memberships.reinviteByMember(
-        input.roomId,
-        input.targetKind,
-        input.targetId,
-        actor.id,
-      );
+      // A user re-invited to a closed/private room must accept again.
+      const updated = needsPendingInvitation
+        ? await this.deps.memberships.reinviteByMember(
+            input.roomId,
+            input.targetKind,
+            input.targetId,
+            actor.id,
+            "pending",
+            "invitation",
+          )
+        : await this.deps.memberships.reinviteByMember(
+            input.roomId,
+            input.targetKind,
+            input.targetId,
+            actor.id,
+          );
       if (!updated) throw new MembershipNotFoundError(existing.id);
       return toDto(updated);
     }
 
-    // No existing row: create a fresh active membership.
+    // No existing row: closed/private user invitations await acceptance.
     try {
       const membership = await this.deps.memberships.create({
         roomId: input.roomId,
         memberKind: input.targetKind,
         memberId: input.targetId,
         role: "member",
-        status: "active",
+        status: needsPendingInvitation ? "pending" : "active",
+        ...(needsPendingInvitation ? { origin: "invitation" as const } : {}),
         invitedById: actor.id,
       });
       return toDto(membership);

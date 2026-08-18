@@ -40,6 +40,13 @@ enum MemberStatus {
   banned
 }
 
+/// Origin of a pending membership: request (self-initiated) or invitation (owner-initiated).
+/// Null for non-pending memberships (active, left, removed, banned).
+enum MembershipOrigin {
+  request
+  invitation
+}
+
 /// Internal room scope: distinguishes the global Feed room from user-created rooms.
 ///
 /// Not exposed in public DTOs; used for internal filtering only.
@@ -346,6 +353,10 @@ model RoomMembership {
   /// polymorphic reason as `memberId`.
   invitedById String?   @map("invited_by_id")
   invitedAt   DateTime? @map("invited_at")
+
+  /// Origin of the membership when status is pending.
+  /// Null for non-pending memberships (active, left, removed, banned).
+  origin MembershipOrigin? @map("origin")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

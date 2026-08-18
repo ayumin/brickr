@@ -37,6 +37,7 @@ import { z } from "zod";
 import {
   MEMBER_KINDS,
   MEMBER_ROLES,
+  MEMBERSHIP_ORIGINS,
   MEMBERSHIP_STATUSES,
   ROOM_VISIBILITIES,
 } from "@brickr/shared";
@@ -154,6 +155,7 @@ const membershipDtoSchema = z.object({
   memberId: z.string(),
   role: z.enum(MEMBER_ROLES),
   status: z.enum(MEMBERSHIP_STATUSES),
+  origin: z.enum(MEMBERSHIP_ORIGINS).optional(),
   invitedById: z.string().optional(),
   invitedAt: z.string().optional(),
   createdAt: z.string(),
@@ -403,6 +405,64 @@ export const banMemberOpenApiMeta = {
   summary: "Ban a member from a room",
   description: "Owner/admin only. Sets the membership status to banned. Banned members cannot re-join.",
   successDescription: "Member banned",
+  extraResponses: {
+    "403": { $ref: "#/components/responses/Forbidden" },
+    "404": { $ref: "#/components/responses/NotFound" },
+  },
+};
+
+export const leaveRoomOpenApiMeta = {
+  operationId: "leaveRoom",
+  tags: ["Simulations"] as string[],
+  summary: "Leave a room",
+  description:
+    "Active members may leave a room (active → left). " +
+    "The room owner cannot leave. Feed rooms cannot be left. " +
+    "Terminates any open SSE connections for the caller in this room.",
+  successDescription: "Room left",
+  extraResponses: {
+    "403": { $ref: "#/components/responses/Forbidden" },
+    "404": { $ref: "#/components/responses/NotFound" },
+    "409": { $ref: "#/components/responses/Conflict" },
+  },
+};
+
+export const acceptInvitationOpenApiMeta = {
+  operationId: "acceptRoomInvitation",
+  tags: ["Simulations"] as string[],
+  summary: "Accept a pending room invitation",
+  description:
+    "The caller must have a pending(invitation) membership in the room. " +
+    "Transitions the membership to active.",
+  successDescription: "The accepted membership",
+  extraResponses: {
+    "403": { $ref: "#/components/responses/Forbidden" },
+    "404": { $ref: "#/components/responses/NotFound" },
+  },
+};
+
+export const declineInvitationOpenApiMeta = {
+  operationId: "declineRoomInvitation",
+  tags: ["Simulations"] as string[],
+  summary: "Decline a pending room invitation",
+  description:
+    "The caller must have a pending(invitation) membership in the room. " +
+    "Deletes the membership row — no history is kept.",
+  successDescription: "Invitation declined",
+  extraResponses: {
+    "403": { $ref: "#/components/responses/Forbidden" },
+    "404": { $ref: "#/components/responses/NotFound" },
+  },
+};
+
+export const withdrawRequestOpenApiMeta = {
+  operationId: "withdrawRoomJoinRequest",
+  tags: ["Simulations"] as string[],
+  summary: "Withdraw a pending join request",
+  description:
+    "The caller must have a pending(request) membership in the room. " +
+    "Deletes the membership row — the user may re-request immediately.",
+  successDescription: "Request withdrawn",
   extraResponses: {
     "403": { $ref: "#/components/responses/Forbidden" },
     "404": { $ref: "#/components/responses/NotFound" },
@@ -791,6 +851,50 @@ buildOpenApiOperation(
   banMemberOpenApiMeta,
 );
 
+buildOpenApiOperation(
+  {
+    method: "POST",
+    path: "/api/rooms/:id/leave",
+    auth: "required",
+    params: roomIdParams,
+    response: z.object({}),
+  },
+  leaveRoomOpenApiMeta,
+);
+
+buildOpenApiOperation(
+  {
+    method: "POST",
+    path: "/api/rooms/:id/invitation/accept",
+    auth: "required",
+    params: roomIdParams,
+    response: membershipResponseSchema,
+  },
+  acceptInvitationOpenApiMeta,
+);
+
+buildOpenApiOperation(
+  {
+    method: "DELETE",
+    path: "/api/rooms/:id/invitation",
+    auth: "required",
+    params: roomIdParams,
+    response: z.object({}),
+  },
+  declineInvitationOpenApiMeta,
+);
+
+buildOpenApiOperation(
+  {
+    method: "DELETE",
+    path: "/api/rooms/:id/request",
+    auth: "required",
+    params: roomIdParams,
+    response: z.object({}),
+  },
+  withdrawRequestOpenApiMeta,
+);
+
 // ---------------------------------------------------------------------------
 // Route registration
 // ---------------------------------------------------------------------------
@@ -1132,6 +1236,60 @@ export function registerRoomsRoutes(app: FastifyInstance, services: AppServices)
     handler: async ({ user, params, reply }) => {
       await services.rooms.banMember(params.id, params.memberId, user);
       services.events.closeSubscriber(params.id, params.memberId);
+      return reply.status(204).send();
+    },
+  }).register(app);
+
+  // POST /api/rooms/:id/leave — leave a room (issue #176)
+  defineRoute({
+    method: "POST",
+    path: "/api/rooms/:id/leave",
+    auth: "required",
+    params: roomIdParams,
+    response: z.object({}),
+    handler: async ({ user, params, reply }) => {
+      await services.rooms.leave(params.id, user);
+      // Terminate any open SSE connections for the leaving user in this room.
+      services.events.disconnectUser(params.id, user.id);
+      return reply.status(204).send();
+    },
+  }).register(app);
+
+  // POST /api/rooms/:id/invitation/accept — accept a pending invitation (issue #176)
+  defineRoute({
+    method: "POST",
+    path: "/api/rooms/:id/invitation/accept",
+    auth: "required",
+    params: roomIdParams,
+    response: membershipResponseSchema,
+    handler: async ({ user, params }) => {
+      const membership = await services.rooms.acceptInvitation(params.id, user);
+      return { membership };
+    },
+  }).register(app);
+
+  // DELETE /api/rooms/:id/invitation — decline a pending invitation (issue #176)
+  defineRoute({
+    method: "DELETE",
+    path: "/api/rooms/:id/invitation",
+    auth: "required",
+    params: roomIdParams,
+    response: z.object({}),
+    handler: async ({ user, params, reply }) => {
+      await services.rooms.declineInvitation(params.id, user);
+      return reply.status(204).send();
+    },
+  }).register(app);
+
+  // DELETE /api/rooms/:id/request — withdraw a pending join request (issue #176)
+  defineRoute({
+    method: "DELETE",
+    path: "/api/rooms/:id/request",
+    auth: "required",
+    params: roomIdParams,
+    response: z.object({}),
+    handler: async ({ user, params, reply }) => {
+      await services.rooms.withdrawRequest(params.id, user);
       return reply.status(204).send();
     },
   }).register(app);
