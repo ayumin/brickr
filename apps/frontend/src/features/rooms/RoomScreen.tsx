@@ -134,7 +134,9 @@ export function RoomScreen({ roomId }: { roomId: string }) {
     const controller = new AbortController();
     api.getRoomInvitation(roomId, controller.signal)
       .then((inv) => setInvitation(inv))
-      .catch(() => setInvitation(null));
+      .catch((cause: unknown) => {
+        if (!isAbortError(cause)) setInvitation(null);
+      });
     return () => controller.abort();
   }, [hasInvitation, roomId]);
 
