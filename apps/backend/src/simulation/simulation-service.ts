@@ -234,11 +234,38 @@ export class SimulationService {
    * feed's job now; `postCount`/`creator`/`canManage` are here (rather than
    * on the leaner `requireReadableRoom` path below) because the room info
    * panel is this method's only reason to exist as a summary.
+   *
+   * Also includes server-computed `capabilities` for the caller (issue #178).
    */
   async get(id: string, actor: SimulationActor): Promise<RoomResponse> {
     const simulation = await this.requireSimulationSummary(id);
-    await assertRoomReadable(this.deps.memberships, simulation, actor);
-    return { room: toSimulationSummaryDto(simulation, actor) };
+    const roomActor = await toRoomActor(
+      this.deps.memberships,
+      simulation.id,
+      actor,
+      simulation.createdByUserId,
+    );
+    const caps = computeRoomCapabilities(
+      { visibility: simulation.visibility, status: simulation.status, scope: simulation.scope },
+      roomActor,
+    );
+    if (!caps.canView) {
+      throw new SimulationNotFoundError(simulation.id);
+    }
+    const summary = toSimulationSummaryDto(simulation, actor);
+    return {
+      room: {
+        ...summary,
+        capabilities: {
+          canView: caps.canView,
+          canPost: caps.canPost,
+          canJoin: caps.canJoin,
+          canLeave: caps.canLeave,
+          canInvite: caps.canInvite,
+          canManage: caps.canManage,
+        },
+      },
+    };
   }
 
   /**

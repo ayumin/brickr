@@ -95,6 +95,15 @@ const roomDtoSchema = z.object({
   createdByUserId: z.string().optional(),
 });
 
+const roomCapabilitiesSchema = z.object({
+  canView: z.boolean(),
+  canPost: z.boolean(),
+  canJoin: z.boolean(),
+  canLeave: z.boolean(),
+  canInvite: z.boolean(),
+  canManage: z.boolean(),
+});
+
 const roomSummarySchema = z.object({
   id: z.string(),
   title: z.string().nullable(),
@@ -108,6 +117,7 @@ const roomSummarySchema = z.object({
     .object({ id: z.string(), handle: z.string(), displayName: z.string() })
     .nullable(),
   canManage: z.boolean(),
+  capabilities: roomCapabilitiesSchema.optional(),
 });
 
 // The service returns { room: RoomSummaryDto }; the response schema
@@ -465,6 +475,20 @@ export const withdrawRequestOpenApiMeta = {
   successDescription: "Request withdrawn",
   extraResponses: {
     "403": { $ref: "#/components/responses/Forbidden" },
+    "404": { $ref: "#/components/responses/NotFound" },
+  },
+};
+
+export const getRoomInvitationOpenApiMeta = {
+  operationId: "getRoomInvitation",
+  tags: ["Simulations"] as string[],
+  summary: "Get the caller's pending room invitation",
+  description:
+    "Returns the pending invitation details for the caller in the given room. " +
+    "The caller must have a pending(invitation) membership. " +
+    "Returns 404 if no pending invitation exists.",
+  successDescription: "The pending invitation details",
+  extraResponses: {
     "404": { $ref: "#/components/responses/NotFound" },
   },
 };
@@ -864,6 +888,27 @@ buildOpenApiOperation(
 
 buildOpenApiOperation(
   {
+    method: "GET",
+    path: "/api/rooms/:id/invitation",
+    auth: "required",
+    params: roomIdParams,
+    response: z.object({
+      invitation: z.object({
+        roomId: z.string(),
+        roomTitle: z.string().nullable(),
+        roomVisibility: z.enum(ROOM_VISIBILITIES),
+        ownerHandle: z.string(),
+        ownerDisplayName: z.string(),
+        activeMemberCount: z.number().int().min(0),
+        invitedAt: z.string(),
+      }),
+    }),
+  },
+  getRoomInvitationOpenApiMeta,
+);
+
+buildOpenApiOperation(
+  {
     method: "POST",
     path: "/api/rooms/:id/invitation/accept",
     auth: "required",
@@ -1252,6 +1297,29 @@ export function registerRoomsRoutes(app: FastifyInstance, services: AppServices)
       // Terminate any open SSE connections for the leaving user in this room.
       services.events.disconnectUser(params.id, user.id);
       return reply.status(204).send();
+    },
+  }).register(app);
+
+  // GET /api/rooms/:id/invitation — get the caller's pending invitation (issue #178)
+  defineRoute({
+    method: "GET",
+    path: "/api/rooms/:id/invitation",
+    auth: "required",
+    params: roomIdParams,
+    response: z.object({
+      invitation: z.object({
+        roomId: z.string(),
+        roomTitle: z.string().nullable(),
+        roomVisibility: z.enum(ROOM_VISIBILITIES),
+        ownerHandle: z.string(),
+        ownerDisplayName: z.string(),
+        activeMemberCount: z.number().int().min(0),
+        invitedAt: z.string(),
+      }),
+    }),
+    handler: async ({ user, params }) => {
+      const invitation = await services.rooms.getInvitation(params.id, user);
+      return { invitation };
     },
   }).register(app);
 

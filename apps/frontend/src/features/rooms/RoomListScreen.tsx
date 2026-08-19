@@ -10,11 +10,12 @@ import { checkSignedInOnlyAccess } from "../../app/route-access";
 import { formatAbsoluteTime, formatRelativeTime } from "../timeline/QuotePost";
 import { roomPath } from "../../routes";
 import { api, isAbortError, toErrorMessage } from "../../services/api-client";
+import { CreateRoomDialog } from "./CreateRoomDialog";
 import { RoomNameDialog } from "./RoomNameDialog";
 import { canJoinRoom } from "./room-list-actions";
 import { writeSelectedRoomId } from "./selected-room-storage";
 
-type Dialog = { mode: "create" } | { mode: "rename"; room: RoomSummaryDto };
+type DialogState = { mode: "create" } | { mode: "rename"; room: RoomSummaryDto };
 
 /** Human-readable label for each visibility level. */
 const VISIBILITY_LABEL: Record<string, string> = {
@@ -155,7 +156,7 @@ export function RoomListScreen() {
   const [error, setError] = useState<string | null>(null);
   const [joinError, setJoinError] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
-  const [dialog, setDialog] = useState<Dialog | null>(null);
+  const [dialog, setDialog] = useState<DialogState | null>(null);
   // Track which rooms are currently being joined (by room id)
   const [joiningIds, setJoiningIds] = useState<Set<string>>(new Set());
 
@@ -286,22 +287,25 @@ export function RoomListScreen() {
         </ul>
       )}
 
-      {dialog ? (
+      {dialog?.mode === "create" ? (
+        <CreateRoomDialog
+          onClose={() => setDialog(null)}
+          onSave={async (title, visibility) => {
+            const created = await api.createRoom({ title, visibility });
+            writeSelectedRoomId(created.id);
+            setDialog(null);
+            navigate(roomPath(created.id));
+          }}
+        />
+      ) : dialog?.mode === "rename" ? (
         <RoomNameDialog
-          mode={dialog.mode}
-          {...(dialog.mode === "rename" ? { initialValue: dialog.room.title ?? "" } : {})}
+          mode="rename"
+          initialValue={dialog.room.title ?? ""}
           onClose={() => setDialog(null)}
           onSave={async (title) => {
-            if (dialog.mode === "create") {
-              const created = await api.createRoom({ title });
-              writeSelectedRoomId(created.id);
-              setDialog(null);
-              navigate(roomPath(created.id));
-            } else {
-              await api.updateRoom(dialog.room.id, { title });
-              setDialog(null);
-              load();
-            }
+            await api.updateRoom(dialog.room.id, { title });
+            setDialog(null);
+            load();
           }}
         />
       ) : null}

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { FeedFilter, PostDto } from "@brickr/shared";
 
@@ -17,6 +17,10 @@ import { RoomInfoPanel } from "./RoomInfoPanel";
 import { RoomInfoSheet } from "./RoomInfoSheet";
 import { RoomNameDialog } from "./RoomNameDialog";
 import { useSelectedRoom } from "./useSelectedRoom";
+import { InvitationCard } from "./InvitationCard";
+import { JoinRequestButton } from "./JoinRequestButton";
+import { useMyMembershipState, useMyInvitation } from "./useRoomMembership";
+import { api, isAbortError } from "../../services/api-client";
 
 /**
  * One room's persistent content (§13.5): mounted once per opened room id by
@@ -104,6 +108,38 @@ export function RoomScreen({ roomId }: { roomId: string }) {
     [composeController, feed],
   );
 
+  // Membership state derived from server-computed capabilities (issue #178).
+  // Must be called before early returns (Rules of Hooks).
+  // When the room is not yet loaded, use a neutral fallback so the hook
+  // always runs (Rules of Hooks) but returns false for all capabilities.
+  const roomForCaps = selectedRoom.state.status === "ready" ? selectedRoom.state.room : null;
+  const { hasPendingRequest, isActiveMember } = useMyMembershipState(roomForCaps ?? {
+    capabilities: undefined,
+    visibility: "public" as const,
+    status: "active",
+  });
+
+  // Invitation state: check if the user has a pending invitation.
+  // Must be called before early returns (Rules of Hooks).
+  const { hasInvitation, loading: invitationLoading, reload: reloadInvitation } = useMyInvitation(roomId);
+
+  // Invitation details (only fetched when hasInvitation is true).
+  // Must be called before early returns (Rules of Hooks).
+  const [invitation, setInvitation] = useState<import("@brickr/shared").PendingInvitationDto | null>(null);
+  useEffect(() => {
+    if (!hasInvitation) {
+      setInvitation(null);
+      return;
+    }
+    const controller = new AbortController();
+    api.getRoomInvitation(roomId, controller.signal)
+      .then((inv) => setInvitation(inv))
+      .catch((cause: unknown) => {
+        if (!isAbortError(cause)) setInvitation(null);
+      });
+    return () => controller.abort();
+  }, [hasInvitation, roomId]);
+
   if (selectedRoom.state.status === "loading" || selectedRoom.state.status === "denied") {
     return (
       <div className="flex items-center justify-center px-4 py-16">
@@ -124,11 +160,12 @@ export function RoomScreen({ roomId }: { roomId: string }) {
     );
   }
 
-  const { room } = selectedRoom.state;
-  const isStopped = room.status === "archived";
+  const { room: readyRoom } = selectedRoom.state;
+  const isStopped = readyRoom.status === "archived";
+
   const roomInfoProps = {
-    room,
-    onOpenAnalysis: () => navigate(roomAnalysisPath(room.id)),
+    room: readyRoom,
+    onOpenAnalysis: () => navigate(roomAnalysisPath(readyRoom.id)),
     // Closes the mobile info sheet too: opened from there, `RoomNameDialog`
     // would otherwise stack on top of it — two `Dialog`s mounted at once,
     // each with its own Escape handler racing the other's.
@@ -140,6 +177,8 @@ export function RoomScreen({ roomId }: { roomId: string }) {
     onResume: selectedRoom.resume,
     onArchive: selectedRoom.archive,
     onDelete: selectedRoom.delete,
+    onLeft: () => navigate("/rooms", { replace: true }),
+    onMembershipChanged: selectedRoom.reload,
   };
 
   return (
@@ -149,7 +188,7 @@ export function RoomScreen({ roomId }: { roomId: string }) {
             thread list beneath scrolls. */}
         <div className="sticky top-0 z-10 bg-canvas/95 backdrop-blur">
           <RoomHeader
-            title={room.title ?? "無題のルーム"}
+            title={readyRoom.title ?? "無題のルーム"}
             isStopped={isStopped}
             activeResponseCount={feed.activeResponseCount}
             connection={feed.connection}
@@ -176,8 +215,8 @@ export function RoomScreen({ roomId }: { roomId: string }) {
                   composeController.request({
                     context: {
                       mode: "new",
-                      roomId: room.id,
-                      roomLabel: room.title ?? "無題のルーム",
+                      roomId: readyRoom.id,
+                      roomLabel: readyRoom.title ?? "無題のルーム",
                     },
                     onPosted: (_post, thread) => feed.upsertThread(thread),
                   });
@@ -189,6 +228,32 @@ export function RoomScreen({ roomId }: { roomId: string }) {
             </div>
           ) : null}
         </div>
+
+        {/* Pending invitation card (issue #178): shown when the user has a
+            pending(invitation) membership and the room is not stopped. */}
+        {!isStopped && !invitationLoading && invitation ? (
+          <div className="px-4 pt-3">
+            <InvitationCard
+              invitation={invitation}
+              onDone={() => {
+                reloadInvitation();
+                selectedRoom.reload();
+              }}
+            />
+          </div>
+        ) : null}
+
+        {/* Join request button (issue #178): shown for open/closed rooms where
+            the user is not yet an active member and has no pending invitation. */}
+        {!isStopped && !invitation && !isActiveMember && (hasPendingRequest || (readyRoom.capabilities?.canJoin ?? false)) ? (
+          <div className="px-4 pt-3">
+            <JoinRequestButton
+              room={readyRoom}
+              hasPendingRequest={hasPendingRequest}
+              onDone={selectedRoom.reload}
+            />
+          </div>
+        ) : null}
 
         {userProfile.error ? (
           <div className="px-4 pt-3">
@@ -292,7 +357,7 @@ export function RoomScreen({ roomId }: { roomId: string }) {
       {renameDialogOpen ? (
         <RoomNameDialog
           mode="rename"
-          initialValue={room.title ?? ""}
+          initialValue={readyRoom.title ?? ""}
           onClose={() => setRenameDialogOpen(false)}
           onSave={async (title) => {
             await selectedRoom.rename(title);

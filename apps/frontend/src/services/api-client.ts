@@ -63,6 +63,7 @@ import type {
   UserProfileDto,
   UserProfileResponse,
   UserTokenUsageResponse,
+  PendingInvitationDto,
 } from "@brickr/shared";
 
 const DEFAULT_BASE_URL = "http://localhost:3000";
@@ -773,6 +774,63 @@ export const api = {
       signal ? { signal } : {},
     );
     return data.inviteCodes;
+  },
+
+  /**
+   * Accepts a pending room invitation (issue #178).
+   * The caller must have a pending(invitation) membership in the room.
+   */
+  async acceptRoomInvitation(roomId: string): Promise<RoomMembershipDto> {
+    const data = await request<{ membership: RoomMembershipDto }>(
+      `/api/rooms/${encodeURIComponent(roomId)}/invitation/accept`,
+      { method: "POST" },
+    );
+    return data.membership;
+  },
+
+  /**
+   * Declines a pending room invitation (issue #178).
+   * The caller must have a pending(invitation) membership in the room.
+   */
+  async declineRoomInvitation(roomId: string): Promise<void> {
+    await request<Record<string, never>>(
+      `/api/rooms/${encodeURIComponent(roomId)}/invitation`,
+      { method: "DELETE" },
+    );
+  },
+
+  /**
+   * Withdraws a pending join request (issue #178).
+   * The caller must have a pending(request) membership in the room.
+   */
+  async withdrawRoomJoinRequest(roomId: string): Promise<void> {
+    await request<Record<string, never>>(
+      `/api/rooms/${encodeURIComponent(roomId)}/request`,
+      { method: "DELETE" },
+    );
+  },
+
+  /**
+   * Leaves a room (issue #178).
+   * The caller must be an active member and not the room owner.
+   */
+  async leaveRoom(roomId: string): Promise<void> {
+    await request<Record<string, never>>(
+      `/api/rooms/${encodeURIComponent(roomId)}/leave`,
+      { method: "POST" },
+    );
+  },
+
+  /**
+   * Gets the caller's pending invitation for a room (issue #178).
+   * Returns the invitation details so the invitee can decide to accept or decline.
+   */
+  async getRoomInvitation(roomId: string, signal?: AbortSignal): Promise<PendingInvitationDto> {
+    const data = await request<{ invitation: PendingInvitationDto }>(
+      `/api/rooms/${encodeURIComponent(roomId)}/invitation`,
+      signal ? { signal } : {},
+    );
+    return data.invitation;
   },
 
   /**
