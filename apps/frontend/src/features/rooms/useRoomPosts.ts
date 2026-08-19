@@ -16,6 +16,8 @@ export type UseRoomPostsResult = {
   connection: ConnectionState;
   loading: boolean;
   error: string | null;
+  /** Whether the caller may reply/quote in this room right now (§10.8). */
+  canPost: boolean;
   /** Insert the user's own post immediately, before the stream echoes it back. */
   addLocalPost: (post: PostDto, thread: FeedThreadDto) => void;
   reload: () => void;
@@ -87,7 +89,9 @@ export function useRoomPosts(roomId: string, enabled = true): UseRoomPostsResult
     const controller = new AbortController();
     void api
       .getPosts(roomId, controller.signal)
-      .then((posts) => { if (!cancelled) dispatch({ kind: "hydrated", posts }); })
+      .then(({ posts, canPost }) => {
+        if (!cancelled) dispatch({ kind: "hydrated", posts, canPost });
+      })
       .catch((cause: unknown) => {
         if (cancelled || isAbortError(cause)) return;
         dispatch({ kind: "loadFailed", message: toErrorMessage(cause) });
@@ -101,5 +105,14 @@ export function useRoomPosts(roomId: string, enabled = true): UseRoomPostsResult
 
   const reload = useCallback(() => setReloadToken((v) => v + 1), []);
 
-  return { posts: state.posts, activities: state.activities, connection: state.connection, loading: state.loading, error: state.error, addLocalPost, reload };
+  return {
+    posts: state.posts,
+    activities: state.activities,
+    connection: state.connection,
+    loading: state.loading,
+    error: state.error,
+    canPost: state.canPost,
+    addLocalPost,
+    reload,
+  };
 }

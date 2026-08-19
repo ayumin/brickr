@@ -19,9 +19,12 @@ export function registerPostRoutes(app: FastifyInstance, services: AppServices):
       // work the same regardless of which room the post lives in — including
       // the reserved Feed room, which `requireReadableRoom` always refuses
       // (its `canView` is unconditionally false, see room-authorization.ts).
-      // `requireReadableRoomForPosts` is the variant built for exactly this.
-      await services.roomRuntime.requireReadableRoomForPosts(params.id, user);
-      return { posts: await services.posts.listByRoom(params.id) };
+      // `requireReadableRoomForPosts` is the variant built for exactly this,
+      // and also reports `canPost` for the same reason: the post-detail
+      // screen's reply/quote actions must not depend on `GET /api/rooms/:id`,
+      // which 404s for the Feed room too.
+      const { canPost } = await services.roomRuntime.requireReadableRoomForPosts(params.id, user);
+      return { posts: await services.posts.listByRoom(params.id), canPost };
     });
   });
 

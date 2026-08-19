@@ -646,12 +646,11 @@ export const api = {
     return data.room;
   },
 
-  async getPosts(roomId: string, signal?: AbortSignal): Promise<PostDto[]> {
-    const data = await request<PostsResponse>(
+  async getPosts(roomId: string, signal?: AbortSignal): Promise<PostsResponse> {
+    return request<PostsResponse>(
       `/api/rooms/${encodeURIComponent(roomId)}/posts`,
       signal ? { signal } : {},
     );
-    return data.posts;
   },
 
   /**

@@ -37,7 +37,7 @@ describe("room post state: REST and stream race", () => {
   it("keeps one copy when a streamed post arrives before history", () => {
     const state = apply([
       { kind: "upsertPosts", posts: [second] },
-      { kind: "hydrated", posts: [first, second] },
+      { kind: "hydrated", posts: [first, second], canPost: true },
     ]);
 
     expect(state.posts.map((entry) => entry.id)).toEqual(["post-1", "post-2"]);
@@ -46,7 +46,7 @@ describe("room post state: REST and stream race", () => {
 
   it("keeps one copy when history arrives before a streamed post", () => {
     const state = apply([
-      { kind: "hydrated", posts: [first, second] },
+      { kind: "hydrated", posts: [first, second], canPost: true },
       { kind: "upsertPosts", posts: [second] },
     ]);
 
@@ -56,7 +56,7 @@ describe("room post state: REST and stream race", () => {
   it("replaces an existing post and preserves chronological order", () => {
     const edited: PostDto = { ...second, content: "updated" };
     const state = apply([
-      { kind: "hydrated", posts: [second] },
+      { kind: "hydrated", posts: [second], canPost: true },
       { kind: "upsertPosts", posts: [edited, first] },
     ]);
 

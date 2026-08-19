@@ -951,8 +951,11 @@ export const openApiDocument: OpenAPIV3.Document = {
         responses: {
           "200": jsonResponse("Room posts", {
             type: "object",
-            required: ["posts"],
-            properties: { posts: { type: "array", items: ref("Post") } },
+            required: ["posts", "canPost"],
+            properties: {
+              posts: { type: "array", items: ref("Post") },
+              canPost: { type: "boolean" },
+            },
           }),
           "401": { $ref: "#/components/responses/Unauthorized" },
           ...errorResponses,
