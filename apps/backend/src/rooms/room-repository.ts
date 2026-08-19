@@ -1,4 +1,4 @@
-import type { RoomVisibility, RoomStatus } from "@brickr/shared";
+import { DEFAULT_ROOM_ID, DEFAULT_ROOM_TITLE, type RoomVisibility, type RoomStatus } from "@brickr/shared";
 import type { Db, DbTransaction } from "../persistence/prisma.js";
 import { optionalField } from "../persistence/repository-mapping.js";
 import { toFallbackHandle } from "../user-profile/user-profile-repository.js";
@@ -78,6 +78,36 @@ function toRoomSummary(row: RoomSummaryRow): RoomSummary {
 
 export class RoomRepository {
   constructor(private readonly db: Db) {}
+
+  /**
+   * Idempotently guarantees the always-seeded default room (`DEFAULT_ROOM_ID`)
+   * exists — the unified feed's embedded composer targets it directly, so a
+   * missing row surfaces as a confusing "room not found" error on any feed
+   * post's detail view (§10.4) rather than at post-creation time.
+   *
+   * `prisma/seed.ts` is not guaranteed to run against every database (a fresh
+   * deploy may only run migrations), so this must not be the only place that
+   * creates the row — call it at server startup instead of relying on seeding.
+   */
+  async ensureDefaultRoom(): Promise<void> {
+    await this.db.room.upsert({
+      where: { id: DEFAULT_ROOM_ID },
+      create: {
+        id: DEFAULT_ROOM_ID,
+        title: DEFAULT_ROOM_TITLE,
+        status: "active",
+        visibility: "public",
+        scope: "global",
+        createdByUserId: null,
+      },
+      update: {
+        title: DEFAULT_ROOM_TITLE,
+        status: "active",
+        visibility: "public",
+        scope: "global",
+      },
+    });
+  }
 
   /**
    * Creates an ordinary room.
