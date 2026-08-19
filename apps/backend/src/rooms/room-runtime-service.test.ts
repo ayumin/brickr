@@ -513,6 +513,51 @@ describe("RoomRuntimeService.submitUserPost — room authorization (issue #175)"
   });
 });
 
+describe("RoomRuntimeService.requireReadableRoom vs requireReadableRoomForPosts (Feed room)", () => {
+  /**
+   * `computeRoomCapabilities` reports `canView: false` unconditionally for the
+   * reserved Feed room (scope: 'global') — by design, so it never gets a
+   * second room-shaped surface through `GET /api/rooms/:id` (room-authorization.ts).
+   * `requireReadableRoomForPosts` exists specifically to bypass that for
+   * reconstructing a post's own thread (§10.8), which must work the same
+   * regardless of which room the post lives in. A feed-composed post's detail
+   * view previously 404'd (`room "..." not found`) because its route called
+   * the wrong one of these two methods.
+   */
+  it("requireReadableRoom still refuses the Feed room", async () => {
+    const harness = makeHarness({
+      characters: [],
+      room: { ...ROOM, scope: "global", createdByUserId: undefined },
+    });
+
+    await expect(
+      harness.service.requireReadableRoom(ROOM.id, { id: "any-user", isAdmin: false }),
+    ).rejects.toThrow(RuntimeRoomNotFoundError);
+  });
+
+  it("requireReadableRoomForPosts admits the Feed room so a feed post's thread can be read", async () => {
+    const harness = makeHarness({
+      characters: [],
+      room: { ...ROOM, scope: "global", createdByUserId: undefined },
+    });
+
+    await expect(
+      harness.service.requireReadableRoomForPosts(ROOM.id, { id: "any-user", isAdmin: false }),
+    ).resolves.toMatchObject({ id: ROOM.id, scope: "global" });
+  });
+
+  it("requireReadableRoomForPosts still enforces membership for an ordinary closed room", async () => {
+    const harness = makeHarness({
+      characters: [],
+      room: { ...ROOM, visibility: "closed", createdByUserId: "someone-else" },
+    });
+
+    await expect(
+      harness.service.requireReadableRoomForPosts(ROOM.id, { id: "non-member", isAdmin: false }),
+    ).rejects.toThrow(RuntimeRoomNotFoundError);
+  });
+});
+
 describe("RoomRuntimeService orchestration", () => {
   it("uses the full character list to resolve handles for previous Cast authors", async () => {
     const active = makeCharacter("active");

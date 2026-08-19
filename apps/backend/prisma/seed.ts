@@ -1,11 +1,10 @@
-import { DEFAULT_ROOM_ID, DEFAULT_ROOM_TITLE } from "@brickr/shared";
-
 import { CHARACTER_SEEDS } from "../src/characters/character-seeds.js";
 import { MODEL_PROFILE_SEEDS } from "../src/model-profiles/model-profile-seeds.js";
 import { prisma, type DbTransaction } from "../src/persistence/prisma.js";
 import { demoAvatarDataUrl } from "../src/characters/demo-avatar.js";
 import { bootstrapAdmin, describeAdminBootstrap } from "../src/auth/admin-bootstrap.js";
 import { UserAccountRepository } from "../src/auth/user-account-repository.js";
+import { RoomRepository } from "../src/rooms/room-repository.js";
 import { env } from "../src/config/env.js";
 
 /**
@@ -90,24 +89,11 @@ async function main(): Promise<void> {
   // The unified feed's embedded composer posts new top-level threads into this
   // room directly, so posting from the feed never requires picking a room
   // first. It is hidden from the user-facing Room list and remains unowned.
+  //
+  // Also guaranteed at server startup (`ensureDefaultRoom`), since this seed
+  // script is not guaranteed to run against every database.
 
-  await prisma.room.upsert({
-    where: { id: DEFAULT_ROOM_ID },
-    create: {
-      id: DEFAULT_ROOM_ID,
-      title: DEFAULT_ROOM_TITLE,
-      status: "active",
-      visibility: "public",
-      scope: "global",
-      createdByUserId: null,
-    },
-    update: {
-      title: DEFAULT_ROOM_TITLE,
-      status: "active",
-      visibility: "public",
-      scope: "global",
-    },
-  });
+  await new RoomRepository(prisma).ensureDefaultRoom();
   console.log("seeded default room");
 
   // --- Demo rooms -----------------------------------------------------------

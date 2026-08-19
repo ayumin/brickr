@@ -1,3 +1,4 @@
+import { DEFAULT_ROOM_ID, DEFAULT_ROOM_TITLE } from "@brickr/shared";
 import { describe, expect, it, vi } from "vitest";
 import type { Db } from "../persistence/prisma.js";
 import { RoomRepository } from "./room-repository.js";
@@ -274,6 +275,33 @@ describe("RoomRepository.archiveByIds", () => {
         status: "active",
       },
       data: { status: "archived" },
+    });
+  });
+});
+
+describe("RoomRepository.ensureDefaultRoom", () => {
+  it("upserts the fixed default-room id so a fresh database that skipped prisma/seed.ts still has it", async () => {
+    const upsert = vi.fn(() => Promise.resolve());
+    const db = { room: { upsert } } as unknown as Db;
+
+    await new RoomRepository(db).ensureDefaultRoom();
+
+    expect(upsert).toHaveBeenCalledWith({
+      where: { id: DEFAULT_ROOM_ID },
+      create: {
+        id: DEFAULT_ROOM_ID,
+        title: DEFAULT_ROOM_TITLE,
+        status: "active",
+        visibility: "public",
+        scope: "global",
+        createdByUserId: null,
+      },
+      update: {
+        title: DEFAULT_ROOM_TITLE,
+        status: "active",
+        visibility: "public",
+        scope: "global",
+      },
     });
   });
 });

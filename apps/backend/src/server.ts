@@ -1,8 +1,14 @@
 import { buildApp } from "./app.js";
 import { env } from "./config/env.js";
 import { prisma } from "./persistence/prisma.js";
+import { RoomRepository } from "./rooms/room-repository.js";
 
 async function main(): Promise<void> {
+  // The unified feed posts into this room directly (§10.4); guaranteed here
+  // rather than relying solely on `prisma/seed.ts`, which is not guaranteed to
+  // run against every database (e.g. a deploy that only runs migrations).
+  await new RoomRepository(prisma).ensureDefaultRoom();
+
   const app = await buildApp(prisma);
 
   const shutdown = async (signal: string): Promise<void> => {

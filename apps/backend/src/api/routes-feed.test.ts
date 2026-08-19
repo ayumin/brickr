@@ -219,28 +219,31 @@ describe("/api/rooms/:id/posts", () => {
 
   async function start() {
     const post = { id: "post-1", roomId: "room-1", content: "hello" };
-    const requireReadableRoom = vi.fn(() => Promise.resolve());
+    const requireReadableRoomForPosts = vi.fn(() => Promise.resolve());
     const listByRoom = vi.fn(() => Promise.resolve([post]));
     const submitUserPost = vi.fn(() => Promise.resolve(post));
     const buildThreadForReader = vi.fn(() => Promise.resolve({ root: post, replies: [] }));
     const services = {
-      roomRuntime: { requireReadableRoom, submitUserPost },
+      roomRuntime: { requireReadableRoomForPosts, submitUserPost },
       posts: { listByRoom },
       feed: { buildThreadForReader },
     } as unknown as AppServices;
     const app = await buildApp(services, user);
     apps.push(app);
-    return { app, requireReadableRoom, listByRoom, submitUserPost };
+    return { app, requireReadableRoomForPosts, listByRoom, submitUserPost };
   }
 
   it("lists posts through the Room API", async () => {
-    const { app, requireReadableRoom, listByRoom } = await start();
+    const { app, requireReadableRoomForPosts, listByRoom } = await start();
     const response = await app.inject({ method: "GET", url: "/api/rooms/room-1/posts" });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
       posts: [{ id: "post-1", roomId: "room-1", content: "hello" }],
     });
-    expect(requireReadableRoom).toHaveBeenCalledWith("room-1", user);
+    // Uses the "ForPosts" variant, not `requireReadableRoom` — it must not
+    // refuse the reserved Feed room the way the plain room-view path does
+    // (see the doc comment on post-routes.ts's handler).
+    expect(requireReadableRoomForPosts).toHaveBeenCalledWith("room-1", user);
     expect(listByRoom).toHaveBeenCalledWith("room-1");
   });
 

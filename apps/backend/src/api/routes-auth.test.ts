@@ -155,6 +155,7 @@ function makeServices(): AppServices {
       list: () => Promise.resolve([]),
       get: () => Promise.resolve({ room: { id: "s1" } }),
       requireReadableRoom: () => Promise.resolve({ id: "s1" }),
+      requireReadableRoomForPosts: () => Promise.resolve({ id: "s1" }),
       create: () => Promise.resolve({ id: "s1" }),
       rename: () => Promise.resolve({ id: "s1" }),
       stop: () => Promise.resolve({ id: "s1" }),

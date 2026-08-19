@@ -15,7 +15,12 @@ export function registerPostRoutes(app: FastifyInstance, services: AppServices):
     if (!params) return reply;
 
     return withDomainErrors(reply, async () => {
-      await services.roomRuntime.requireReadableRoom(params.id, user);
+      // This endpoint reconstructs a post's full thread (§10.8), which must
+      // work the same regardless of which room the post lives in — including
+      // the reserved Feed room, which `requireReadableRoom` always refuses
+      // (its `canView` is unconditionally false, see room-authorization.ts).
+      // `requireReadableRoomForPosts` is the variant built for exactly this.
+      await services.roomRuntime.requireReadableRoomForPosts(params.id, user);
       return { posts: await services.posts.listByRoom(params.id) };
     });
   });
