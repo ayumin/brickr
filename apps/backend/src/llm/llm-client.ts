@@ -17,6 +17,15 @@ import {
 } from "./provider.js";
 
 const MOCK_PROVIDER_ID: ProviderId = "mock";
+const GEMINI_PROVIDER_ID: ProviderId = "gemini";
+
+/**
+ * Fixed fallback chain: Primary → Gemini → Mock.
+ *
+ * Gemini is always the secondary provider; Mock is the last resort so the
+ * application never stops responding even when all real providers are down.
+ */
+const RUNTIME_FALLBACK_SUFFIX: readonly ProviderId[] = [GEMINI_PROVIDER_ID, MOCK_PROVIDER_ID];
 
 export type LLMClientOptions = {
   timeoutMs: number;
@@ -40,8 +49,6 @@ export type LLMBudgetChecker = {
 };
 
 export class LLMClient {
-  private readonly loggedFallbacks = new Set<ProviderId>();
-
   constructor(
     private readonly registry: LLMProviderRegistry,
     private readonly options: LLMClientOptions,
@@ -55,40 +62,108 @@ export class LLMClient {
     providerId: ProviderId,
     requested: LLMGenerateRequest,
   ): Promise<LLMGenerateResult> {
-    const provider = this.resolveProvider(providerId);
-    // A model name only means something to the provider that serves it, so a
-    // substituted provider must bring its own model.
-    const request: LLMGenerateRequest =
-      provider.id === providerId
-        ? requested
-        : {
-            ...requested,
-            model: this.fallbackModel?.(provider.id) ?? provider.defaultModel,
-          };
+    // Build the ordered list of providers to try: Primary → Gemini → Mock.
+    // Deduplicate so that e.g. "gemini" as primary does not appear twice.
+    const chain = buildFallbackChain(providerId);
 
-    // Budget circuit-breaker check (issue #162). The mock provider is exempt
-    // so tests and development environments are never blocked by budget state.
-    if (this.budgetChecker && provider.id !== MOCK_PROVIDER_ID) {
-      let allowed: boolean;
-      try {
-        allowed = await this.budgetChecker.isAllowed(provider.id);
-      } catch (error) {
-        throw normalizeError(error, provider.id);
+    let lastError: LLMError | undefined;
+
+    for (const currentId of chain) {
+      // Skip providers that are not registered / have no credentials.
+      if (!this.registry.has(currentId)) {
+        continue;
       }
-      if (!allowed) {
-        throw new LLMBudgetExceededError(provider.id);
+
+      const provider = this.registry.get(currentId);
+
+      // Adapt the model when switching providers: a model name is only
+      // meaningful to the provider that serves it.
+      const request: LLMGenerateRequest =
+        currentId === providerId
+          ? requested
+          : {
+              ...requested,
+              model: this.fallbackModel?.(currentId) ?? provider.defaultModel,
+            };
+
+      // Budget circuit-breaker check (issue #162). The mock provider is exempt
+      // so tests and development environments are never blocked by budget state.
+      if (this.budgetChecker && currentId !== MOCK_PROVIDER_ID) {
+        let allowed: boolean;
+        try {
+          allowed = await this.budgetChecker.isAllowed(currentId);
+        } catch (error) {
+          // A budget-checker infrastructure failure (e.g. the underlying DB is
+          // down) is not the same as an intentional "budget exceeded"
+          // decision: since the checker guards every non-mock provider, quietly
+          // falling through the rest of the chain would degrade all real
+          // traffic to Gemini/Mock without surfacing the outage. Fail fast
+          // instead so it is visible to the caller, same as before the
+          // fallback chain existed.
+          const normalized = normalizeError(error, currentId);
+          this.logFallback(providerId, currentId, normalized.message, "failed");
+          throw normalized;
+        }
+        if (!allowed) {
+          // Budget exceeded is provider-specific and non-retryable; skip to next.
+          const budgetError = new LLMBudgetExceededError(currentId);
+          lastError = budgetError;
+          this.logFallback(providerId, currentId, "budget_exceeded", "retrying_next");
+          continue;
+        }
+      }
+
+      try {
+        const result = await this.callWithRetry(provider, request);
+        this.usageTracker?.record(result);
+
+        // Log success when a fallback was used.
+        if (currentId !== providerId) {
+          this.logFallback(providerId, currentId, lastError?.message ?? "unknown", "success");
+        }
+
+        return result;
+      } catch (error) {
+        const normalized = normalizeError(error, currentId);
+        lastError = normalized;
+
+        // Abort errors (user-cancelled requests) must not trigger fallback —
+        // the caller explicitly cancelled the operation.
+        // `callWithRetry` wraps the original error in an LLMError, so we
+        // inspect both the thrown value and its cause.
+        if (isAbortError(error) || isAbortError((error as LLMError)?.cause)) {
+          throw normalized;
+        }
+
+        // Log that we are moving to the next provider.
+        this.logFallback(providerId, currentId, normalized.message, "retrying_next");
       }
     }
 
-    const attempts = Math.max(0, this.options.maxRetries) + 1;
+    // All providers in the chain have been exhausted.
+    this.logFallback(
+      providerId,
+      "none",
+      lastError?.message ?? "unknown",
+      "failed",
+    );
+    throw lastError ?? new LLMError("all providers failed", providerId, false);
+  }
 
+  /**
+   * Attempts the call up to `maxRetries + 1` times against the same provider
+   * before giving up and letting the caller try the next provider in the chain.
+   */
+  private async callWithRetry(
+    provider: LLMProvider,
+    request: LLMGenerateRequest,
+  ): Promise<LLMGenerateResult> {
+    const attempts = Math.max(0, this.options.maxRetries) + 1;
     let lastError: LLMError | undefined;
 
     for (let attempt = 1; attempt <= attempts; attempt += 1) {
       try {
-        const result = await this.callOnce(provider, request);
-        this.usageTracker?.record(result);
-        return result;
+        return await this.callOnce(provider, request);
       } catch (error) {
         const normalized = normalizeError(error, provider.id);
         lastError = normalized;
@@ -109,31 +184,28 @@ export class LLMClient {
   }
 
   /**
-   * A missing API key degrades instead of breaking the room.
+   * Logs a fallback event in the structured format required by the spec (§9).
    *
-   * Prefers another *real* provider so characters still produce genuine text
-   * when only some keys are configured, and only uses the mock when nothing
-   * real is available. The choice is deterministic per requested provider, so a
-   * character keeps the same substitute for the whole run.
+   * Format:
+   *   primary=<id> fallback=<id> reason=<msg> result=success
+   *   primary=<id> attempted=<id|none> reason=<msg> result=retrying_next|failed
    *
-   * Logged once per provider so it does not spam the log.
+   * `fallback` always names the provider that actually served the request.
+   * `attempted` names the provider that was just tried — and failed, was
+   * skipped, or (as "none") exhausted the chain — never the provider about
+   * to be tried next, so the field name cannot be misread as "falling back
+   * to this provider" when it is in fact the one that just failed.
    */
-  private resolveProvider(providerId: ProviderId): LLMProvider {
-    if (this.registry.has(providerId)) {
-      return this.registry.get(providerId);
-    }
-
-    const substituteId =
-      this.registry.availableIds().find((id) => id !== MOCK_PROVIDER_ID) ?? MOCK_PROVIDER_ID;
-
-    if (!this.loggedFallbacks.has(providerId)) {
-      this.loggedFallbacks.add(providerId);
-      this.logger?.debug(
-        `provider "${providerId}" unavailable; falling back to "${substituteId}"`,
-      );
-    }
-
-    return this.registry.get(substituteId);
+  private logFallback(
+    primary: ProviderId,
+    providerId: ProviderId | "none",
+    reason: string,
+    result: "success" | "retrying_next" | "failed",
+  ): void {
+    const field = result === "success" ? "fallback" : "attempted";
+    this.logger?.debug(
+      `primary=${primary} ${field}=${providerId} reason=${reason} result=${result}`,
+    );
   }
 
   private async callOnce(
@@ -183,6 +255,27 @@ export class LLMClient {
       }
     }
   }
+}
+
+/**
+ * Builds the ordered fallback chain for a given primary provider.
+ *
+ * Always: Primary → Gemini → Mock.
+ * Deduplicates so that e.g. "gemini" as primary yields ["gemini", "mock"].
+ */
+function buildFallbackChain(primaryId: ProviderId): ProviderId[] {
+  const chain: ProviderId[] = [primaryId];
+  for (const id of RUNTIME_FALLBACK_SUFFIX) {
+    if (!chain.includes(id)) {
+      chain.push(id);
+    }
+  }
+  return chain;
+}
+
+/** Returns true when the value is an AbortError (user-cancelled request). */
+function isAbortError(value: unknown): boolean {
+  return value instanceof Error && value.name === "AbortError";
 }
 
 /** Never let an SDK-specific error type escape the LLM layer. */
