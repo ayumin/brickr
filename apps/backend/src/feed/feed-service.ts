@@ -13,9 +13,9 @@ import type { RoomMembershipRepository } from "../rooms/room-membership-reposito
 import {
   assertRoomReadable,
   isRoomOwnerOrAdmin,
-  RuntimeRoomNotFoundError,
   type SignedInActor,
 } from "../rooms/room-runtime-service.js";
+import { RoomNotFoundError } from "../rooms/room-errors.js";
 import type { ThreadActivityEvent } from "../rooms/public-events.js";
 import { toFeedCapabilities } from "./feed-capabilities.js";
 import { decodeFeedCursor, encodeFeedCursor } from "./feed-cursor.js";
@@ -142,7 +142,7 @@ export class FeedService {
     reader: NonNullable<FeedReader>,
   ): Promise<void> {
     const room = await this.rooms.findById(roomId);
-    if (!room) throw new RuntimeRoomNotFoundError(roomId);
+    if (!room) throw new RoomNotFoundError(roomId);
     await assertRoomReadable(this.memberships, room, reader);
   }
 
@@ -186,7 +186,7 @@ export class FeedService {
     if (!root) throw new ThreadRootNotFoundError(post.threadRootId);
 
     const roomRow = await this.rooms.findById(root.roomId);
-    if (!roomRow) throw new RuntimeRoomNotFoundError(root.roomId);
+    if (!roomRow) throw new RoomNotFoundError(root.roomId);
 
     const room: FeedRoom = {
       id: roomRow.id,

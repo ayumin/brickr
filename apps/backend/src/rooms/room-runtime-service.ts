@@ -34,6 +34,7 @@ import {
   type RoomSummary,
 } from "./room.js";
 import { CastParticipationResolver } from "./cast-participation-resolver.js";
+import { RoomNotFoundError } from "./room-errors.js";
 
 /** Hard ceiling on character posts generated from one user post. */
 const MAX_POSTS_PER_SUBMISSION = 24;
@@ -92,14 +93,6 @@ export type RoomRuntimeServiceDeps = {
   /** Resolves which Cast characters are eligible to respond in a given room (issue #177). */
   castResolver: CastParticipationResolver;
 };
-
-export class RuntimeRoomNotFoundError extends DomainError {
-  readonly httpStatus = 404;
-  readonly errorCode = "not_found" as const;
-  constructor(id: string) {
-    super(`room "${id}" not found`);
-  }
-}
 
 export class RoomStoppedError extends DomainError {
   readonly httpStatus = 409;
@@ -165,7 +158,7 @@ export async function assertRoomReadable(
   );
 
   if (!caps.canView) {
-    throw new RuntimeRoomNotFoundError(room.id);
+    throw new RoomNotFoundError(room.id);
   }
 }
 
@@ -250,7 +243,7 @@ export class RoomRuntimeService {
       roomActor,
     );
     if (!caps.canView) {
-      throw new RuntimeRoomNotFoundError(room.id);
+      throw new RoomNotFoundError(room.id);
     }
     const summary = toRoomSummaryDto(room, actor);
     return {
@@ -315,14 +308,14 @@ export class RoomRuntimeService {
       roomActor,
     );
     if (!caps.canView) {
-      throw new RuntimeRoomNotFoundError(room.id);
+      throw new RoomNotFoundError(room.id);
     }
     return room;
   }
 
   private async requireRoomSummary(id: string): Promise<RoomSummary> {
     const room = await this.deps.rooms.findSummaryById(id);
-    if (!room) throw new RuntimeRoomNotFoundError(id);
+    if (!room) throw new RoomNotFoundError(id);
     return room;
   }
 
@@ -776,7 +769,7 @@ export class RoomRuntimeService {
 
   private async requireRoom(id: string): Promise<Room> {
     const room = await this.deps.rooms.findById(id);
-    if (!room) throw new RuntimeRoomNotFoundError(id);
+    if (!room) throw new RoomNotFoundError(id);
     return room;
   }
 

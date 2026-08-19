@@ -12,10 +12,10 @@ import type { PostService } from "../posts/post-service.js";
 import type { RoomRepository } from "./room-repository.js";
 import {
   assertRoomOwnerOrAdmin,
-  RuntimeRoomNotFoundError,
   toRoomDto,
   type SignedInActor,
 } from "./room-runtime-service.js";
+import { RoomNotFoundError } from "./room-errors.js";
 
 const SUMMARY_POST_LIMIT = 100;
 const SUMMARY_CONTENT_LIMIT = 500;
@@ -39,7 +39,7 @@ export class RoomAnalysisService {
 
   async analyze(id: string, actor: SignedInActor): Promise<RoomAnalysisDto> {
     const room = await this.rooms.findById(id);
-    if (!room) throw new RuntimeRoomNotFoundError(id);
+    if (!room) throw new RoomNotFoundError(id);
     assertRoomOwnerOrAdmin(room, actor);
 
     const posts = await this.posts.listByRoom(id);

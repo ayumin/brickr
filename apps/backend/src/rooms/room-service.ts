@@ -31,18 +31,14 @@ import {
 import type { RoomDto } from "@brickr/shared";
 import { assertNotFeedRoom } from "./feed-room-guard.js";
 import type { UserProfileRepository } from "../user-profile/user-profile-repository.js";
+import { RoomNotFoundError } from "./room-errors.js";
+
+// Re-export so existing callers that import from room-service.ts continue to work.
+export { RoomNotFoundError } from "./room-errors.js";
 
 // ---------------------------------------------------------------------------
 // Domain errors
 // ---------------------------------------------------------------------------
-
-export class RoomNotFoundError extends DomainError {
-  readonly httpStatus = 404;
-  readonly errorCode = "room_not_found" as const;
-  constructor(id: string) {
-    super(`room "${id}" not found`);
-  }
-}
 
 export class RoomForbiddenError extends DomainError {
   readonly httpStatus = 403;
