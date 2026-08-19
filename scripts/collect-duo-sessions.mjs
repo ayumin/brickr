@@ -24,10 +24,14 @@ const BASE_FIELDS = [
   "updatedAt",
   "archived",
 ];
-// The flows API is an Experiment. Field names have already bitten us once
-// (duoWorkflows vs duoWorkflowWorkflows), so anything unproven goes here and is
-// dropped on the first failure rather than guessed at.
-const OPTIONAL_FIELDS = ["humanStatus"];
+// `status` is a stable uppercase enum (FINISHED, STOPPED, ...). `humanStatus`
+// was tried first and rejected: it returns localised display text, mixing
+// "finished" with "実行中", so it cannot be compared safely in code.
+//
+// It stays in the optional list so an instance that lacks it degrades instead of
+// failing outright. The flows API is an Experiment and its field names have
+// already changed under us once (duoWorkflows vs duoWorkflowWorkflows).
+const OPTIONAL_FIELDS = ["status"];
 
 function arg(name, fallback) {
   const prefix = `--${name}=`;
@@ -35,9 +39,18 @@ function arg(name, fallback) {
   return found === undefined ? fallback : found.slice(prefix.length);
 }
 
-const host = (process.env.CI_SERVER_URL ?? "https://gitlab.com").replace(/\/+$/, "");
-const token = process.env.DUO_RETRO_TOKEN ?? process.env.GITLAB_TOKEN;
-const fullPath = arg("project", process.env.CI_PROJECT_PATH);
+// An exported-but-empty variable is the common failure mode here:
+// `export DUO_RETRO_TOKEN="$(some command)"` where the command printed nothing.
+// `??` only skips null and undefined, so the empty string would suppress the
+// GITLAB_TOKEN fallback and make the diagnosis harder than it needs to be.
+function env(name) {
+  const value = process.env[name];
+  return value === undefined || value.trim() === "" ? undefined : value;
+}
+
+const host = env("CI_SERVER_URL")?.replace(/\/+$/, "") ?? "https://gitlab.com";
+const token = env("DUO_RETRO_TOKEN") ?? env("GITLAB_TOKEN");
+const fullPath = arg("project", env("CI_PROJECT_PATH"));
 const daysInput = arg("days", "7");
 const days = Number(daysInput);
 const envFile = arg("env-file", null);
@@ -65,10 +78,19 @@ const since = new Date(until.getTime() - days * 24 * 60 * 60 * 1000);
 const date = until.toISOString().slice(0, 10);
 const outputPath = arg("out", `docs/duo-sessions/${date}.md`);
 
+// 100 sessions per page. The cap only exists so a surprise in the API cannot
+// turn into an unbounded paging loop.
+const MAX_PAGES = 20;
+
 function buildQuery(fields) {
-  return `query($fullPath: ID!, $after: String, $updatedAfter: ISO8601DateTime) {
+  // No updatedAfter argument on purpose. The flows API is an Experiment and the
+  // semantics of its filter arguments are not verified here. A server-side
+  // filter that silently matches nothing is indistinguishable from "no sessions
+  // this week", which is the worst way for a retrospective collector to fail.
+  // The period is applied client-side instead, against a field we do read.
+  return `query($fullPath: ID!, $after: String) {
   project(fullPath: $fullPath) {
-    duoWorkflowWorkflows(first: 100, after: $after, updatedAfter: $updatedAfter) {
+    duoWorkflowWorkflows(first: 100, after: $after) {
       pageInfo { hasNextPage endCursor }
       nodes { ${fields.join(" ")} }
     }
@@ -93,13 +115,10 @@ async function fetchSessions() {
   let droppedOptional = false;
   const nodes = [];
   let after = null;
+  let pages = 0;
 
   for (;;) {
-    const payload = await graphql(buildQuery(fields), {
-      fullPath,
-      after,
-      updatedAfter: since.toISOString(),
-    });
+    const payload = await graphql(buildQuery(fields), { fullPath, after });
 
     if (Array.isArray(payload.errors) && payload.errors.length > 0) {
       const messages = payload.errors.map((error) => error.message).join("; ");
@@ -129,11 +148,36 @@ async function fetchSessions() {
     }
 
     nodes.push(...connection.nodes);
+    pages += 1;
+
     if (connection.pageInfo.hasNextPage !== true) break;
+    if (pages >= MAX_PAGES) {
+      // Warn when the page cap is hit before we have seen any session whose
+      // updatedAt predates `since`. If every fetched session is within the
+      // window, the API may still have older sessions we never reached, which
+      // means the in-window count could be understated. This is the failure
+      // mode the comment in buildQuery describes: an unconfirmed sort order
+      // combined with a large historical backlog can exhaust MAX_PAGES on
+      // old sessions (or, here, on recent ones) before covering the window.
+      const oldestUpdated = nodes.reduce((min, node) => {
+        const t = Date.parse(node.updatedAt);
+        return Number.isFinite(t) && t < min ? t : min;
+      }, Infinity);
+      const windowMayBeIncomplete = oldestUpdated >= since.getTime();
+      process.stderr.write(
+        `Stopped after ${MAX_PAGES} pages (${nodes.length} sessions).${windowMayBeIncomplete ? " WARNING: the oldest fetched session is still within the requested window — the in-window count may be understated. Raise MAX_PAGES or narrow --days to ensure full coverage." : " Raise MAX_PAGES if the window is not fully covered."}\n`,
+      );
+      break;
+    }
     after = connection.pageInfo.endCursor;
   }
 
   return nodes;
+}
+
+function withinWindow(session) {
+  const updated = Date.parse(session.updatedAt);
+  return Number.isFinite(updated) && updated >= since.getTime();
 }
 
 const numericId = (gid) => /(\d+)$/.exec(String(gid ?? ""))?.[1] ?? "?";
@@ -204,7 +248,7 @@ function renderGenerated(sessions) {
     "",
   ];
 
-  const statuses = tally(sessions, (session) => session.humanStatus);
+  const statuses = tally(sessions, (session) => session.status);
   if (statuses.some(([key]) => key !== "(unknown)")) {
     lines.push(
       "状態別:",
@@ -217,31 +261,81 @@ function renderGenerated(sessions) {
   } else {
     lines.push(
       "> 状態別の集計は取得できませんでした。",
-      "> `humanStatus` がこのインスタンスの GraphQL スキーマにない可能性があります。",
+      "> `status` がこのインスタンスの GraphQL スキーマにない可能性があります。",
       "",
     );
   }
 
-  lines.push(
-    "## セッション一覧（自動生成・全件）",
-    "",
-    "下の「セッション一覧」節には、この全件表から特筆すべきものだけを抜粋してください。",
-    "",
+  // A normal week produces a couple of hundred sessions. Listing all of them
+  // buries the few that are worth reading, so only two slices are emitted:
+  // the sessions that did not finish, and the longest ones.
+  const LONGEST_COUNT = 10;
+
+  const header = [
     row(["Session ID", "種別", "エージェント", "状態", "経過(分)", "goal 冒頭"]),
     row(["-----------", "------", "--------------", "------", "-----------", "-----------"]),
-    ...[...sessions]
-      .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt))
-      .map((session) => {
-        const minutes = elapsedMinutes(session);
-        return row([
-          numericId(session.id),
-          `\`${cell(session.workflowDefinition)}\``,
-          cell(session.agentName ?? "-"),
-          cell(session.humanStatus ?? "-"),
-          minutes === null ? "-" : String(minutes),
-          cell(goalExcerpt(session.goal)),
-        ]);
-      }),
+  ];
+  const sessionRow = (session) => {
+    const minutes = elapsedMinutes(session);
+    return row([
+      numericId(session.id),
+      `\`${cell(session.workflowDefinition)}\``,
+      cell(session.agentName ?? "-"),
+      cell(session.status ?? "-"),
+      minutes === null ? "-" : String(minutes),
+      cell(goalExcerpt(session.goal)),
+    ]);
+  };
+  const byElapsedDesc = (a, b) => (elapsedMinutes(b) ?? -1) - (elapsedMinutes(a) ?? -1);
+
+  // Only treat a session as unfinished when the status is actually known.
+  // Without this guard, an instance that dropped the optional `status` field
+  // would flag every single session as needing review.
+  const statusKnown = sessions.some(
+    (session) => session.status !== undefined && session.status !== null,
+  );
+  // Compared case-insensitively. The enum is uppercase today, but this file
+  // already survived one rename in this API and the comparison is the one place
+  // where a casing change would silently mark every session as unfinished.
+  const isFinished = (session) => String(session.status ?? "").toUpperCase() === "FINISHED";
+  const unfinished = statusKnown
+    ? [...sessions]
+        .filter((session) => session.archived !== true && !isFinished(session))
+        .sort(byElapsedDesc)
+    : [];
+  const unfinishedIds = new Set(unfinished.map((session) => session.id));
+
+  const longestSessions = [...sessions]
+    .filter((session) => session.archived !== true && !unfinishedIds.has(session.id))
+    .sort(byElapsedDesc)
+    .slice(0, LONGEST_COUNT);
+
+  lines.push("## 要確認セッション", "");
+  if (!statusKnown) {
+    lines.push(
+      "> 状態が取得できなかったため抽出できません。`status` の取得可否を確認してください。",
+      "",
+    );
+  } else if (unfinished.length === 0) {
+    lines.push("この期間のセッションはすべて `FINISHED` でした。", "");
+  } else {
+    lines.push(
+      "`FINISHED` 以外で終わったセッションです。掘る価値があるのは基本ここです。",
+      "",
+      ...header,
+      ...unfinished.map(sessionRow),
+      "",
+    );
+  }
+
+  const omitted = sessions.length - unfinished.length - longestSessions.length;
+  lines.push(
+    `## 経過時間の長い上位 ${LONGEST_COUNT} 件`,
+    "",
+    ...header,
+    ...longestSessions.map(sessionRow),
+    "",
+    `> 残る ${omitted} 件は省略しています。全件は docs/duo-sessions/README.md の GraphQL クエリで取得できます。`,
     "",
     END,
   );
@@ -283,11 +377,18 @@ function writeEnvFile(sessionCount) {
   );
 }
 
-const sessions = await fetchSessions();
+const fetched = await fetchSessions();
+const sessions = fetched.filter(withinWindow);
+
+// Both numbers are printed so that a zero result can be told apart from a
+// filter that quietly dropped everything.
+process.stdout.write(
+  `Fetched ${fetched.length} session(s); ${sessions.length} updated within the last ${days} day(s).\n`,
+);
 
 if (sessions.length === 0) {
   writeEnvFile(0);
-  process.stdout.write(`No sessions updated in the last ${days} day(s). Nothing to write.\n`);
+  process.stdout.write("Nothing to write.\n");
   process.exit(0);
 }
 
