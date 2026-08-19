@@ -24,6 +24,11 @@ const forbidden = [
   { label: "legacy Global Simulation constant", pattern: /GLOBAL_SIMULATION/ },
   { label: "legacy Global Simulation concept", pattern: /Global Simulation/i },
   { label: "removed frontend feature", pattern: /features\/simulation(?:\/|\b)/ },
+  // The domain is Room everywhere: type, class, file and directory names
+  // included. Only the lower-case word survives, in the reserved handle list
+  // (`packages/shared/src/handle.ts`) and in product prose.
+  { label: "legacy Simulation identifier", pattern: /Simulation/ },
+  { label: "legacy simulation module path", pattern: /src\/simulation(?:\/|\b)/ },
 ];
 
 const violations = [];

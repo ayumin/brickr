@@ -101,7 +101,7 @@ packages/
 | 認証Context | `apps/backend/src/auth/auth-context.ts` | Session解決とUser/Admin Guard |
 | Account/招待 | `apps/backend/src/auth/` | Signup/Login、Session、Admin、InviteCode |
 | Handle | `apps/backend/src/handles/` | User/Character共有Namespace |
-| Room処理 | `apps/backend/src/simulation/` | Room、membership、分析、投稿生成 |
+| Room処理 | `apps/backend/src/rooms/` | Room、membership、分析、投稿生成 |
 | 非同期worker | `apps/backend/src/worker/` | ScheduledEvent claim・実行・再試行 |
 | LLM抽象化 | `apps/backend/src/llm/provider.ts` | Provider共通契約 |
 | 実行設定 | `apps/backend/src/settings/` | 環境変数とDB Overrideの合成 |
@@ -134,7 +134,7 @@ docs/local-development
 ```text
 feat(characters): add provider model selection
 fix(posts): preserve quoted post context
-test(simulation): cover partial provider failures
+test(rooms): cover partial provider failures
 docs: explain local database setup
 ```
 
@@ -274,21 +274,21 @@ docs: explain local database setup
 
 ### 認可行列テスト
 
-`apps/backend/src/simulation/room-authorization.test.ts` および
-`apps/backend/src/simulation/room-authorization-matrix.test.ts`:
+`apps/backend/src/rooms/room-authorization.test.ts` および
+`apps/backend/src/rooms/room-authorization-matrix.test.ts`:
 - 各visibility × membership状態の組み合わせでcapabilitiesを検証
 - Feed Roomの論理membership合成を検証（`room-authorization-new-capabilities.test.ts`）
 
 ### Membership状態遷移テスト
 
-`apps/backend/src/simulation/membership-lifecycle.test.ts`:
+`apps/backend/src/rooms/membership-lifecycle.test.ts`:
 - 許可された状態遷移が成功することを検証
 - 禁止された状態遷移が拒否されることを検証
 - 競合状態（同時申請等）の処理を検証
 
 ### Cast参加resolverテスト
 
-`apps/backend/src/simulation/cast-participation-resolver.test.ts`:
+`apps/backend/src/rooms/cast-participation-resolver.test.ts`:
 - Feed Room（scope: global）では全アクティブキャラクターを返すことを検証
 - 通常Room（scope: room）ではactive membershipを持つキャラクターのみを返すことを検証
 
