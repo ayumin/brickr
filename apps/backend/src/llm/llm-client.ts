@@ -2,7 +2,7 @@
  * The single entry point into the LLM layer.
  *
  * Owns timeout, bounded retry, provider fallback and error normalization, so
- * the simulation layer only ever has to deal with `LLMError`.
+ * the room layer only ever has to deal with `LLMError`.
  */
 
 import type { LLMProviderRegistry } from "./provider-registry.js";
@@ -109,7 +109,7 @@ export class LLMClient {
   }
 
   /**
-   * A missing API key degrades instead of breaking the simulation.
+   * A missing API key degrades instead of breaking the room.
    *
    * Prefers another *real* provider so characters still produce genuine text
    * when only some keys are configured, and only uses the mock when nothing
@@ -202,7 +202,7 @@ function normalizeError(error: unknown, providerId: ProviderId): LLMError {
  * Raised when the budget circuit breaker is open for a provider (issue #162).
  *
  * Not retryable: the breaker stays open until an administrator resets it.
- * Treated as an expected failure by the simulation layer (same as `LLMError`),
+ * Treated as an expected failure by the room layer (same as `LLMError`),
  * so one character dropping out does not stop the rest.
  */
 export class LLMBudgetExceededError extends LLMError {

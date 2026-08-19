@@ -26,9 +26,9 @@ import type { CharacterRepository } from "../characters/character-repository.js"
 import type { LLMClient } from "../llm/llm-client.js";
 import type { LLMProviderRegistry } from "../llm/provider-registry.js";
 import type { PostService } from "../posts/post-service.js";
-import type { SimulationRepository } from "./simulation-repository.js";
+import type { RoomRepository } from "./room-repository.js";
 import type { RoomMembershipRepository } from "./room-membership-repository.js";
-import type { Simulation } from "./simulation.js";
+import type { Room } from "./room.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -101,7 +101,7 @@ export async function askLlmShouldJoin(
   llm: LLMClient,
   providers: LLMProviderRegistry,
   character: Character,
-  room: Simulation,
+  room: Room,
 ): Promise<JoinDecision> {
   const provider = providers.preferred();
   if (!provider) {
@@ -154,7 +154,7 @@ export async function askLlmShouldJoin(
 // ---------------------------------------------------------------------------
 
 export type CastJoinServiceDeps = {
-  simulations: SimulationRepository;
+  rooms: RoomRepository;
   characters: CharacterRepository;
   memberships: RoomMembershipRepository;
   posts: PostService;
@@ -181,7 +181,7 @@ export async function processCastJoinRequests(
   roomId: string,
   deps: CastJoinServiceDeps,
 ): Promise<CastJoinResult[]> {
-  const room = await deps.simulations.findById(roomId);
+  const room = await deps.rooms.findById(roomId);
   if (!room || room.status === "archived") {
     return [{ outcome: "skipped", reason: "room not found or archived" }];
   }
@@ -253,7 +253,7 @@ export async function processCastJoinRequests(
 
 async function processSingleCandidate(
   character: Character,
-  room: Simulation,
+  room: Room,
   deps: CastJoinServiceDeps,
 ): Promise<CastJoinResult> {
   // LLM judgment — safe-side: skip if LLM says no or fails.
@@ -310,10 +310,10 @@ async function processSingleCandidate(
 export async function publishWelcomePost(
   roomId: string,
   characterId: string,
-  deps: Pick<CastJoinServiceDeps, "simulations" | "characters" | "posts" | "llm" | "providers">,
+  deps: Pick<CastJoinServiceDeps, "rooms" | "characters" | "posts" | "llm" | "providers">,
 ): Promise<WelcomePostResult> {
   const [room, character] = await Promise.all([
-    deps.simulations.findById(roomId),
+    deps.rooms.findById(roomId),
     deps.characters.findById(characterId),
   ]);
 

@@ -2,10 +2,10 @@ import type { PostDto } from "@brickr/shared";
 import { describe, expect, it, vi } from "vitest";
 import type { PostService } from "../posts/post-service.js";
 import type { Post } from "../posts/post.js";
-import type { SimulationRepository } from "../simulation/simulation-repository.js";
-import type { RoomMembershipRepository } from "../simulation/room-membership-repository.js";
-import { SimulationNotFoundError } from "../simulation/simulation-service.js";
-import type { Simulation } from "../simulation/simulation.js";
+import type { RoomRepository } from "../rooms/room-repository.js";
+import type { RoomMembershipRepository } from "../rooms/room-membership-repository.js";
+import { RuntimeRoomNotFoundError } from "../rooms/room-runtime-service.js";
+import type { Room } from "../rooms/room.js";
 import type { FeedRepository, FeedRoom, FeedThreadRow } from "./feed-repository.js";
 import { FeedService, FEED_PAGE_SIZE, THREAD_REPLIES_LIMIT, ThreadRootNotFoundError } from "./feed-service.js";
 
@@ -177,12 +177,12 @@ function makeHarness(input: { posts: Post[]; rooms?: FeedRoom[]; memberRoomIds?:
     toDtos: (batch: Post[]) => Promise.resolve(batch.map(toDto)),
   } as unknown as PostService;
 
-  const simulations = {
+  const roomRepo = {
     findById: (id: string) => {
       const room = rooms.get(id);
-      return Promise.resolve(room ? toSimulation(room) : null);
+      return Promise.resolve(room ? toRoom(room) : null);
     },
-  } as unknown as SimulationRepository;
+  } as unknown as RoomRepository;
 
   // Backs `assertRoomReadable`'s real membership lookup (issue #175). Queried
   // for every room regardless of visibility, so its default (no `memberRoomIds`
@@ -215,7 +215,7 @@ function makeHarness(input: { posts: Post[]; rooms?: FeedRoom[]; memberRoomIds?:
     service: new FeedService(
       feed as unknown as FeedRepository,
       posts,
-      simulations,
+      roomRepo,
       memberships as unknown as RoomMembershipRepository,
     ),
     spies: feed,
@@ -236,7 +236,7 @@ function toDto(entry: Post): PostDto {
   };
 }
 
-function toSimulation(room: FeedRoom): Simulation {
+function toRoom(room: FeedRoom): Room {
   return {
     id: room.id,
     title: room.title,
@@ -634,7 +634,7 @@ describe("FeedService room feed (§10.2, §10.4)", () => {
 
     await expect(
       service.getRoomFeed(STOPPED_ROOM.id, { reader: READER, filter: "all" }),
-    ).rejects.toThrow(SimulationNotFoundError);
+    ).rejects.toThrow(RuntimeRoomNotFoundError);
   });
 
   it("opens a stopped room for its creator and for an administrator", async () => {
@@ -675,7 +675,7 @@ describe("FeedService room feed (§10.2, §10.4)", () => {
 
     await expect(
       service.getRoomFeed("missing", { reader: READER, filter: "all" }),
-    ).rejects.toThrow(SimulationNotFoundError);
+    ).rejects.toThrow(RuntimeRoomNotFoundError);
   });
 
   it("refuses a closed room for a non-member", async () => {
@@ -688,7 +688,7 @@ describe("FeedService room feed (§10.2, §10.4)", () => {
 
     await expect(
       service.getRoomFeed(CLOSED_ROOM.id, { reader: READER, filter: "all" }),
-    ).rejects.toThrow(SimulationNotFoundError);
+    ).rejects.toThrow(RuntimeRoomNotFoundError);
   });
 
   it("opens a closed room for an active member", async () => {
@@ -740,7 +740,7 @@ describe("FeedService room feed (§10.2, §10.4)", () => {
 
     await expect(
       service.getRoomFeed(PRIVATE_ROOM.id, { reader: READER, filter: "all" }),
-    ).rejects.toThrow(SimulationNotFoundError);
+    ).rejects.toThrow(RuntimeRoomNotFoundError);
   });
 });
 
@@ -971,7 +971,7 @@ describe("FeedService.buildThreadActivity (§11.3)", () => {
     const { service } = makeHarness({ posts: [homeless], rooms: [ROOM] });
 
     await expect(service.buildThreadActivity(homeless)).rejects.toThrow(
-      SimulationNotFoundError,
+      RuntimeRoomNotFoundError,
     );
   });
 });

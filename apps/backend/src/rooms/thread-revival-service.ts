@@ -24,7 +24,7 @@ import type { CharacterRepository } from "../characters/character-repository.js"
 import type { AgentService } from "../agents/agent-service.js";
 import type { PostService } from "../posts/post-service.js";
 import type { ThreadService } from "../posts/thread-service.js";
-import type { SimulationRepository } from "./simulation-repository.js";
+import type { RoomRepository } from "./room-repository.js";
 import type { Rng } from "./responder-selector.js";
 import { resolveProfile, shouldReviveThread } from "./behavior-profiles.js";
 import type { CastParticipationResolver } from "./cast-participation-resolver.js";
@@ -54,7 +54,7 @@ const CANDIDATE_LIMIT = 10;
 export type Clock = () => Date;
 
 export type ThreadRevivalDeps = {
-  simulations: SimulationRepository;
+  rooms: RoomRepository;
   characters: CharacterRepository;
   posts: PostService;
   threads: ThreadService;
@@ -94,7 +94,7 @@ export async function reviveThread(
   const rng = deps.rng ?? Math.random;
 
   // Verify the room is still active.
-  const room = await deps.simulations.findById(roomId);
+  const room = await deps.rooms.findById(roomId);
   if (!room || room.status === "archived") {
     return { outcome: "skipped", reason: "room not found or archived" };
   }

@@ -6,30 +6,30 @@
  *     pendingCount for owners, full entry for members/admins
  *
  * Repository-level tests (findAllVisibleTo visibility query) live in
- * simulation-repository.test.ts alongside the other repository tests.
+ * room-repository.test.ts alongside the other repository tests.
  */
 import { DEFAULT_ROOM_ID } from "@brickr/shared";
 import { describe, expect, it, vi } from "vitest";
 import {
-  SimulationService,
+  RoomRuntimeService,
   toRoomListEntryDto,
-  type SimulationActor,
-  type SimulationServiceDeps,
-} from "./simulation-service.js";
-import type { SimulationSummary } from "./simulation.js";
+  type SignedInActor,
+  type RoomRuntimeServiceDeps,
+} from "./room-runtime-service.js";
+import type { RoomSummary } from "./room.js";
 
 // ---------------------------------------------------------------------------
 // Fixtures
 // ---------------------------------------------------------------------------
 
-const OWNER: SimulationActor = { id: "user-owner", isAdmin: false };
-const MEMBER: SimulationActor = { id: "user-member", isAdmin: false };
-const NON_MEMBER: SimulationActor = { id: "user-other", isAdmin: false };
-const ADMIN: SimulationActor = { id: "user-admin", isAdmin: true };
+const OWNER: SignedInActor = { id: "user-owner", isAdmin: false };
+const MEMBER: SignedInActor = { id: "user-member", isAdmin: false };
+const NON_MEMBER: SignedInActor = { id: "user-other", isAdmin: false };
+const ADMIN: SignedInActor = { id: "user-admin", isAdmin: true };
 
 const BASE_DATE = new Date("2026-08-16T00:00:00.000Z");
 
-function makeSummary(overrides: Partial<SimulationSummary> = {}): SimulationSummary {
+function makeSummary(overrides: Partial<RoomSummary> = {}): RoomSummary {
   return {
     id: "room-1",
     title: "テストルーム",
@@ -48,15 +48,15 @@ function makeSummary(overrides: Partial<SimulationSummary> = {}): SimulationSumm
   };
 }
 
-function makeListService(summaries: SimulationSummary[]): SimulationService {
-  return new SimulationService({
-    simulations: {
+function makeListService(summaries: RoomSummary[]): RoomRuntimeService {
+  return new RoomRuntimeService({
+    rooms: {
       findAllVisibleTo: vi.fn(() => Promise.resolve(summaries)),
     },
-  } as unknown as SimulationServiceDeps);
+  } as unknown as RoomRuntimeServiceDeps);
 }
 
-describe("SimulationService Room list", () => {
+describe("RoomRuntimeService Room list", () => {
   it("keeps the logical Feed room out of the Room list", async () => {
     const feedRoom = makeSummary({ id: DEFAULT_ROOM_ID, title: "フィード" });
     const ordinaryRoom = makeSummary({ id: "room-visible", title: "表示するルーム" });

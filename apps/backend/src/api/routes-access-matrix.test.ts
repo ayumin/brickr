@@ -13,9 +13,9 @@ import type { Post } from "../posts/post.js";
 import { ProfileService } from "../profiles/profile-service.js";
 import type { ProfileRepository } from "../profiles/profile-repository.js";
 import type { AppServices } from "../services.js";
-import { SimulationService } from "../simulation/simulation-service.js";
-import type { SimulationRepository } from "../simulation/simulation-repository.js";
-import type { Simulation } from "../simulation/simulation.js";
+import { RoomRuntimeService } from "../rooms/room-runtime-service.js";
+import type { RoomRepository } from "../rooms/room-repository.js";
+import type { Room } from "../rooms/room.js";
 import type { UserProfileRepository } from "../user-profile/user-profile-repository.js";
 import { registerRoutes } from "./routes.js";
 
@@ -35,7 +35,7 @@ import { registerRoutes } from "./routes.js";
  * Only the repositories are faked, and they hold plain rows: the decisions under
  * test are the services' own, not a re-implementation of them in a stub. Where a
  * rule lives in a `where` clause instead - which rooms exist for a caller (§10.3)
- * - it is asserted in `simulation-repository.test.ts`, and what this file checks
+ * - it is asserted in `room-repository.test.ts`, and what this file checks
  * is that the service hands the repository the caller it was given.
  */
 
@@ -62,7 +62,7 @@ const ADMIN = account("user-admin", "admin", true);
 
 const NOW = new Date("2026-08-14T00:00:00.000Z");
 
-function room(id: string, overrides: Partial<Simulation> = {}): Simulation {
+function room(id: string, overrides: Partial<Room> = {}): Room {
   return {
     id,
     title: id,
@@ -126,7 +126,7 @@ const SYSTEM_CAST = castMember("cast-system", "system_cast");
 const CAST = [OWNED_CAST, SYSTEM_CAST];
 
 /** Rooms the caller may list, mirroring the repository's `where` clause (§10.3). */
-function visibleRooms(actor: { id: string; isAdmin: boolean }): Simulation[] {
+function visibleRooms(actor: { id: string; isAdmin: boolean }): Room[] {
   return ROOMS.filter(
     (candidate) =>
       actor.isAdmin ||
@@ -138,7 +138,7 @@ function visibleRooms(actor: { id: string; isAdmin: boolean }): Simulation[] {
 function makeServices(): { services: AppServices; listedFor: string[] } {
   const listedFor: string[] = [];
 
-  const simulationRepository = {
+  const roomRepository = {
     findById: (id: string) => Promise.resolve(ROOMS.find((r) => r.id === id) ?? null),
     findSummaryById: (id: string) => {
       const found = ROOMS.find((r) => r.id === id);
@@ -150,7 +150,7 @@ function makeServices(): { services: AppServices; listedFor: string[] } {
         visibleRooms(actor).map((r) => ({ ...r, postCount: 0, creator: null })),
       );
     },
-  } as unknown as SimulationRepository;
+  } as unknown as RoomRepository;
 
   const postService = {
     findById: (id: string) => Promise.resolve(POSTS.find((p) => p.id === id) ?? null),
@@ -231,16 +231,16 @@ function makeServices(): { services: AppServices; listedFor: string[] } {
   // this file exercises.
   const memberships = { findOne: () => Promise.resolve(null) };
 
-  const simulations = new SimulationService({
-    simulations: simulationRepository,
+  const roomRuntime = new RoomRuntimeService({
+    rooms: roomRepository,
     memberships,
     posts: postService,
-  } as unknown as ConstructorParameters<typeof SimulationService>[0]);
+  } as unknown as ConstructorParameters<typeof RoomRuntimeService>[0]);
 
   const feed = new FeedService(
     {} as never,
     postService,
-    simulationRepository,
+    roomRepository,
     memberships as never,
   );
 
@@ -255,7 +255,7 @@ function makeServices(): { services: AppServices; listedFor: string[] } {
   return {
     services: {
       characters,
-      simulations,
+      roomRuntime,
       feed,
       profiles,
       posts: postService,
@@ -316,7 +316,7 @@ describe("access matrix (§24.2)", () => {
       const { body, listedFor } = await get(NORMAL_USER, "/api/rooms");
 
       // The service passes the caller straight to the query (§10.3); the `where`
-      // clause itself is pinned in simulation-repository.test.ts.
+      // clause itself is pinned in room-repository.test.ts.
       expect(listedFor).toEqual([NORMAL_USER.id]);
       expect((body as { rooms: Array<{ id: string }> }).rooms.map((s) => s.id)).toEqual([
         ACTIVE_ROOM.id,

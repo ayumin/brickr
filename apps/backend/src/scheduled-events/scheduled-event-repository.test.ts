@@ -10,7 +10,7 @@
  *      or a cast member is removed/banned.
  *
  * The Prisma client is mocked following the established pattern in this codebase
- * (see post-repository.test.ts, simulation-repository.test.ts). The raw SQL
+ * (see post-repository.test.ts, room-repository.test.ts). The raw SQL
  * path used by `claimEvent` is exercised through `$queryRaw` mock.
  */
 import { describe, expect, it, vi } from "vitest";

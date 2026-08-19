@@ -7,7 +7,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Character } from "../characters/character.js";
 import type { Post } from "../posts/post.js";
-import type { Simulation } from "../simulation/simulation.js";
+import type { Room } from "../rooms/room.js";
 import { reviveThread, DORMANT_THRESHOLD_MS, type ThreadRevivalDeps } from "./thread-revival-service.js";
 
 // ---------------------------------------------------------------------------
@@ -17,7 +17,7 @@ import { reviveThread, DORMANT_THRESHOLD_MS, type ThreadRevivalDeps } from "./th
 const now = new Date("2026-08-17T12:00:00.000Z");
 const dormantAt = new Date(now.getTime() - DORMANT_THRESHOLD_MS - 1_000); // just past threshold
 
-const room: Simulation = {
+const room: Room = {
   id: "room-1",
   title: "Test Room",
   status: "active",
@@ -78,9 +78,9 @@ const revivedPost: Post = {
 
 function makeDeps(overrides: Partial<ThreadRevivalDeps> = {}): ThreadRevivalDeps {
   return {
-    simulations: {
+    rooms: {
       findById: vi.fn(() => Promise.resolve(room)),
-    } as unknown as ThreadRevivalDeps["simulations"],
+    } as unknown as ThreadRevivalDeps["rooms"],
     characters: {
       findAll: vi.fn(() => Promise.resolve([eagerCharacter])),
     } as unknown as ThreadRevivalDeps["characters"],
@@ -121,9 +121,9 @@ function makeDeps(overrides: Partial<ThreadRevivalDeps> = {}): ThreadRevivalDeps
 describe("reviveThread", () => {
   it("returns skipped when the room is archived", async () => {
     const deps = makeDeps({
-      simulations: {
+      rooms: {
         findById: vi.fn(() => Promise.resolve({ ...room, status: "archived" })),
-      } as unknown as ThreadRevivalDeps["simulations"],
+      } as unknown as ThreadRevivalDeps["rooms"],
     });
 
     const result = await reviveThread("room-1", deps);
@@ -134,9 +134,9 @@ describe("reviveThread", () => {
 
   it("returns skipped when the room does not exist", async () => {
     const deps = makeDeps({
-      simulations: {
+      rooms: {
         findById: vi.fn(() => Promise.resolve(null)),
-      } as unknown as ThreadRevivalDeps["simulations"],
+      } as unknown as ThreadRevivalDeps["rooms"],
     });
 
     const result = await reviveThread("room-1", deps);

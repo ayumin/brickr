@@ -77,7 +77,7 @@ export const env = {
     displayName: str("ADMIN_DISPLAY_NAME", "管理者"),
   },
 
-  simulation: {
+  room: {
     minResponders: int("MIN_RESPONDERS", 2),
     maxResponders: int("MAX_RESPONDERS", 6),
     contextPostLimit: int("CONTEXT_POST_LIMIT", 16),

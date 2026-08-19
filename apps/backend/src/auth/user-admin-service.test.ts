@@ -6,7 +6,7 @@ import type { SessionRepository } from "./session-repository.js";
 import type { UserAccountRepository } from "./user-account-repository.js";
 import type { UserAccountWithSecret } from "./user-account.js";
 import { UserAdminService } from "./user-admin-service.js";
-import type { RoomService } from "../simulation/room-service.js";
+import type { RoomService } from "../rooms/room-service.js";
 
 const hanako: UserAccountWithSecret = {
   id: "user-1",

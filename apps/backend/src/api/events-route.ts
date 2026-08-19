@@ -3,8 +3,8 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { requireUser } from "../auth/auth-context.js";
 import { toPublicEvent } from "../feed/public-events.js";
 import type { AppServices } from "../services.js";
-import type { EventListener } from "../simulation/event-hub.js";
-import { SimulationNotFoundError } from "../simulation/simulation-service.js";
+import type { EventListener } from "../rooms/event-hub.js";
+import { RuntimeRoomNotFoundError } from "../rooms/room-runtime-service.js";
 import { sendError } from "./errors.js";
 import { toFeedReader } from "./feed-reader.js";
 import { idParams } from "./schemas.js";
@@ -163,7 +163,7 @@ export function registerEventsRoute(app: FastifyInstance, services: AppServices)
     try {
       await services.feed.assertRoomFeedReadable(roomId, toFeedReader(user));
     } catch (error) {
-      if (error instanceof SimulationNotFoundError) {
+      if (error instanceof RuntimeRoomNotFoundError) {
         return sendError(reply, 404, "not_found", error.message);
       }
       throw error;

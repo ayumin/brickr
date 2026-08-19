@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Db } from "../persistence/prisma.js";
-import { SimulationRepository } from "./simulation-repository.js";
+import { RoomRepository } from "./room-repository.js";
 
 const ADMIN = { id: "admin-1", isAdmin: true };
 const USER = { id: "user-1", isAdmin: false };
@@ -20,7 +20,7 @@ function firstFindManyArgs(findMany: ReturnType<typeof makeDb>["findMany"]): unk
 function makeRoomRow(overrides: Record<string, unknown> = {}) {
   const createdAt = new Date("2026-08-10T01:02:03.000Z");
   return {
-    id: "simulation-1",
+    id: "room-1",
     title: "テスト",
     status: "active",
     visibility: "public",
@@ -36,13 +36,13 @@ function makeRoomRow(overrides: Record<string, unknown> = {}) {
   };
 }
 
-describe("SimulationRepository.findAllVisibleTo", () => {
+describe("RoomRepository.findAllVisibleTo", () => {
   it("orders by activity and maps post counts and the creator", async () => {
     const createdAt = new Date("2026-08-10T01:02:03.000Z");
     const lastActivityAt = new Date("2026-08-12T09:00:00.000Z");
     const { db } = makeDb([
       {
-        id: "simulation-1",
+        id: "room-1",
         title: "履歴",
         status: "active",
         visibility: "public",
@@ -58,11 +58,11 @@ describe("SimulationRepository.findAllVisibleTo", () => {
       },
     ]);
 
-    const [summary] = await new SimulationRepository(db).findAllVisibleTo(USER);
+    const [summary] = await new RoomRepository(db).findAllVisibleTo(USER);
 
     // Core fields are mapped correctly.
     expect(summary).toMatchObject({
-      id: "simulation-1",
+      id: "room-1",
       title: "履歴",
       status: "active",
       createdAt,
@@ -76,7 +76,7 @@ describe("SimulationRepository.findAllVisibleTo", () => {
   it("uses AND to combine the status and visibility conditions for a regular user", async () => {
     const { db, findMany } = makeDb([]);
 
-    await new SimulationRepository(db).findAllVisibleTo(USER);
+    await new RoomRepository(db).findAllVisibleTo(USER);
 
     // Activity order, not creation order, so an active room cannot sink out of
     // reach (§10.3).
@@ -92,7 +92,7 @@ describe("SimulationRepository.findAllVisibleTo", () => {
   it("asks the database for only the stopped rooms an ordinary caller owns", async () => {
     const { db, findMany } = makeDb([]);
 
-    await new SimulationRepository(db).findAllVisibleTo(USER);
+    await new RoomRepository(db).findAllVisibleTo(USER);
 
     // Filtered in the query rather than afterwards: a room this caller may not
     // see is never read, so it cannot leak through a mapping mistake later.
@@ -106,7 +106,7 @@ describe("SimulationRepository.findAllVisibleTo", () => {
   it("includes public/open/closed rooms for a regular user (visibility clause)", async () => {
     const { db, findMany } = makeDb([]);
 
-    await new SimulationRepository(db).findAllVisibleTo(USER);
+    await new RoomRepository(db).findAllVisibleTo(USER);
 
     const call = firstFindManyArgs(findMany);
     // public, open, closed are discoverable by all authenticated users
@@ -119,7 +119,7 @@ describe("SimulationRepository.findAllVisibleTo", () => {
   it("allows private rooms for their creator or an active member", async () => {
     const { db, findMany } = makeDb([]);
 
-    await new SimulationRepository(db).findAllVisibleTo(USER);
+    await new RoomRepository(db).findAllVisibleTo(USER);
 
     const call = firstFindManyArgs(findMany);
     expect(call).toHaveProperty("where.AND.1.OR.1.visibility", "private");
@@ -139,7 +139,7 @@ describe("SimulationRepository.findAllVisibleTo", () => {
   it("puts no status or visibility condition on an administrator's list, but still filters by scope", async () => {
     const { db, findMany } = makeDb([]);
 
-    await new SimulationRepository(db).findAllVisibleTo(ADMIN);
+    await new RoomRepository(db).findAllVisibleTo(ADMIN);
 
     const call = firstFindManyArgs(findMany);
     // Admins do not need visibility or lifecycle filters, but the scope filter
@@ -150,7 +150,7 @@ describe("SimulationRepository.findAllVisibleTo", () => {
   it("includes pending membership count in the _count select", async () => {
     const { db, findMany } = makeDb([]);
 
-    await new SimulationRepository(db).findAllVisibleTo(USER);
+    await new RoomRepository(db).findAllVisibleTo(USER);
 
     const call = firstFindManyArgs(findMany);
     expect(call).toHaveProperty("include._count.select.memberships", {
@@ -161,7 +161,7 @@ describe("SimulationRepository.findAllVisibleTo", () => {
   it("includes the caller's own membership in the include clause", async () => {
     const { db, findMany } = makeDb([]);
 
-    await new SimulationRepository(db).findAllVisibleTo(USER);
+    await new RoomRepository(db).findAllVisibleTo(USER);
 
     const call = firstFindManyArgs(findMany);
     expect(call).toHaveProperty("include.memberships.where", {
@@ -185,7 +185,7 @@ describe("SimulationRepository.findAllVisibleTo", () => {
       }),
     ]);
 
-    const [summary] = await new SimulationRepository(db).findAllVisibleTo(USER);
+    const [summary] = await new RoomRepository(db).findAllVisibleTo(USER);
 
     expect(summary?.pendingCount).toBe(3);
     expect(summary?.callerIsActiveMember).toBe(true);
@@ -206,7 +206,7 @@ describe("SimulationRepository.findAllVisibleTo", () => {
       }),
     ]);
 
-    const [summary] = await new SimulationRepository(db).findAllVisibleTo(USER);
+    const [summary] = await new RoomRepository(db).findAllVisibleTo(USER);
 
     expect(summary?.callerIsActiveMember).toBe(false);
   });
@@ -215,7 +215,7 @@ describe("SimulationRepository.findAllVisibleTo", () => {
     const createdAt = new Date("2026-08-10T01:02:03.000Z");
     const { db } = makeDb([
       makeRoomRow({
-        id: "simulation-2",
+        id: "room-2",
         title: null,
         tags: [],
         createdAt,
@@ -227,7 +227,7 @@ describe("SimulationRepository.findAllVisibleTo", () => {
       }),
     ]);
 
-    const [summary] = await new SimulationRepository(db).findAllVisibleTo(ADMIN);
+    const [summary] = await new RoomRepository(db).findAllVisibleTo(ADMIN);
 
     expect(summary?.creator).toBeNull();
     expect(summary).not.toHaveProperty("createdByUserId");
@@ -237,7 +237,7 @@ describe("SimulationRepository.findAllVisibleTo", () => {
     const createdAt = new Date("2026-08-10T01:02:03.000Z");
     const { db } = makeDb([
       makeRoomRow({
-        id: "simulation-3",
+        id: "room-3",
         title: "旧アカウント",
         tags: [],
         createdAt,
@@ -253,7 +253,7 @@ describe("SimulationRepository.findAllVisibleTo", () => {
       }),
     ]);
 
-    const [summary] = await new SimulationRepository(db).findAllVisibleTo(ADMIN);
+    const [summary] = await new RoomRepository(db).findAllVisibleTo(ADMIN);
 
     // The same fallback the profile repository applies, rather than a second one
     // that could disagree with it.
@@ -261,12 +261,12 @@ describe("SimulationRepository.findAllVisibleTo", () => {
   });
 });
 
-describe("SimulationRepository.archiveByIds", () => {
+describe("RoomRepository.archiveByIds", () => {
   it("archives only active room-scoped rows in the membership-derived id set", async () => {
     const updateMany = vi.fn(() => Promise.resolve({ count: 2 }));
     const db = { room: { updateMany } } as unknown as Db;
 
-    await new SimulationRepository(db).archiveByIds(["room-transferred", "room-created"]);
+    await new RoomRepository(db).archiveByIds(["room-transferred", "room-created"]);
 
     expect(updateMany).toHaveBeenCalledWith({
       where: {

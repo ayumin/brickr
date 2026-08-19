@@ -5,7 +5,7 @@ import { DomainError } from "../domain-error.js";
 export type RuntimeSettingsValues = {
   models: { openai: string; anthropic: string; gemini: string };
   llm: { timeoutMs: number; maxRetries: number };
-  simulation: {
+  room: {
     minResponders: number;
     maxResponders: number;
     contextPostLimit: number;
@@ -50,7 +50,7 @@ export class RuntimeSettings {
     for (const [name, value] of this.overrides) applyValue(next, name, value);
     Object.assign(this.values.models, next.models);
     Object.assign(this.values.llm, next.llm);
-    Object.assign(this.values.simulation, next.simulation);
+    Object.assign(this.values.room, next.room);
   }
 }
 
@@ -62,12 +62,12 @@ function environmentValues(): RuntimeSettingsValues {
       gemini: env.gemini.model,
     },
     llm: { timeoutMs: env.llm.timeoutMs, maxRetries: env.llm.maxRetries },
-    simulation: {
-      minResponders: env.simulation.minResponders,
-      maxResponders: env.simulation.maxResponders,
-      contextPostLimit: env.simulation.contextPostLimit,
-      maxConcurrentCharacters: env.simulation.maxConcurrentCharacters,
-      maxCascadeDepth: env.simulation.maxCascadeDepth,
+    room: {
+      minResponders: env.room.minResponders,
+      maxResponders: env.room.maxResponders,
+      contextPostLimit: env.room.contextPostLimit,
+      maxConcurrentCharacters: env.room.maxConcurrentCharacters,
+      maxCascadeDepth: env.room.maxCascadeDepth,
     },
   };
 }
@@ -75,7 +75,7 @@ function environmentValues(): RuntimeSettingsValues {
 function validateOverrides(overrides: Map<EditableApplicationSettingName, string>): void {
   const values = environmentValues();
   for (const [name, value] of overrides) applyValue(values, name, value);
-  if (values.simulation.minResponders > values.simulation.maxResponders) {
+  if (values.room.minResponders > values.room.maxResponders) {
     throw new InvalidApplicationSettingError(
       "MIN_RESPONDERS must not exceed MAX_RESPONDERS",
     );
@@ -114,11 +114,11 @@ function applyValue(
   }
   if (name === "LLM_TIMEOUT_MS") values.llm.timeoutMs = value;
   else if (name === "LLM_MAX_RETRIES") values.llm.maxRetries = value;
-  else if (name === "MIN_RESPONDERS") values.simulation.minResponders = value;
-  else if (name === "MAX_RESPONDERS") values.simulation.maxResponders = value;
-  else if (name === "CONTEXT_POST_LIMIT") values.simulation.contextPostLimit = value;
-  else if (name === "MAX_CONCURRENT_CHARACTERS") values.simulation.maxConcurrentCharacters = value;
-  else values.simulation.maxCascadeDepth = value;
+  else if (name === "MIN_RESPONDERS") values.room.minResponders = value;
+  else if (name === "MAX_RESPONDERS") values.room.maxResponders = value;
+  else if (name === "CONTEXT_POST_LIMIT") values.room.contextPostLimit = value;
+  else if (name === "MAX_CONCURRENT_CHARACTERS") values.room.maxConcurrentCharacters = value;
+  else values.room.maxCascadeDepth = value;
 }
 
 function settingValue(values: RuntimeSettingsValues, name: EditableApplicationSettingName): string {
@@ -127,11 +127,11 @@ function settingValue(values: RuntimeSettingsValues, name: EditableApplicationSe
   if (name === "GEMINI_MODEL") return values.models.gemini;
   if (name === "LLM_TIMEOUT_MS") return String(values.llm.timeoutMs);
   if (name === "LLM_MAX_RETRIES") return String(values.llm.maxRetries);
-  if (name === "MIN_RESPONDERS") return String(values.simulation.minResponders);
-  if (name === "MAX_RESPONDERS") return String(values.simulation.maxResponders);
-  if (name === "CONTEXT_POST_LIMIT") return String(values.simulation.contextPostLimit);
-  if (name === "MAX_CONCURRENT_CHARACTERS") return String(values.simulation.maxConcurrentCharacters);
-  return String(values.simulation.maxCascadeDepth);
+  if (name === "MIN_RESPONDERS") return String(values.room.minResponders);
+  if (name === "MAX_RESPONDERS") return String(values.room.maxResponders);
+  if (name === "CONTEXT_POST_LIMIT") return String(values.room.contextPostLimit);
+  if (name === "MAX_CONCURRENT_CHARACTERS") return String(values.room.maxConcurrentCharacters);
+  return String(values.room.maxCascadeDepth);
 }
 
 export class InvalidApplicationSettingError extends DomainError {

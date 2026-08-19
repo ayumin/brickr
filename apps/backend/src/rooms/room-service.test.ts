@@ -15,7 +15,7 @@
  *   - approveMembership / removeMembership / banMember: owner/admin only
  */
 import { describe, expect, it, vi } from "vitest";
-import type { SimulationRepository } from "./simulation-repository.js";
+import type { RoomRepository } from "./room-repository.js";
 import type { RoomMembershipRepository } from "./room-membership-repository.js";
 import type { HandleRepository } from "../handles/handle-repository.js";
 import {
@@ -37,17 +37,17 @@ import {
 } from "./room-service.js";
 import { CannotModifyOwnerError } from "./room-membership-errors.js";
 import { FeedRoomImmutableError } from "./feed-room-guard.js";
-import type { Simulation, SimulationActor } from "./simulation.js";
+import type { Room, SignedInActor } from "./room.js";
 import type { RoomMembership } from "./room-membership-repository.js";
 
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
-const OWNER: SimulationActor = { id: "user-owner", isAdmin: false };
-const ADMIN: SimulationActor = { id: "user-admin", isAdmin: true };
-const OTHER: SimulationActor = { id: "user-other", isAdmin: false };
+const OWNER: SignedInActor = { id: "user-owner", isAdmin: false };
+const ADMIN: SignedInActor = { id: "user-admin", isAdmin: true };
+const OTHER: SignedInActor = { id: "user-other", isAdmin: false };
 
-function makeRoom(overrides: Partial<Simulation> = {}): Simulation {
+function makeRoom(overrides: Partial<Room> = {}): Room {
   return {
     id: "room-1",
     title: "テストルーム",
@@ -63,13 +63,13 @@ function makeRoom(overrides: Partial<Simulation> = {}): Simulation {
 }
 
 /** The reserved Feed room: unowned (admin-only), scope: 'global'. */
-function makeFeedRoom(overrides: Partial<Simulation> = {}): Simulation {
+function makeFeedRoom(overrides: Partial<Room> = {}): Room {
   return makeRoom({ scope: "global", createdByUserId: undefined, ...overrides });
 }
 
-function makeSimulationRepo(
-  overrides: Partial<SimulationRepository> = {},
-): SimulationRepository {
+function makeRoomRepo(
+  overrides: Partial<RoomRepository> = {},
+): RoomRepository {
   return {
     create: vi.fn(),
     createWithOwner: vi.fn(() => Promise.resolve(makeRoom())),
@@ -85,7 +85,7 @@ function makeSimulationRepo(
     delete: vi.fn(() => Promise.resolve()),
     archiveByIds: vi.fn(() => Promise.resolve()),
     ...overrides,
-  } as unknown as SimulationRepository;
+  } as unknown as RoomRepository;
 }
 
 function makeMembership(overrides: Partial<RoomMembership> = {}): RoomMembership {
@@ -145,31 +145,31 @@ function makeHandleRepo(
 }
 
 function makeService(
-  simRepo?: Partial<SimulationRepository>,
+  simRepo?: Partial<RoomRepository>,
   memRepo?: Partial<RoomMembershipRepository>,
   handleRepo?: Partial<HandleRepository>,
-): { service: RoomService; simulations: SimulationRepository; memberships: RoomMembershipRepository; handles: HandleRepository } {
-  const simulations = makeSimulationRepo(simRepo);
+): { service: RoomService; rooms: RoomRepository; memberships: RoomMembershipRepository; handles: HandleRepository } {
+  const rooms = makeRoomRepo(simRepo);
   const memberships = makeMembershipRepo(memRepo);
   const handles = makeHandleRepo(handleRepo);
-  const service = new RoomService({ simulations, memberships, handles });
-  return { service, simulations, memberships, handles };
+  const service = new RoomService({ rooms, memberships, handles });
+  return { service, rooms, memberships, handles };
 }
 
 // ── create ────────────────────────────────────────────────────────────────────
 
 describe("RoomService.create", () => {
   it("creates a room with default public visibility", async () => {
-    const { service, simulations } = makeService();
+    const { service, rooms } = makeService();
 
     const result = await service.create({ createdByUserId: OWNER.id });
 
-    expect(simulations.createWithOwner).toHaveBeenCalledWith(null, "public", OWNER.id);
+    expect(rooms.createWithOwner).toHaveBeenCalledWith(null, "public", OWNER.id);
     expect(result).toMatchObject({ id: "room-1", status: "active", visibility: "public" });
   });
 
   it("creates a room with the specified visibility", async () => {
-    const { service, simulations } = makeService({
+    const { service, rooms } = makeService({
       createWithOwner: vi.fn(() => Promise.resolve(makeRoom({ visibility: "closed" }))),
     });
 
@@ -179,7 +179,7 @@ describe("RoomService.create", () => {
       createdByUserId: OWNER.id,
     });
 
-    expect(simulations.createWithOwner).toHaveBeenCalledWith(
+    expect(rooms.createWithOwner).toHaveBeenCalledWith(
       "プライベートルーム",
       "closed",
       OWNER.id,
@@ -188,13 +188,13 @@ describe("RoomService.create", () => {
   });
 
   it("passes the title to the repository", async () => {
-    const { service, simulations } = makeService({
+    const { service, rooms } = makeService({
       createWithOwner: vi.fn(() => Promise.resolve(makeRoom({ title: "新しいルーム" }))),
     });
 
     await service.create({ title: "新しいルーム", createdByUserId: OWNER.id });
 
-    expect(simulations.createWithOwner).toHaveBeenCalledWith("新しいルーム", "public", OWNER.id);
+    expect(rooms.createWithOwner).toHaveBeenCalledWith("新しいルーム", "public", OWNER.id);
   });
 });
 
@@ -202,20 +202,20 @@ describe("RoomService.create", () => {
 
 describe("RoomService.update", () => {
   it("updates the title when the caller is the owner", async () => {
-    const { service, simulations } = makeService();
+    const { service, rooms } = makeService();
 
     const result = await service.update("room-1", { title: "新タイトル" }, OWNER);
 
-    expect(simulations.updateTitle).toHaveBeenCalledWith("room-1", "新タイトル");
+    expect(rooms.updateTitle).toHaveBeenCalledWith("room-1", "新タイトル");
     expect(result).toMatchObject({ id: "room-1" });
   });
 
   it("updates the title when the caller is an admin", async () => {
-    const { service, simulations } = makeService();
+    const { service, rooms } = makeService();
 
     await service.update("room-1", { title: "管理者変更" }, ADMIN);
 
-    expect(simulations.updateTitle).toHaveBeenCalledWith("room-1", "管理者変更");
+    expect(rooms.updateTitle).toHaveBeenCalledWith("room-1", "管理者変更");
   });
 
   it("throws RoomForbiddenError when the caller is neither owner nor admin", async () => {
@@ -280,20 +280,20 @@ describe("RoomService.update", () => {
 
 describe("RoomService.archive", () => {
   it("archives the room when the caller is the owner", async () => {
-    const { service, simulations } = makeService();
+    const { service, rooms } = makeService();
 
     const result = await service.archive("room-1", OWNER);
 
-    expect(simulations.updateStatus).toHaveBeenCalledWith("room-1", "archived");
+    expect(rooms.updateStatus).toHaveBeenCalledWith("room-1", "archived");
     expect(result).toMatchObject({ id: "room-1" });
   });
 
   it("archives the room when the caller is an admin", async () => {
-    const { service, simulations } = makeService();
+    const { service, rooms } = makeService();
 
     await service.archive("room-1", ADMIN);
 
-    expect(simulations.updateStatus).toHaveBeenCalledWith("room-1", "archived");
+    expect(rooms.updateStatus).toHaveBeenCalledWith("room-1", "archived");
   });
 
   it("throws RoomForbiddenError when the caller is neither owner nor admin", async () => {
@@ -332,23 +332,23 @@ describe("RoomService.archive", () => {
 
 describe("RoomService.delete", () => {
   it("deletes an archived room when the caller is the owner", async () => {
-    const { service, simulations } = makeService({
+    const { service, rooms } = makeService({
       findById: vi.fn(() => Promise.resolve(makeRoom({ status: "archived" }))),
     });
 
     await service.delete("room-1", OWNER);
 
-    expect(simulations.delete).toHaveBeenCalledWith("room-1");
+    expect(rooms.delete).toHaveBeenCalledWith("room-1");
   });
 
   it("deletes an archived room when the caller is an admin", async () => {
-    const { service, simulations } = makeService({
+    const { service, rooms } = makeService({
       findById: vi.fn(() => Promise.resolve(makeRoom({ status: "archived" }))),
     });
 
     await service.delete("room-1", ADMIN);
 
-    expect(simulations.delete).toHaveBeenCalledWith("room-1");
+    expect(rooms.delete).toHaveBeenCalledWith("room-1");
   });
 
   it("throws RoomForbiddenError when the caller is neither owner nor admin", async () => {
@@ -397,22 +397,22 @@ describe("RoomService.delete", () => {
 
 describe("RoomService.archiveOwnedBy", () => {
   it("archives rooms from active owner memberships rather than original creator ids", async () => {
-    const { service, simulations, memberships } = makeService(undefined, {
+    const { service, rooms, memberships } = makeService(undefined, {
       findActiveOwnerRooms: vi.fn(() => Promise.resolve(["room-transferred", "room-created"])),
     });
 
     await service.archiveOwnedBy("user-owner");
 
     expect(memberships.findActiveOwnerRooms).toHaveBeenCalledWith("user-owner");
-    expect(simulations.archiveByIds).toHaveBeenCalledWith(["room-transferred", "room-created"]);
+    expect(rooms.archiveByIds).toHaveBeenCalledWith(["room-transferred", "room-created"]);
   });
 
   it("does not issue an empty archive update", async () => {
-    const { service, simulations } = makeService();
+    const { service, rooms } = makeService();
 
     await service.archiveOwnedBy("user-without-rooms");
 
-    expect(simulations.archiveByIds).not.toHaveBeenCalled();
+    expect(rooms.archiveByIds).not.toHaveBeenCalled();
   });
 });
 

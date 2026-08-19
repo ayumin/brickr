@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type {
   InternalSseEvent,
   PublishedInternalSseEvent,
-} from "../simulation/public-events.js";
+} from "../rooms/public-events.js";
 import type { FeedRoom } from "./feed-repository.js";
 import { toPublicEvent } from "./public-events.js";
 

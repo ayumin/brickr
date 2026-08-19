@@ -12,7 +12,7 @@ import {
 } from "@brickr/shared";
 import { z } from "zod";
 import { PROVIDER_IDS } from "../llm/provider.js";
-import { BEHAVIOR_PROFILE_KEYS } from "../simulation/behavior-profiles.js";
+import { BEHAVIOR_PROFILE_KEYS } from "../rooms/behavior-profiles.js";
 
 /**
  * Request validation at the HTTP boundary (CLAUDE.md §55).

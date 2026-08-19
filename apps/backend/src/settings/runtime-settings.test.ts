@@ -5,7 +5,7 @@ describe("RuntimeSettings", () => {
   it("applies overrides without replacing objects held by running services", () => {
     const runtime = new RuntimeSettings();
     const llmReference = runtime.values.llm;
-    const simulationReference = runtime.values.simulation;
+    const roomReference = runtime.values.room;
     const next = runtime.preview({
       LLM_TIMEOUT_MS: "45000",
       MAX_CONCURRENT_CHARACTERS: "9",
@@ -14,9 +14,9 @@ describe("RuntimeSettings", () => {
     runtime.load(next);
 
     expect(runtime.values.llm).toBe(llmReference);
-    expect(runtime.values.simulation).toBe(simulationReference);
+    expect(runtime.values.room).toBe(roomReference);
     expect(runtime.values.llm.timeoutMs).toBe(45_000);
-    expect(runtime.values.simulation.maxConcurrentCharacters).toBe(9);
+    expect(runtime.values.room.maxConcurrentCharacters).toBe(9);
     expect(runtime.values.models.openai).toBe("gpt-test");
     expect(runtime.isOverridden("OPENAI_MODEL")).toBe(true);
   });

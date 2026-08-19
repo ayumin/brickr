@@ -25,7 +25,7 @@ export type ContextSelectionInput = {
    */
   threadPosts: Post[];
   /**
-   * Recent posts from elsewhere in the simulation. Useful colour, but only
+   * Recent posts from elsewhere in the room. Useful colour, but only
    * filler — they are dropped first when the budget is tight.
    */
   ambientPosts: Post[];
@@ -38,7 +38,7 @@ export type ContextSelectionInput = {
  *
  * Thread posts are privileged over ambient ones. Merging both into one flat
  * "keep the newest N" pool looks simpler but silently breaks the conversation:
- * once a simulation has more than `limit` recent posts, a character replying
+ * once a room has more than `limit` recent posts, a character replying
  * deep in a thread loses that thread's own root and parent, and answers
  * something it can no longer see.
  *

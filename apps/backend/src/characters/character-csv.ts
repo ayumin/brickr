@@ -3,7 +3,7 @@ import { z } from "zod";
 import { DomainError } from "../domain-error.js";
 import type { Character } from "./character.js";
 import type { ModelProfile } from "../model-profiles/model-profile.js";
-import { BEHAVIOR_PROFILE_KEYS } from "../simulation/behavior-profiles.js";
+import { BEHAVIOR_PROFILE_KEYS } from "../rooms/behavior-profiles.js";
 
 const CHARACTER_CSV_COLUMNS = [
   { key: "id", label: "ID" },

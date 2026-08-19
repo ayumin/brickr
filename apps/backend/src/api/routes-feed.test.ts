@@ -224,7 +224,7 @@ describe("/api/rooms/:id/posts", () => {
     const submitUserPost = vi.fn(() => Promise.resolve(post));
     const buildThreadForReader = vi.fn(() => Promise.resolve({ root: post, replies: [] }));
     const services = {
-      simulations: { requireReadableRoom, submitUserPost },
+      roomRuntime: { requireReadableRoom, submitUserPost },
       posts: { listByRoom },
       feed: { buildThreadForReader },
     } as unknown as AppServices;

@@ -3,14 +3,14 @@ import { Prisma, type Db } from "../persistence/prisma.js";
 import { optionalField } from "../persistence/repository-mapping.js";
 import { toPost, type PostRow } from "../posts/post-repository.js";
 import type { Post } from "../posts/post.js";
-import { toSimulationStatus, toSimulationVisibility } from "../simulation/simulation-repository.js";
+import { toRoomStatus, toRoomVisibility } from "../rooms/room-repository.js";
 import type { FeedCursor } from "./feed-cursor.js";
 
 /**
  * The room columns the feed needs: enough for its label and its capabilities.
  *
  * `createdByUserId` is absent rather than null for an unowned room, matching the
- * `Simulation` domain model so both go through the same ownership check.
+ * `Room` domain model so both go through the same ownership check.
  */
 export type FeedRoom = {
   id: string;
@@ -32,7 +32,7 @@ export type FeedMineScope = {
 };
 
 export type FeedPageQuery = {
-  /** One room, or every simulation when the unified feed asks (§10.1). */
+  /** One room, or every room when the unified feed asks (§10.1). */
   roomId?: string;
   mine?: FeedMineScope;
   cursor?: FeedCursor;
@@ -109,8 +109,8 @@ export class FeedRepository {
       room: {
         id: row.room.id,
         title: row.room.title,
-        status: toSimulationStatus(row.room.status),
-        visibility: toSimulationVisibility(row.room.visibility),
+        status: toRoomStatus(row.room.status),
+        visibility: toRoomVisibility(row.room.visibility),
         ...optionalField("createdByUserId", row.room.createdByUserId),
       },
     }));
@@ -301,7 +301,7 @@ export class FeedRepository {
    * Three queries regardless of page size, and none of them per thread.
    *
    * A room-scoped caller narrows every lookup to that room as well. It changes no
-   * result — a thread never spans simulations, since a reply is refused unless its
+   * result — a thread never spans rooms, since a reply is refused unless its
    * target belongs to the same one (§10.5) — but without it one room's "自分あて"
    * would read every reply, mention, and quote in the database to build a list
    * that the outer query then throws away (§26).

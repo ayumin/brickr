@@ -2,8 +2,8 @@ import Fastify, { type FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { UserAccount } from "../auth/user-account.js";
 import type { AppServices } from "../services.js";
-import { EventHub } from "../simulation/event-hub.js";
-import { SimulationNotFoundError } from "../simulation/simulation-service.js";
+import { EventHub } from "../rooms/event-hub.js";
+import { RuntimeRoomNotFoundError } from "../rooms/room-runtime-service.js";
 import { registerRoutes } from "./routes.js";
 
 /**
@@ -27,7 +27,7 @@ const user: UserAccount = {
 function makeServices(readable = true) {
   const events = new EventHub();
   const assertRoomFeedReadable = vi.fn((roomId: string) =>
-    readable ? Promise.resolve() : Promise.reject(new SimulationNotFoundError(roomId)),
+    readable ? Promise.resolve() : Promise.reject(new RuntimeRoomNotFoundError(roomId)),
   );
   return {
     services: { events, feed: { assertRoomFeedReadable } } as unknown as AppServices,

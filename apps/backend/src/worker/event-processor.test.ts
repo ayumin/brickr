@@ -3,21 +3,21 @@ import type { AgentService } from "../agents/agent-service.js";
 import type { Character } from "../characters/character.js";
 import type { Post } from "../posts/post.js";
 import type { ScheduledEvent } from "../scheduled-events/scheduled-event.js";
-import type { Simulation } from "../simulation/simulation.js";
+import type { Room } from "../rooms/room.js";
 import { processEvent, type EventProcessorDeps } from "./event-processor.js";
 
 // Mock the thread revival and room review services so we can control their
 // return values without needing to wire up all their dependencies.
-vi.mock("../simulation/thread-revival-service.js", () => ({
+vi.mock("../rooms/thread-revival-service.js", () => ({
   reviveThread: vi.fn(),
   DORMANT_THRESHOLD_MS: 2 * 60 * 60 * 1_000,
 }));
-vi.mock("../simulation/room-review-service.js", () => ({
+vi.mock("../rooms/room-review-service.js", () => ({
   reviewRoom: vi.fn(),
 }));
 
-import { reviveThread } from "../simulation/thread-revival-service.js";
-import { reviewRoom } from "../simulation/room-review-service.js";
+import { reviveThread } from "../rooms/thread-revival-service.js";
+import { reviewRoom } from "../rooms/room-review-service.js";
 
 const now = new Date("2026-08-17T00:00:00.000Z");
 
@@ -50,7 +50,7 @@ const triggerPost: Post = {
   createdAt: now,
 };
 
-const room: Simulation = {
+const room: Room = {
   id: "room-1",
   title: "Room",
   status: "active",
@@ -86,7 +86,7 @@ function makeDeps(generate: (request: GenerateRequest) => Promise<unknown>) {
   const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
   const scheduledEventsCreate = vi.fn(() => Promise.resolve(null));
   const deps = {
-    simulations: { findById: () => Promise.resolve(room) },
+    rooms: { findById: () => Promise.resolve(room) },
     characters: {
       findAll: () => Promise.resolve([character]),
       findById: () => Promise.resolve(character),

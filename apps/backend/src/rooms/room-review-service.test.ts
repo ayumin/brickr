@@ -6,7 +6,7 @@
  */
 import { describe, expect, it, vi } from "vitest";
 import type { Post } from "../posts/post.js";
-import type { Simulation } from "../simulation/simulation.js";
+import type { Room } from "../rooms/room.js";
 import { reviewRoom, type RoomReviewDeps } from "./room-review-service.js";
 
 // ---------------------------------------------------------------------------
@@ -15,7 +15,7 @@ import { reviewRoom, type RoomReviewDeps } from "./room-review-service.js";
 
 const now = new Date("2026-08-17T12:00:00.000Z");
 
-const room: Simulation = {
+const room: Room = {
   id: "room-1",
   title: "Test Room",
   status: "active",
@@ -46,9 +46,9 @@ const dormantPost: Post = {
 
 function makeDeps(overrides: Partial<RoomReviewDeps> = {}): RoomReviewDeps {
   return {
-    simulations: {
+    rooms: {
       findById: vi.fn(() => Promise.resolve(room)),
-    } as unknown as RoomReviewDeps["simulations"],
+    } as unknown as RoomReviewDeps["rooms"],
     castResolver: {
       resolveRespondingCasts: vi.fn(() => Promise.resolve([{ id: "char-1" }])),
     } as unknown as RoomReviewDeps["castResolver"],
@@ -71,9 +71,9 @@ function makeDeps(overrides: Partial<RoomReviewDeps> = {}): RoomReviewDeps {
 describe("reviewRoom", () => {
   it("returns skipped when the room is archived", async () => {
     const deps = makeDeps({
-      simulations: {
+      rooms: {
         findById: vi.fn(() => Promise.resolve({ ...room, status: "archived" })),
-      } as unknown as RoomReviewDeps["simulations"],
+      } as unknown as RoomReviewDeps["rooms"],
     });
 
     const result = await reviewRoom("room-1", deps);
@@ -84,9 +84,9 @@ describe("reviewRoom", () => {
 
   it("returns skipped when the room does not exist", async () => {
     const deps = makeDeps({
-      simulations: {
+      rooms: {
         findById: vi.fn(() => Promise.resolve(null)),
-      } as unknown as RoomReviewDeps["simulations"],
+      } as unknown as RoomReviewDeps["rooms"],
     });
 
     const result = await reviewRoom("room-1", deps);

@@ -16,7 +16,7 @@
  */
 import type { PendingInvitationDto, RoomMembershipDto, RoomVisibility } from "@brickr/shared";
 import { DomainError } from "../domain-error.js";
-import type { SimulationRepository } from "./simulation-repository.js";
+import type { RoomRepository } from "./room-repository.js";
 import type {
   RoomMembership,
   RoomMembershipRepository,
@@ -24,10 +24,10 @@ import type {
 import { CannotModifyOwnerError } from "./room-membership-errors.js";
 import type { HandleRepository } from "../handles/handle-repository.js";
 import {
-  isSimulationOwnerOrAdmin,
-  toSimulationDto,
-  type SimulationActor,
-} from "./simulation-service.js";
+  isRoomOwnerOrAdmin,
+  toRoomDto,
+  type SignedInActor,
+} from "./room-runtime-service.js";
 import type { RoomDto } from "@brickr/shared";
 import { assertNotFeedRoom } from "./feed-room-guard.js";
 import type { UserProfileRepository } from "../user-profile/user-profile-repository.js";
@@ -177,7 +177,7 @@ export type UpdateRoomInput = {
 // ---------------------------------------------------------------------------
 
 export type RoomServiceDeps = {
-  simulations: SimulationRepository;
+  rooms: RoomRepository;
   memberships: RoomMembershipRepository;
   handles?: HandleRepository;
   userProfiles?: UserProfileRepository;
@@ -192,12 +192,12 @@ export class RoomService {
    */
   async create(input: CreateRoomInput): Promise<RoomDto> {
     const visibility: RoomVisibility = input.visibility ?? "public";
-    const simulation = await this.deps.simulations.createWithOwner(
+    const room = await this.deps.rooms.createWithOwner(
       input.title ?? null,
       visibility,
       input.createdByUserId,
     );
-    return toSimulationDto(simulation);
+    return toRoomDto(room);
   }
 
   /**
@@ -207,54 +207,54 @@ export class RoomService {
   async update(
     id: string,
     input: UpdateRoomInput,
-    actor: SimulationActor,
+    actor: SignedInActor,
   ): Promise<RoomDto> {
     if (input.visibility !== undefined) {
       throw new VisibilityImmutableError();
     }
 
-    const simulation = await this.requireRoom(id);
-    this.assertOwnerOrAdmin(simulation, actor, id);
-    assertNotFeedRoom(simulation);
+    const room = await this.requireRoom(id);
+    this.assertOwnerOrAdmin(room, actor, id);
+    assertNotFeedRoom(room);
 
-    if (simulation.status === "archived") {
+    if (room.status === "archived") {
       throw new RoomArchivedError(id);
     }
 
     if (input.title !== undefined) {
-      const updated = await this.deps.simulations.updateTitle(id, input.title);
-      return toSimulationDto(updated);
+      const updated = await this.deps.rooms.updateTitle(id, input.title);
+      return toRoomDto(updated);
     }
 
-    return toSimulationDto(simulation);
+    return toRoomDto(room);
   }
 
   /**
    * Archives a room. Only the owner or an admin may archive.
    */
-  async archive(id: string, actor: SimulationActor): Promise<RoomDto> {
-    const simulation = await this.requireRoom(id);
-    this.assertOwnerOrAdmin(simulation, actor, id);
-    assertNotFeedRoom(simulation);
+  async archive(id: string, actor: SignedInActor): Promise<RoomDto> {
+    const room = await this.requireRoom(id);
+    this.assertOwnerOrAdmin(room, actor, id);
+    assertNotFeedRoom(room);
 
-    const archived = await this.deps.simulations.updateStatus(id, "archived");
-    return toSimulationDto(archived);
+    const archived = await this.deps.rooms.updateStatus(id, "archived");
+    return toRoomDto(archived);
   }
 
   /**
    * Hard-deletes an archived room. Only the owner or an admin may delete.
    * The room must already be archived — active rooms must be archived first.
    */
-  async delete(id: string, actor: SimulationActor): Promise<void> {
-    const simulation = await this.requireRoom(id);
-    this.assertOwnerOrAdmin(simulation, actor, id);
-    assertNotFeedRoom(simulation);
+  async delete(id: string, actor: SignedInActor): Promise<void> {
+    const room = await this.requireRoom(id);
+    this.assertOwnerOrAdmin(room, actor, id);
+    assertNotFeedRoom(room);
 
-    if (simulation.status !== "archived") {
+    if (room.status !== "archived") {
       throw new RoomNotArchivedError(id);
     }
 
-    await this.deps.simulations.delete(id);
+    await this.deps.rooms.delete(id);
   }
 
   /**
@@ -265,7 +265,7 @@ export class RoomService {
   async archiveOwnedBy(userId: string): Promise<void> {
     const roomIds = await this.deps.memberships.findActiveOwnerRooms(userId);
     if (roomIds.length === 0) return;
-    await this.deps.simulations.archiveByIds(roomIds);
+    await this.deps.rooms.archiveByIds(roomIds);
   }
 
   /**
@@ -287,16 +287,16 @@ export class RoomService {
    * Banned members are always rejected. Already-active members get a 409.
    * Pending members (already requested) also get a 409.
    */
-  async join(roomId: string, actor: SimulationActor): Promise<RoomMembershipDto> {
-    const simulation = await this.requireRoom(roomId);
-    assertNotFeedRoom(simulation);
+  async join(roomId: string, actor: SignedInActor): Promise<RoomMembershipDto> {
+    const room = await this.requireRoom(roomId);
+    assertNotFeedRoom(room);
 
-    if (simulation.status === "archived") {
+    if (room.status === "archived") {
       throw new RoomArchivedError(roomId);
     }
 
     // closed/private: invitation only
-    if (simulation.visibility === "closed" || simulation.visibility === "private") {
+    if (room.visibility === "closed" || room.visibility === "private") {
       throw new RoomJoinNotAllowedError(roomId);
     }
 
@@ -308,7 +308,7 @@ export class RoomService {
         throw new RoomAlreadyMemberError(roomId);
       }
       // left/removed: allow re-join by updating status
-      const status = simulation.visibility === "public" ? "active" : "pending";
+      const status = room.visibility === "public" ? "active" : "pending";
       const updated = status === "pending"
         ? await this.deps.memberships.updateStatusByMember(
             roomId,
@@ -328,7 +328,7 @@ export class RoomService {
     }
 
     // No existing membership: create one
-    const isPublic = simulation.visibility === "public";
+    const isPublic = room.visibility === "public";
     const status = isPublic ? "active" : "pending";
     const membership = await this.deps.memberships.create({
       roomId,
@@ -355,13 +355,13 @@ export class RoomService {
   async inviteByHandle(
     roomId: string,
     handle: string,
-    actor: SimulationActor,
+    actor: SignedInActor,
   ): Promise<RoomMembershipDto> {
-    const simulation = await this.requireRoom(roomId);
-    this.assertOwnerOrAdmin(simulation, actor, roomId);
-    assertNotFeedRoom(simulation);
+    const room = await this.requireRoom(roomId);
+    this.assertOwnerOrAdmin(room, actor, roomId);
+    assertNotFeedRoom(room);
 
-    if (simulation.status === "archived") {
+    if (room.status === "archived") {
       throw new RoomArchivedError(roomId);
     }
 
@@ -393,7 +393,7 @@ export class RoomService {
     // For closed/private rooms, create a pending(invitation) membership.
     // For public/open rooms, create an active membership immediately.
     const needsPendingInvitation =
-      simulation.visibility === "closed" || simulation.visibility === "private";
+      room.visibility === "closed" || room.visibility === "private";
 
     const membership = await this.deps.memberships.create({
       roomId,
@@ -413,11 +413,11 @@ export class RoomService {
    * The caller must have a pending(invitation) membership in the room.
    * Transitions the membership to active.
    */
-  async acceptInvitation(roomId: string, actor: SimulationActor): Promise<RoomMembershipDto> {
-    const simulation = await this.requireRoom(roomId);
-    assertNotFeedRoom(simulation);
+  async acceptInvitation(roomId: string, actor: SignedInActor): Promise<RoomMembershipDto> {
+    const room = await this.requireRoom(roomId);
+    assertNotFeedRoom(room);
 
-    if (simulation.status === "archived") {
+    if (room.status === "archived") {
       throw new RoomArchivedError(roomId);
     }
 
@@ -446,9 +446,9 @@ export class RoomService {
    * The caller must have a pending(invitation) membership in the room.
    * Deletes the membership row — no history is kept.
    */
-  async declineInvitation(roomId: string, actor: SimulationActor): Promise<void> {
-    const simulation = await this.requireRoom(roomId);
-    assertNotFeedRoom(simulation);
+  async declineInvitation(roomId: string, actor: SignedInActor): Promise<void> {
+    const room = await this.requireRoom(roomId);
+    assertNotFeedRoom(room);
 
     const membership = await this.deps.memberships.findOne(roomId, "user", actor.id);
     if (
@@ -468,9 +468,9 @@ export class RoomService {
    * The caller must have a pending(request) membership in the room.
    * Deletes the membership row — the user may re-request immediately.
    */
-  async withdrawRequest(roomId: string, actor: SimulationActor): Promise<void> {
-    const simulation = await this.requireRoom(roomId);
-    assertNotFeedRoom(simulation);
+  async withdrawRequest(roomId: string, actor: SignedInActor): Promise<void> {
+    const room = await this.requireRoom(roomId);
+    assertNotFeedRoom(room);
 
     const membership = await this.deps.memberships.findOne(roomId, "user", actor.id);
     if (
@@ -490,9 +490,9 @@ export class RoomService {
    * The caller must have a pending(invitation) membership in the room.
    * Returns enough context for the invitee to decide whether to accept or decline.
    */
-  async getInvitation(roomId: string, actor: SimulationActor): Promise<PendingInvitationDto> {
-    const simulation = await this.requireRoom(roomId);
-    assertNotFeedRoom(simulation);
+  async getInvitation(roomId: string, actor: SignedInActor): Promise<PendingInvitationDto> {
+    const room = await this.requireRoom(roomId);
+    assertNotFeedRoom(room);
 
     const membership = await this.deps.memberships.findOne(roomId, "user", actor.id);
     if (
@@ -510,8 +510,8 @@ export class RoomService {
     // Look up the room owner's profile for display
     let ownerHandle = "unknown";
     let ownerDisplayName = "不明";
-    if (simulation.createdByUserId && this.deps.userProfiles) {
-      const ownerProfile = await this.deps.userProfiles.findById(simulation.createdByUserId);
+    if (room.createdByUserId && this.deps.userProfiles) {
+      const ownerProfile = await this.deps.userProfiles.findById(room.createdByUserId);
       if (ownerProfile) {
         ownerHandle = ownerProfile.handle;
         ownerDisplayName = ownerProfile.displayName;
@@ -519,9 +519,9 @@ export class RoomService {
     }
 
     return {
-      roomId: simulation.id,
-      roomTitle: simulation.title,
-      roomVisibility: simulation.visibility,
+      roomId: room.id,
+      roomTitle: room.title,
+      roomVisibility: room.visibility,
       ownerHandle,
       ownerDisplayName,
       activeMemberCount,
@@ -536,11 +536,11 @@ export class RoomService {
    * - The room owner cannot leave (must archive or transfer ownership first).
    * - Transitions the membership from active → left.
    */
-  async leave(roomId: string, actor: SimulationActor): Promise<void> {
-    const simulation = await this.requireRoom(roomId);
+  async leave(roomId: string, actor: SignedInActor): Promise<void> {
+    const room = await this.requireRoom(roomId);
 
     // Feed rooms are implicitly joined and cannot be left.
-    if (simulation.scope === "global") {
+    if (room.scope === "global") {
       throw new CannotLeaveFeedRoomError();
     }
 
@@ -568,13 +568,13 @@ export class RoomService {
   async approveMembership(
     roomId: string,
     memberId: string,
-    actor: SimulationActor,
+    actor: SignedInActor,
   ): Promise<RoomMembershipDto> {
-    const simulation = await this.requireRoom(roomId);
-    this.assertOwnerOrAdmin(simulation, actor, roomId);
-    assertNotFeedRoom(simulation);
+    const room = await this.requireRoom(roomId);
+    this.assertOwnerOrAdmin(room, actor, roomId);
+    assertNotFeedRoom(room);
 
-    if (simulation.status === "archived") {
+    if (room.status === "archived") {
       throw new RoomArchivedError(roomId);
     }
 
@@ -595,16 +595,16 @@ export class RoomService {
   async removeMembership(
     roomId: string,
     memberId: string,
-    actor: SimulationActor,
+    actor: SignedInActor,
   ): Promise<void> {
-    const simulation = await this.requireRoom(roomId);
-    this.assertOwnerOrAdmin(simulation, actor, roomId);
-    assertNotFeedRoom(simulation);
+    const room = await this.requireRoom(roomId);
+    this.assertOwnerOrAdmin(room, actor, roomId);
+    assertNotFeedRoom(room);
 
-    if (simulation.status === "archived") {
+    if (room.status === "archived") {
       throw new RoomArchivedError(roomId);
     }
-    this.assertNotOwnerMembership(simulation, memberId);
+    this.assertNotOwnerMembership(room, memberId);
 
     const updated = await this.deps.memberships.updateStatusByMember(
       roomId,
@@ -622,16 +622,16 @@ export class RoomService {
   async banMember(
     roomId: string,
     memberId: string,
-    actor: SimulationActor,
+    actor: SignedInActor,
   ): Promise<void> {
-    const simulation = await this.requireRoom(roomId);
-    this.assertOwnerOrAdmin(simulation, actor, roomId);
-    assertNotFeedRoom(simulation);
+    const room = await this.requireRoom(roomId);
+    this.assertOwnerOrAdmin(room, actor, roomId);
+    assertNotFeedRoom(room);
 
-    if (simulation.status === "archived") {
+    if (room.status === "archived") {
       throw new RoomArchivedError(roomId);
     }
-    this.assertNotOwnerMembership(simulation, memberId);
+    this.assertNotOwnerMembership(room, memberId);
 
     const updated = await this.deps.memberships.updateStatusByMember(
       roomId,
@@ -645,26 +645,26 @@ export class RoomService {
   // -- helpers ---------------------------------------------------------------
 
   private async requireRoom(id: string) {
-    const simulation = await this.deps.simulations.findById(id);
-    if (!simulation) throw new RoomNotFoundError(id);
-    return simulation;
+    const room = await this.deps.rooms.findById(id);
+    if (!room) throw new RoomNotFoundError(id);
+    return room;
   }
 
   private assertOwnerOrAdmin(
-    simulation: { createdByUserId?: string },
-    actor: SimulationActor,
+    room: { createdByUserId?: string },
+    actor: SignedInActor,
     id: string,
   ): void {
-    if (!isSimulationOwnerOrAdmin(simulation, actor)) {
+    if (!isRoomOwnerOrAdmin(room, actor)) {
       throw new RoomForbiddenError(id);
     }
   }
 
   private assertNotOwnerMembership(
-    simulation: { createdByUserId?: string },
+    room: { createdByUserId?: string },
     memberId: string,
   ): void {
-    if (memberId === simulation.createdByUserId) {
+    if (memberId === room.createdByUserId) {
       throw new CannotModifyOwnerError();
     }
   }

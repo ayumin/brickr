@@ -47,7 +47,7 @@ import {
   banMemberOpenApiMeta,
   registerRoomsRoutes,
 } from "./rooms-routes.js";
-import type { RoomService } from "../simulation/room-service.js";
+import type { RoomService } from "../rooms/room-service.js";
 import {
   RoomNotFoundError,
   RoomForbiddenError,
@@ -58,15 +58,15 @@ import {
   RoomMemberBannedError,
   UserNotFoundError,
   VisibilityImmutableError,
-} from "../simulation/room-service.js";
-import type { RoomMembershipService } from "../simulation/room-membership-service.js";
+} from "../rooms/room-service.js";
+import type { RoomMembershipService } from "../rooms/room-membership-service.js";
 import {
   MembershipNotFoundError,
   MemberAlreadyExistsError,
   MemberBannedError,
   CannotModifyOwnerError,
   InvalidStatusTransitionError,
-} from "../simulation/room-membership-service.js";
+} from "../rooms/room-membership-service.js";
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -81,7 +81,7 @@ const signedInUser: UserAccount = {
   interests: [],
 };
 
-class SimulationNotFoundError extends DomainError {
+class RuntimeRoomNotFoundError extends DomainError {
   readonly httpStatus = 404;
   readonly errorCode = "not_found" as const;
 }
@@ -151,19 +151,19 @@ function makeRoomMembershipService(
 }
 
 function makeServices(
-  simulationsOverrides: Partial<AppServices["simulations"]> = {},
+  roomRuntimeOverrides: Partial<AppServices["roomRuntime"]> = {},
   roomsOverrides: Partial<RoomService> = {},
   roomMembershipsOverrides: Partial<RoomMembershipService> = {},
 ): AppServices {
   return {
-    simulations: {
+    roomRuntime: {
       get: () => Promise.resolve({ room: roomSummary }),
       listRooms: () => Promise.resolve([]),
       stop: () => Promise.resolve({ ...roomDto, status: "archived" as const }),
       resume: () => Promise.resolve(roomDto),
-      ...simulationsOverrides,
+      ...roomRuntimeOverrides,
     },
-    simulationAnalysis: {
+    roomAnalysis: {
       analyze: () => Promise.resolve({ room: roomDto, postCount: 0 }),
     },
     rooms: makeRoomService(roomsOverrides),
@@ -260,7 +260,7 @@ describe("GET /api/rooms/:id", () => {
 
   it("maps a DomainError from the service to its HTTP answer", async () => {
     const services = makeServices({
-      get: () => Promise.reject(new SimulationNotFoundError("room not found")),
+      get: () => Promise.reject(new RuntimeRoomNotFoundError("room not found")),
     });
     const app = await buildApp(signedInUser, services);
     apps.push(app);

@@ -53,7 +53,7 @@ describe("EventHub (§11.4)", () => {
     hub.publish("room-1", activity("room-1"));
 
     expect(other).not.toHaveBeenCalled();
-    // The feed spans every simulation, so it still sees it.
+    // The feed spans every room, so it still sees it.
     expect(feed).toHaveBeenCalledTimes(1);
   });
 
@@ -126,7 +126,7 @@ describe("EventHub (§11.4)", () => {
       expect(hub.hasSubscribers("room-2")).toBe(false);
     });
 
-    /** The feed spans every simulation, so one feed listener covers every room. */
+    /** The feed spans every room, so one feed listener covers every room. */
     it("is true for every room while the feed is listening", () => {
       const hub = new EventHub();
       hub.subscribeAll(vi.fn());

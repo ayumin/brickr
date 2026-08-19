@@ -15,7 +15,7 @@ export function registerPostRoutes(app: FastifyInstance, services: AppServices):
     if (!params) return reply;
 
     return withDomainErrors(reply, async () => {
-      await services.simulations.requireReadableRoom(params.id, user);
+      await services.roomRuntime.requireReadableRoom(params.id, user);
       return { posts: await services.posts.listByRoom(params.id) };
     });
   });
@@ -31,7 +31,7 @@ export function registerPostRoutes(app: FastifyInstance, services: AppServices):
     if (!body) return reply;
 
     return withDomainErrors(reply, async () => {
-      const post = await services.simulations.submitUserPost({
+      const post = await services.roomRuntime.submitUserPost({
         roomId: params.id,
         authorId: user.id,
         isAdmin: user.isAdmin,

@@ -26,13 +26,13 @@ import type { ThreadActivityEvent } from "./public-events.js";
 import { computeRoomCapabilities, type RoomActor } from "./room-authorization.js";
 import { selectCascadeResponders, selectResponders } from "./responder-selector.js";
 import type { UserProfile } from "../user-profile/user-profile.js";
-import type { SimulationRepository } from "./simulation-repository.js";
+import type { RoomRepository } from "./room-repository.js";
 import type { RoomMembershipRepository } from "./room-membership-repository.js";
 import {
-  type Simulation,
-  type SimulationActor,
-  type SimulationSummary,
-} from "./simulation.js";
+  type Room,
+  type SignedInActor,
+  type RoomSummary,
+} from "./room.js";
 import { CastParticipationResolver } from "./cast-participation-resolver.js";
 
 /** Hard ceiling on character posts generated from one user post. */
@@ -51,13 +51,13 @@ export type SubmitUserPostInput = {
   quoteOf?: string | null;
 };
 
-export type SimulationLogger = {
+export type RoomRuntimeLogger = {
   info: (obj: Record<string, unknown>, msg: string) => void;
   warn: (obj: Record<string, unknown>, msg: string) => void;
   error: (obj: Record<string, unknown>, msg: string) => void;
 };
 
-export type SimulationServiceOptions = {
+export type RoomRuntimeServiceOptions = {
   minResponders: number;
   maxResponders: number;
   maxConcurrentCharacters: number;
@@ -69,22 +69,22 @@ export type SimulationServiceOptions = {
  *
  * Declared here as the narrow port this service needs, and satisfied by
  * `FeedService`, so the dependency stays one-way: the feed knows about
- * simulations, not the other way round.
+ * rooms, not the other way round.
  */
 export type ThreadActivitySource = {
   buildThreadActivity: (post: Post) => Promise<ThreadActivityEvent>;
 };
 
-export type SimulationServiceDeps = {
-  simulations: SimulationRepository;
+export type RoomRuntimeServiceDeps = {
+  rooms: RoomRepository;
   memberships: RoomMembershipRepository;
   posts: PostService;
   characters: CharacterRepository;
   threads: ThreadService;
   agents: AgentService;
   events: EventHub;
-  options: SimulationServiceOptions;
-  logger: SimulationLogger;
+  options: RoomRuntimeServiceOptions;
+  logger: RoomRuntimeLogger;
   tokenUsage: TokenUsageService;
   threadActivity: ThreadActivitySource;
   /** Optional: when present, token usage is recorded against the provider budget (issue #162). */
@@ -93,28 +93,28 @@ export type SimulationServiceDeps = {
   castResolver: CastParticipationResolver;
 };
 
-export class SimulationNotFoundError extends DomainError {
+export class RuntimeRoomNotFoundError extends DomainError {
   readonly httpStatus = 404;
   readonly errorCode = "not_found" as const;
   constructor(id: string) {
-    super(`simulation "${id}" not found`);
+    super(`room "${id}" not found`);
   }
 }
 
-export class SimulationStoppedError extends DomainError {
+export class RoomStoppedError extends DomainError {
   readonly httpStatus = 409;
   readonly errorCode = "room_archived" as const;
   constructor(id: string) {
-    super(`simulation "${id}" has been stopped`);
+    super(`room "${id}" has been stopped`);
   }
 }
 
 /** Rename/stop/resume/analysis are limited to the creator or an admin (CLAUDE.md §66.6). */
-export class SimulationForbiddenError extends DomainError {
+export class RoomManageForbiddenError extends DomainError {
   readonly httpStatus = 403;
   readonly errorCode = "forbidden" as const;
   constructor(id: string) {
-    super(`not allowed to manage simulation "${id}"`);
+    super(`not allowed to manage room "${id}"`);
   }
 }
 
@@ -155,17 +155,17 @@ export class RoomPostForbiddenError extends DomainError {
  */
 export async function assertRoomReadable(
   memberships: RoomMembershipRepository,
-  simulation: Pick<Simulation, "id" | "status" | "visibility" | "createdByUserId" | "scope">,
-  actor: SimulationActor,
+  room: Pick<Room, "id" | "status" | "visibility" | "createdByUserId" | "scope">,
+  actor: SignedInActor,
 ): Promise<void> {
-  const roomActor = await toRoomActor(memberships, simulation.id, actor, simulation.createdByUserId);
+  const roomActor = await toRoomActor(memberships, room.id, actor, room.createdByUserId);
   const caps = computeRoomCapabilities(
-    { visibility: simulation.visibility, status: simulation.status, scope: simulation.scope },
+    { visibility: room.visibility, status: room.status, scope: room.scope },
     roomActor,
   );
 
   if (!caps.canView) {
-    throw new SimulationNotFoundError(simulation.id);
+    throw new RuntimeRoomNotFoundError(room.id);
   }
 }
 
@@ -176,16 +176,16 @@ export async function assertRoomReadable(
  * thread as it exists the moment that character starts working, so characters
  * that start later legitimately see more.
  */
-export class SimulationService {
-  /** Tracks in-flight generation per simulation so `stop` can take effect. */
+export class RoomRuntimeService {
+  /** Tracks in-flight generation per room so `stop` can take effect. */
   private readonly stopped = new Set<string>();
 
-  constructor(private readonly deps: SimulationServiceDeps) {}
+  constructor(private readonly deps: RoomRuntimeServiceDeps) {}
 
   async create(title: string | null, createdByUserId: string): Promise<RoomDto> {
-    const simulation = await this.deps.simulations.create(title, createdByUserId);
-    this.stopped.delete(simulation.id);
-    return toSimulationDto(simulation);
+    const room = await this.deps.rooms.create(title, createdByUserId);
+    this.stopped.delete(room.id);
+    return toRoomDto(room);
   }
 
   /**
@@ -196,9 +196,9 @@ export class SimulationService {
    * caller should see or manage. Shared by `list()` and `listRooms()` so this
    * exclusion is defined once rather than duplicated at each call site.
    */
-  private async listableSimulations(actor: SimulationActor): Promise<SimulationSummary[]> {
-    const simulations = await this.deps.simulations.findAllVisibleTo(actor);
-    return simulations.filter((simulation) => simulation.id !== DEFAULT_ROOM_ID);
+  private async listableRooms(actor: SignedInActor): Promise<RoomSummary[]> {
+    const rooms = await this.deps.rooms.findAllVisibleTo(actor);
+    return rooms.filter((room) => room.id !== DEFAULT_ROOM_ID);
   }
 
   /**
@@ -208,9 +208,9 @@ export class SimulationService {
    * decides whether `rename`/`stop`/`resume` will be accepted, so deriving it
    * twice is how a button appears for an action the server then refuses.
    */
-  async list(actor: SimulationActor): Promise<RoomSummaryDto[]> {
-    const simulations = await this.listableSimulations(actor);
-    return simulations.map((simulation) => toSimulationSummaryDto(simulation, actor));
+  async list(actor: SignedInActor): Promise<RoomSummaryDto[]> {
+    const rooms = await this.listableRooms(actor);
+    return rooms.map((room) => toRoomSummaryDto(room, actor));
   }
 
   /**
@@ -224,9 +224,9 @@ export class SimulationService {
    * - Pending badge: owners receive a `pendingCount` field with the number of
    *   pending join requests.
    */
-  async listRooms(actor: SimulationActor): Promise<RoomListEntryDto[]> {
-    const simulations = await this.listableSimulations(actor);
-    return simulations.map((simulation) => toRoomListEntryDto(simulation, actor));
+  async listRooms(actor: SignedInActor): Promise<RoomListEntryDto[]> {
+    const rooms = await this.listableRooms(actor);
+    return rooms.map((room) => toRoomListEntryDto(room, actor));
   }
 
   /**
@@ -237,22 +237,22 @@ export class SimulationService {
    *
    * Also includes server-computed `capabilities` for the caller (issue #178).
    */
-  async get(id: string, actor: SimulationActor): Promise<RoomResponse> {
-    const simulation = await this.requireSimulationSummary(id);
+  async get(id: string, actor: SignedInActor): Promise<RoomResponse> {
+    const room = await this.requireRoomSummary(id);
     const roomActor = await toRoomActor(
       this.deps.memberships,
-      simulation.id,
+      room.id,
       actor,
-      simulation.createdByUserId,
+      room.createdByUserId,
     );
     const caps = computeRoomCapabilities(
-      { visibility: simulation.visibility, status: simulation.status, scope: simulation.scope },
+      { visibility: room.visibility, status: room.status, scope: room.scope },
       roomActor,
     );
     if (!caps.canView) {
-      throw new SimulationNotFoundError(simulation.id);
+      throw new RuntimeRoomNotFoundError(room.id);
     }
-    const summary = toSimulationSummaryDto(simulation, actor);
+    const summary = toRoomSummaryDto(room, actor);
     return {
       room: {
         ...summary,
@@ -271,19 +271,20 @@ export class SimulationService {
   /**
    * The room behind a room-scoped request, or a 404 (§10.4).
    *
-   * Public so every route that treats this simulation *as a room* — the room
+   * Public so every route that treats this room *as a room* — the room
    * detail, the room feed — applies exactly the same rule. Do not reach for
-   * this to gate "give me this simulation's posts" in general: `requireReadableSimulation`
-   * below is that rule, and it deliberately does not refuse the global row.
+   * this to gate "give me this room's posts" in general:
+   * `requireReadableRoomForPosts` below is that rule, and it deliberately does
+   * not refuse the global row.
    */
-  async requireReadableRoom(id: string, actor: SimulationActor): Promise<Simulation> {
-    const simulation = await this.requireSimulation(id);
-    await assertRoomReadable(this.deps.memberships, simulation, actor);
-    return simulation;
+  async requireReadableRoom(id: string, actor: SignedInActor): Promise<Room> {
+    const room = await this.requireRoom(id);
+    await assertRoomReadable(this.deps.memberships, room, actor);
+    return room;
   }
 
   /**
-   * The simulation behind a request for its posts in full (§10.8), or a 404.
+   * The room behind a request for its posts in full (§10.8), or a 404.
    *
    * Deliberately weaker than `requireReadableRoom`: a stopped room still stays
    * hidden from anyone but its creator or an administrator, but the global feed
@@ -291,60 +292,60 @@ export class SimulationService {
    * stop the global feed from getting a second, room-shaped surface through
    * `GET /api/rooms/:id` — it was never
    * about whether a post's own thread (post detail, §10.8) can be reconstructed,
-   * which must work the same way regardless of which simulation a post lives in.
+   * which must work the same way regardless of which room a post lives in.
    *
    * Closed/private rooms require an active membership (or ownership/admin),
    * backed by a real `RoomMembership` lookup (issue #175, closing out #153) —
    * except the Feed room, which has no membership rows and is never refused.
    */
-  async requireReadableSimulation(id: string, actor: SimulationActor): Promise<Simulation> {
-    const simulation = await this.requireSimulation(id);
+  async requireReadableRoomForPosts(id: string, actor: SignedInActor): Promise<Room> {
+    const room = await this.requireRoom(id);
     // The Feed room is deliberately never refused here (see the doc comment
     // above): it has no membership rows, and computeRoomCapabilities's Feed-room
     // branch would otherwise report canView: false for everyone.
-    if (simulation.scope === "global") return simulation;
+    if (room.scope === "global") return room;
     const roomActor = await toRoomActor(
       this.deps.memberships,
-      simulation.id,
+      room.id,
       actor,
-      simulation.createdByUserId,
+      room.createdByUserId,
     );
     const caps = computeRoomCapabilities(
-      { visibility: simulation.visibility, status: simulation.status, scope: simulation.scope },
+      { visibility: room.visibility, status: room.status, scope: room.scope },
       roomActor,
     );
     if (!caps.canView) {
-      throw new SimulationNotFoundError(simulation.id);
+      throw new RuntimeRoomNotFoundError(room.id);
     }
-    return simulation;
+    return room;
   }
 
-  private async requireSimulationSummary(id: string): Promise<SimulationSummary> {
-    const simulation = await this.deps.simulations.findSummaryById(id);
-    if (!simulation) throw new SimulationNotFoundError(id);
-    return simulation;
+  private async requireRoomSummary(id: string): Promise<RoomSummary> {
+    const room = await this.deps.rooms.findSummaryById(id);
+    if (!room) throw new RuntimeRoomNotFoundError(id);
+    return room;
   }
 
-  async rename(id: string, title: string, actor: SimulationActor): Promise<RoomDto> {
-    const simulation = await this.requireSimulation(id);
-    assertSimulationOwnerOrAdmin(simulation, actor);
-    return toSimulationDto(await this.deps.simulations.updateTitle(id, title));
+  async rename(id: string, title: string, actor: SignedInActor): Promise<RoomDto> {
+    const room = await this.requireRoom(id);
+    assertRoomOwnerOrAdmin(room, actor);
+    return toRoomDto(await this.deps.rooms.updateTitle(id, title));
   }
 
-  async stop(id: string, actor: SimulationActor): Promise<RoomDto> {
-    const simulation = await this.requireSimulation(id);
-    assertSimulationOwnerOrAdmin(simulation, actor);
+  async stop(id: string, actor: SignedInActor): Promise<RoomDto> {
+    const room = await this.requireRoom(id);
+    assertRoomOwnerOrAdmin(room, actor);
     this.stopped.add(id);
-    const stoppedSimulation = await this.deps.simulations.updateStatus(id, "archived");
-    return toSimulationDto(stoppedSimulation);
+    const stoppedRoom = await this.deps.rooms.updateStatus(id, "archived");
+    return toRoomDto(stoppedRoom);
   }
 
-  async resume(id: string, actor: SimulationActor): Promise<RoomDto> {
-    const simulation = await this.requireSimulation(id);
-    assertSimulationOwnerOrAdmin(simulation, actor);
+  async resume(id: string, actor: SignedInActor): Promise<RoomDto> {
+    const room = await this.requireRoom(id);
+    assertRoomOwnerOrAdmin(room, actor);
     this.stopped.delete(id);
-    const resumedSimulation = await this.deps.simulations.updateStatus(id, "active");
-    return toSimulationDto(resumedSimulation);
+    const resumedRoom = await this.deps.rooms.updateStatus(id, "active");
+    return toRoomDto(resumedRoom);
   }
 
   /**
@@ -352,23 +353,23 @@ export class SimulationService {
    * generation in the background. The caller does not wait for the characters.
    */
   async submitUserPost(input: SubmitUserPostInput): Promise<Post> {
-    const simulation = await this.requireSimulation(input.roomId);
-    if (simulation.status === "archived") {
-      throw new SimulationStoppedError(input.roomId);
+    const room = await this.requireRoom(input.roomId);
+    if (room.status === "archived") {
+      throw new RoomStoppedError(input.roomId);
     }
 
     // The Feed room's canPost only checks isAuthenticated (no membership row
     // exists to look up), so skip the query entirely for it — the same
-    // short-circuit `requireReadableSimulation` above already uses.
-    if (simulation.scope !== "global") {
+    // short-circuit `requireReadableRoom` above already uses.
+    if (room.scope !== "global") {
       const roomActor = await toRoomActor(
         this.deps.memberships,
         input.roomId,
         { id: input.authorId, isAdmin: input.isAdmin ?? false },
-        simulation.createdByUserId,
+        room.createdByUserId,
       );
       const caps = computeRoomCapabilities(
-        { visibility: simulation.visibility, status: simulation.status, scope: simulation.scope },
+        { visibility: room.visibility, status: room.status, scope: room.scope },
         roomActor,
       );
       if (!caps.canPost) {
@@ -384,7 +385,7 @@ export class SimulationService {
     // post in a public room atomically create the membership so the user
     // appears in the member list immediately. left/removed actors are
     // re-activated; banned actors are already blocked by canPost above.
-    if (simulation.scope !== "global" && simulation.visibility === "public") {
+    if (room.scope !== "global" && room.visibility === "public") {
       await this.ensurePublicRoomMembership(input.roomId, input.authorId);
     }
 
@@ -403,7 +404,7 @@ export class SimulationService {
     // `runGeneration` reports its own outcome and does not reject; this `.catch`
     // is a last resort so a failure in the reporting itself cannot become an
     // unhandled rejection.
-    void this.runGeneration(post, input.responderIds, simulation.scope).catch(() => undefined);
+    void this.runGeneration(post, input.responderIds, room.scope).catch(() => undefined);
 
     return post;
   }
@@ -414,7 +415,7 @@ export class SimulationService {
   private async runGeneration(
     triggerPost: Post,
     explicitIds: string[],
-    roomScope: Simulation["scope"],
+    roomScope: Room["scope"],
   ): Promise<void> {
     const generatedIds: string[] = [];
     const budget = { remaining: MAX_POSTS_PER_SUBMISSION };
@@ -464,7 +465,7 @@ export class SimulationService {
     } catch (error) {
       this.deps.logger.error(
         { roomId: triggerPost.roomId, err: describe(error) },
-        "simulation run failed",
+        "room run failed",
       );
       // Internal only: the reason names the provider or model that failed, which
       // would say out loud that the author is an AI (§11.2). Subscribers learn
@@ -589,7 +590,7 @@ export class SimulationService {
       return null;
     } finally {
       // In a `finally` so every start is answered exactly once, including when
-      // generation throws or the simulation was stopped mid-flight. An unanswered
+      // generation throws or the room was stopped mid-flight. An unanswered
       // start would leave the UI showing a response that never arrives.
       activity.finish(outcome);
     }
@@ -597,7 +598,7 @@ export class SimulationService {
 
   /**
    * Picks an action, generates, persists and publishes. Returns null if the
-   * thread disappeared or the simulation was stopped mid-flight — both are
+   * thread disappeared or the room was stopped mid-flight — both are
    * "stayed quiet", not a failure, so the caller must not treat them as one.
    */
   private async generateAndPublish(
@@ -773,10 +774,10 @@ export class SimulationService {
 
   // -- helpers --------------------------------------------------------------
 
-  private async requireSimulation(id: string): Promise<Simulation> {
-    const simulation = await this.deps.simulations.findById(id);
-    if (!simulation) throw new SimulationNotFoundError(id);
-    return simulation;
+  private async requireRoom(id: string): Promise<Room> {
+    const room = await this.deps.rooms.findById(id);
+    if (!room) throw new RuntimeRoomNotFoundError(id);
+    return room;
   }
 
   private async assertPostBelongsToRoom(
@@ -824,14 +825,14 @@ export class SimulationService {
   }
 }
 
-export function toSimulationDto(simulation: Simulation): RoomDto {
+export function toRoomDto(room: Room): RoomDto {
   return {
-    id: simulation.id,
-    title: simulation.title,
-    status: simulation.status,
-    visibility: simulation.visibility,
-    createdAt: simulation.createdAt.toISOString(),
-    ...optionalField("createdByUserId", simulation.createdByUserId),
+    id: room.id,
+    title: room.title,
+    status: room.status,
+    visibility: room.visibility,
+    createdAt: room.createdAt.toISOString(),
+    ...optionalField("createdByUserId", room.createdByUserId),
   };
 }
 
@@ -845,27 +846,27 @@ export function toSimulationDto(simulation: Simulation): RoomDto {
  * number of pending join requests, used to show a badge on the room entry.
  * Non-owners receive no `pendingCount` field at all.
  */
-export function toSimulationSummaryDto(
-  simulation: SimulationSummary,
-  actor: SimulationActor,
+export function toRoomSummaryDto(
+  room: RoomSummary,
+  actor: SignedInActor,
 ): RoomSummaryDto {
-  const isOwner = isSimulationOwnerOrAdmin(simulation, actor);
+  const isOwner = isRoomOwnerOrAdmin(room, actor);
   return {
-    ...toSimulationDto(simulation),
-    postCount: simulation.postCount,
-    lastActivityAt: simulation.lastActivityAt.toISOString(),
-    creator: simulation.creator,
+    ...toRoomDto(room),
+    postCount: room.postCount,
+    lastActivityAt: room.lastActivityAt.toISOString(),
+    creator: room.creator,
     canManage: isOwner,
-    ...(isOwner && simulation.pendingCount !== undefined
-      ? { pendingCount: simulation.pendingCount }
+    ...(isOwner && room.pendingCount !== undefined
+      ? { pendingCount: room.pendingCount }
       : {}),
   };
 }
 
-export type { SimulationActor } from "./simulation.js";
+export type { SignedInActor } from "./room.js";
 
 /**
- * Converts a `SimulationActor` to a `RoomActor` for the authorization service.
+ * Converts a `SignedInActor` to a `RoomActor` for the authorization service.
  *
  * Queries `RoomMembership` for the actor's real row in this room (issue #175)
  * and only falls back to synthesising an owner membership from
@@ -879,7 +880,7 @@ export type { SimulationActor } from "./simulation.js";
 export async function toRoomActor(
   memberships: RoomMembershipRepository,
   roomId: string,
-  actor: SimulationActor,
+  actor: SignedInActor,
   createdByUserId: string | undefined | null,
 ): Promise<RoomActor> {
   const membership = await memberships.findOne(roomId, "user", actor.id);
@@ -909,28 +910,28 @@ export async function toRoomActor(
 }
 
 /**
- * A simulation with no owner (created before login existed) matches no actor
+ * A room with no owner (created before login existed) matches no actor
  * id, so only an admin may manage it — mirrors the Character rule (§66.14),
- * even though Simulation ownership itself is public rather than private.
+ * even though Room ownership itself is public rather than private.
  */
-export function isSimulationOwnerOrAdmin(
-  simulation: Pick<Simulation, "createdByUserId">,
-  actor: SimulationActor,
+export function isRoomOwnerOrAdmin(
+  room: Pick<Room, "createdByUserId">,
+  actor: SignedInActor,
 ): boolean {
-  return actor.isAdmin || actor.id === simulation.createdByUserId;
+  return actor.isAdmin || actor.id === room.createdByUserId;
 }
 
-export function assertSimulationOwnerOrAdmin(
-  simulation: Simulation,
-  actor: SimulationActor,
+export function assertRoomOwnerOrAdmin(
+  room: Room,
+  actor: SignedInActor,
 ): void {
-  if (!isSimulationOwnerOrAdmin(simulation, actor)) {
-    throw new SimulationForbiddenError(simulation.id);
+  if (!isRoomOwnerOrAdmin(room, actor)) {
+    throw new RoomManageForbiddenError(room.id);
   }
 }
 
 /**
- * Converts a `SimulationSummary` to a `RoomListEntryDto` for the visibility-
+ * Converts a `RoomSummary` to a `RoomListEntryDto` for the visibility-
  * aware room list (issue #155).
  *
  * For `closed` rooms where the caller is not an active member, only the
@@ -941,32 +942,32 @@ export function assertSimulationOwnerOrAdmin(
  * function does not need a second DB round-trip.
  */
 export function toRoomListEntryDto(
-  simulation: SimulationSummary,
-  actor: SimulationActor,
+  room: RoomSummary,
+  actor: SignedInActor,
 ): RoomListEntryDto {
-  const isOwnerOrAdmin = isSimulationOwnerOrAdmin(simulation, actor);
-  const isActiveMember = simulation.callerIsActiveMember ?? false;
+  const isOwnerOrAdmin = isRoomOwnerOrAdmin(room, actor);
+  const isActiveMember = room.callerIsActiveMember ?? false;
 
   // Closed rooms: non-members (who are not the owner or admin) receive only
   // the prescribed metadata. Owners and admins always get the full entry.
   if (
-    simulation.visibility === "closed" &&
+    room.visibility === "closed" &&
     !isActiveMember &&
     !isOwnerOrAdmin
   ) {
     return {
       restricted: true,
-      id: simulation.id,
-      title: simulation.title,
-      visibility: simulation.visibility,
-      createdAt: simulation.createdAt.toISOString(),
+      id: room.id,
+      title: room.title,
+      visibility: room.visibility,
+      createdAt: room.createdAt.toISOString(),
     };
   }
 
   return {
     restricted: false,
     isMember: isActiveMember,
-    ...toSimulationSummaryDto(simulation, actor),
+    ...toRoomSummaryDto(room, actor),
   };
 }
 

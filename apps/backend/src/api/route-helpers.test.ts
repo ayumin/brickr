@@ -2,7 +2,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { DomainError } from "../domain-error.js";
-import { parseOr400, withDomainErrors, withSimulation } from "./route-helpers.js";
+import { parseOr400, withDomainErrors, withRoom } from "./route-helpers.js";
 
 function fakeReply(): { reply: FastifyReply; result: () => { status: number; body: unknown } } {
   let status = 0;
@@ -82,15 +82,15 @@ describe("withDomainErrors", () => {
   });
 });
 
-describe("withSimulation", () => {
+describe("withRoom", () => {
   function fakeRequest(params: unknown): FastifyRequest {
     return { params } as unknown as FastifyRequest;
   }
 
-  it("answers 400 for an invalid simulation id", async () => {
+  it("answers 400 for an invalid room id", async () => {
     const { reply, result } = fakeReply();
     const request = fakeRequest({});
-    await withSimulation(request, reply, () => Promise.resolve("unused"));
+    await withRoom(request, reply, () => Promise.resolve("unused"));
     const { status, body } = result();
     expect(status).toBe(400);
     expect(body).toMatchObject({ error: { code: "invalid_params" } });
@@ -99,7 +99,7 @@ describe("withSimulation", () => {
   it("passes the parsed id to the handler and returns its result", async () => {
     const { reply } = fakeReply();
     const request = fakeRequest({ id: "sim-1" });
-    await expect(withSimulation(request, reply, (id) => Promise.resolve(`got:${id}`))).resolves.toBe(
+    await expect(withRoom(request, reply, (id) => Promise.resolve(`got:${id}`))).resolves.toBe(
       "got:sim-1",
     );
   });
@@ -107,7 +107,7 @@ describe("withSimulation", () => {
   it("maps a DomainError thrown by the handler", async () => {
     const { reply, result } = fakeReply();
     const request = fakeRequest({ id: "sim-1" });
-    await withSimulation(request, reply, () => Promise.reject(new TeapotError("nope")));
+    await withRoom(request, reply, () => Promise.reject(new TeapotError("nope")));
     const { status } = result();
     expect(status).toBe(418);
   });

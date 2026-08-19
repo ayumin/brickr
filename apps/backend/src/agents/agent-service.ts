@@ -3,7 +3,7 @@ import type { LLMClient } from "../llm/llm-client.js";
 import { LLMError, type ProviderId } from "../llm/provider.js";
 import type { ModelProfileRepository } from "../model-profiles/model-profile-repository.js";
 import type { Post } from "../posts/post.js";
-import type { ResponseAction } from "../simulation/simulation.js";
+import type { ResponseAction } from "../rooms/room.js";
 import type { HandleResolver } from "./prompt-builder.js";
 import { buildMessages, buildSystemPrompt } from "./prompt-builder.js";
 import { sanitizeGeneratedPost } from "./sanitize.js";

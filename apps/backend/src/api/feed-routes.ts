@@ -3,7 +3,7 @@ import { requireUser } from "../auth/auth-context.js";
 import type { AppServices } from "../services.js";
 import { sendError } from "./errors.js";
 import { toFeedReader } from "./feed-reader.js";
-import { parseOr400, withDomainErrors, withSimulation } from "./route-helpers.js";
+import { parseOr400, withDomainErrors, withRoom } from "./route-helpers.js";
 import { feedQuerySchema } from "./schemas.js";
 
 export function registerFeedRoutes(app: FastifyInstance, services: AppServices): void {
@@ -39,7 +39,7 @@ export function registerFeedRoutes(app: FastifyInstance, services: AppServices):
     const query = parseOr400(feedQuerySchema, request.query, reply, "invalid_query", "feed query is invalid");
     if (!query) return reply;
 
-    return withSimulation(request, reply, async (id) =>
+    return withRoom(request, reply, async (id) =>
       services.feed.getRoomFeed(id, {
         reader: toFeedReader(user),
         filter: query.filter ?? "all",

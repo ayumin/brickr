@@ -4,17 +4,17 @@ import type { LLMClient } from "../llm/llm-client.js";
 import type { LLMProviderRegistry } from "../llm/provider-registry.js";
 import type { PostService } from "../posts/post-service.js";
 import {
-  parseSimulationSummary,
+  parseRoomSummary,
   rankAuthors,
   rankPosts,
-  SimulationAnalysisService,
-} from "./simulation-analysis-service.js";
+  RoomAnalysisService,
+} from "./room-analysis-service.js";
 import {
-  SimulationForbiddenError,
-  SimulationNotFoundError,
-} from "./simulation-service.js";
-import type { SimulationRepository } from "./simulation-repository.js";
-import type { Simulation } from "./simulation.js";
+  RoomManageForbiddenError,
+  RuntimeRoomNotFoundError,
+} from "./room-runtime-service.js";
+import type { RoomRepository } from "./room-repository.js";
+import type { Room } from "./room.js";
 
 function post(
   id: string,
@@ -22,7 +22,7 @@ function post(
 ): PostDto {
   return {
     id,
-    roomId: "simulation-1",
+    roomId: "room-1",
     author: overrides.author ?? { id: "user-1", handle: "hanako", displayName: "花子" },
     content: `${id} content`,
     mentions: [],
@@ -33,7 +33,7 @@ function post(
   };
 }
 
-describe("simulation post ranking", () => {
+describe("room post ranking", () => {
   it("ranks posts by received replies and reposts", () => {
     const ranking = rankPosts([
       post("post-1"),
@@ -49,7 +49,7 @@ describe("simulation post ranking", () => {
   });
 });
 
-describe("simulation author ranking", () => {
+describe("room author ranking", () => {
   it("ranks authors by authored posts and includes activity breakdowns", () => {
     const character = {
       id: "character-1",
@@ -82,10 +82,10 @@ describe("simulation author ranking", () => {
   });
 });
 
-describe("simulation content summary", () => {
+describe("room content summary", () => {
   it("parses all four required analysis perspectives", () => {
     expect(
-      parseSimulationSummary(
+      parseRoomSummary(
         JSON.stringify({
           overallTopics: "全体の話題",
           postOverview: "投稿の種類",
@@ -102,8 +102,8 @@ describe("simulation content summary", () => {
   });
 });
 
-describe("SimulationAnalysisService.analyze ownership (§66.6)", () => {
-  const simulation: Simulation = {
+describe("RoomAnalysisService.analyze ownership (§66.6)", () => {
+  const room: Room = {
     id: "sim-1",
     title: null,
     status: "active",
@@ -115,15 +115,15 @@ describe("SimulationAnalysisService.analyze ownership (§66.6)", () => {
     createdByUserId: "user-1",
   };
 
-  function makeService(found: Simulation | null) {
-    const simulations = {
+  function makeService(found: Room | null) {
+    const rooms = {
       findById: (id: string) => Promise.resolve(id === found?.id ? found : null),
-    } as unknown as SimulationRepository;
+    } as unknown as RoomRepository;
     const posts = {
       listByRoom: () => Promise.resolve([]),
     } as unknown as PostService;
-    return new SimulationAnalysisService(
-      simulations,
+    return new RoomAnalysisService(
+      rooms,
       posts,
       {} as unknown as LLMClient,
       { preferred: () => null } as unknown as LLMProviderRegistry,
@@ -131,39 +131,39 @@ describe("SimulationAnalysisService.analyze ownership (§66.6)", () => {
   }
 
   it("allows the creator", async () => {
-    const service = makeService(simulation);
+    const service = makeService(room);
     await expect(
       service.analyze("sim-1", { id: "user-1", isAdmin: false }),
     ).resolves.toMatchObject({ postCount: 0 });
   });
 
   it("allows an admin who is not the creator", async () => {
-    const service = makeService(simulation);
+    const service = makeService(room);
     await expect(
       service.analyze("sim-1", { id: "someone-else", isAdmin: true }),
     ).resolves.toMatchObject({ postCount: 0 });
   });
 
   it("rejects a signed-in caller who is neither the creator nor an admin", async () => {
-    const service = makeService(simulation);
+    const service = makeService(room);
     await expect(
       service.analyze("sim-1", { id: "someone-else", isAdmin: false }),
-    ).rejects.toBeInstanceOf(SimulationForbiddenError);
+    ).rejects.toBeInstanceOf(RoomManageForbiddenError);
   });
 
-  it("rejects a non-admin when the simulation predates login and has no owner", async () => {
-    const noOwner: Simulation = { ...simulation, createdByUserId: undefined };
+  it("rejects a non-admin when the room predates login and has no owner", async () => {
+    const noOwner: Room = { ...room, createdByUserId: undefined };
     const service = makeService(noOwner);
     await expect(
       service.analyze("sim-1", { id: "user-1", isAdmin: false }),
-    ).rejects.toBeInstanceOf(SimulationForbiddenError);
+    ).rejects.toBeInstanceOf(RoomManageForbiddenError);
   });
 
-  it("still 404s for an unknown simulation before checking ownership", async () => {
+  it("still 404s for an unknown room before checking ownership", async () => {
     const service = makeService(null);
     await expect(
       service.analyze("missing", { id: "user-1", isAdmin: true }),
-    ).rejects.toBeInstanceOf(SimulationNotFoundError);
+    ).rejects.toBeInstanceOf(RuntimeRoomNotFoundError);
   });
 });
 

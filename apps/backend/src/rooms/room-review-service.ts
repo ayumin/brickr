@@ -23,7 +23,7 @@
 
 import { randomUUID } from "node:crypto";
 import type { ScheduledEventRepository } from "../scheduled-events/scheduled-event-repository.js";
-import type { SimulationRepository } from "./simulation-repository.js";
+import type { RoomRepository } from "./room-repository.js";
 import type { PostService } from "../posts/post-service.js";
 import type { Clock } from "./thread-revival-service.js";
 import { DORMANT_THRESHOLD_MS } from "./thread-revival-service.js";
@@ -50,7 +50,7 @@ const REVIVAL_SCHEDULE_DELAY_MS = 30_000; // 30 seconds
 // ---------------------------------------------------------------------------
 
 export type RoomReviewDeps = {
-  simulations: SimulationRepository;
+  rooms: RoomRepository;
   posts: PostService;
   scheduledEvents: ScheduledEventRepository;
   /** Resolves which Cast characters are eligible to respond in a given room (issue #177). */
@@ -87,7 +87,7 @@ export async function reviewRoom(
   const now = clock();
 
   // Verify the room is still active.
-  const room = await deps.simulations.findById(roomId);
+  const room = await deps.rooms.findById(roomId);
   if (!room || room.status === "archived") {
     return { revivalsScheduled: 0, skippedReason: "room not found or archived" };
   }

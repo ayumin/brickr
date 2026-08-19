@@ -151,7 +151,7 @@ function makeServices(): AppServices {
       get: () => Promise.resolve({ id: "user-1" }),
       update: () => Promise.resolve({ id: "user-1" }),
     },
-    simulations: {
+    roomRuntime: {
       list: () => Promise.resolve([]),
       get: () => Promise.resolve({ room: { id: "s1" } }),
       requireReadableRoom: () => Promise.resolve({ id: "s1" }),
@@ -172,7 +172,7 @@ function makeServices(): AppServices {
       getProfile: () => Promise.resolve({ id: "user-1", handle: "hanako" }),
       listPosts: () => Promise.resolve({ posts: [], nextCursor: null }),
     },
-    simulationAnalysis: { analyze: () => Promise.resolve({ postCount: 0 }) },
+    roomAnalysis: { analyze: () => Promise.resolve({ postCount: 0 }) },
     applicationSettings: {
       get: () => Promise.resolve({ environment: [], llm: {} }),
       update: () => Promise.resolve({ environment: [], llm: {} }),

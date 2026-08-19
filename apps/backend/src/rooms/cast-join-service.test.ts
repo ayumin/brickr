@@ -11,7 +11,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 import type { Character } from "../characters/character.js";
-import type { Simulation } from "./simulation.js";
+import type { Room } from "./room.js";
 import type { RoomMembership } from "./room-membership-repository.js";
 import {
   scoreCastForRoom,
@@ -47,7 +47,7 @@ function makeCharacter(overrides: Partial<Character> = {}): Character {
   };
 }
 
-function makeRoom(overrides: Partial<Simulation> = {}): Simulation {
+function makeRoom(overrides: Partial<Room> = {}): Room {
   return {
     id: "room-1",
     title: "Test Room",
@@ -227,7 +227,7 @@ function makeDeps(overrides: Partial<CastJoinServiceDeps> = {}): CastJoinService
   };
 
   return {
-    simulations: {
+    rooms: {
       findById: vi.fn().mockResolvedValue(defaultRoom),
     } as never,
     characters: {
@@ -263,7 +263,7 @@ describe("processCastJoinRequests — public room", () => {
 describe("processCastJoinRequests — open room", () => {
   it("creates a pending membership (owner approval required)", async () => {
     const deps = makeDeps({
-      simulations: {
+      rooms: {
         findById: vi.fn().mockResolvedValue(makeRoom({ visibility: "open" })),
       } as never,
     });
@@ -280,7 +280,7 @@ describe("processCastJoinRequests — open room", () => {
 describe("processCastJoinRequests — closed room", () => {
   it("creates a pending membership (invitation-only, Cast may request)", async () => {
     const deps = makeDeps({
-      simulations: {
+      rooms: {
         findById: vi.fn().mockResolvedValue(makeRoom({ visibility: "closed" })),
       } as never,
     });
@@ -297,7 +297,7 @@ describe("processCastJoinRequests — closed room", () => {
 describe("processCastJoinRequests — private room", () => {
   it("skips autonomous join for private rooms (invitation-only, issue #177)", async () => {
     const deps = makeDeps({
-      simulations: {
+      rooms: {
         findById: vi.fn().mockResolvedValue(makeRoom({ visibility: "private" })),
       } as never,
     });
@@ -482,7 +482,7 @@ describe("processCastJoinRequests — castAutonomous=false", () => {
 describe("processCastJoinRequests — archived room", () => {
   it("skips when the room is archived", async () => {
     const deps = makeDeps({
-      simulations: {
+      rooms: {
         findById: vi.fn().mockResolvedValue(makeRoom({ status: "archived" })),
       } as never,
     });
@@ -495,7 +495,7 @@ describe("processCastJoinRequests — archived room", () => {
 
   it("skips when the room does not exist", async () => {
     const deps = makeDeps({
-      simulations: {
+      rooms: {
         findById: vi.fn().mockResolvedValue(null),
       } as never,
     });
@@ -516,7 +516,7 @@ describe("publishWelcomePost", () => {
     const room = makeRoom();
 
     return {
-      simulations: {
+      rooms: {
         findById: vi.fn().mockResolvedValue(room),
       } as never,
       characters: {
@@ -555,7 +555,7 @@ describe("publishWelcomePost", () => {
 
   it("does not publish when the room is archived", async () => {
     const deps = makeWelcomeDeps({
-      simulations: {
+      rooms: {
         findById: vi.fn().mockResolvedValue(makeRoom({ status: "archived" })),
       } as never,
     });
@@ -566,7 +566,7 @@ describe("publishWelcomePost", () => {
 
   it("does not publish when the room does not exist", async () => {
     const deps = makeWelcomeDeps({
-      simulations: { findById: vi.fn().mockResolvedValue(null) } as never,
+      rooms: { findById: vi.fn().mockResolvedValue(null) } as never,
     });
     const result = await publishWelcomePost("room-1", "char-1", deps);
     expect(result).toEqual({ outcome: "skipped", reason: "room not found or archived" });
