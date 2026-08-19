@@ -74,10 +74,19 @@ const since = new Date(until.getTime() - days * 24 * 60 * 60 * 1000);
 const date = until.toISOString().slice(0, 10);
 const outputPath = arg("out", `docs/duo-sessions/${date}.md`);
 
+// 100 sessions per page. The cap only exists so a surprise in the API cannot
+// turn into an unbounded paging loop.
+const MAX_PAGES = 20;
+
 function buildQuery(fields) {
-  return `query($fullPath: ID!, $after: String, $updatedAfter: ISO8601DateTime) {
+  // No updatedAfter argument on purpose. The flows API is an Experiment and the
+  // semantics of its filter arguments are not verified here. A server-side
+  // filter that silently matches nothing is indistinguishable from "no sessions
+  // this week", which is the worst way for a retrospective collector to fail.
+  // The period is applied client-side instead, against a field we do read.
+  return `query($fullPath: ID!, $after: String) {
   project(fullPath: $fullPath) {
-    duoWorkflowWorkflows(first: 100, after: $after, updatedAfter: $updatedAfter) {
+    duoWorkflowWorkflows(first: 100, after: $after) {
       pageInfo { hasNextPage endCursor }
       nodes { ${fields.join(" ")} }
     }
@@ -102,13 +111,10 @@ async function fetchSessions() {
   let droppedOptional = false;
   const nodes = [];
   let after = null;
+  let pages = 0;
 
   for (;;) {
-    const payload = await graphql(buildQuery(fields), {
-      fullPath,
-      after,
-      updatedAfter: since.toISOString(),
-    });
+    const payload = await graphql(buildQuery(fields), { fullPath, after });
 
     if (Array.isArray(payload.errors) && payload.errors.length > 0) {
       const messages = payload.errors.map((error) => error.message).join("; ");
