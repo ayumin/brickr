@@ -21,17 +21,21 @@
  */
 export const RESERVED_HANDLES: readonly string[] = [
   // Routes the app serves today. `rooms` and `cast` are the refreshed names for
-  // the room list and character management (§6.1). `characters` and `simulations`
-  // are the old names (removed in phase 5, §168) and stay reserved so no user
-  // can ever claim them — a word is cheap to reserve now and expensive once
-  // somebody holds it.
+  // the room list and character management (§6.1). `characters` is the old name
+  // (the route was removed in phase 5, §168) but stays reserved, because
+  // Character is still the domain model behind `cast` and the word remains a
+  // plausible route later.
+  //
+  // `simulations` is deliberately absent: no route, type, class or directory in
+  // this codebase carries that name any more, so there is nothing left for the
+  // reservation to protect and holding the word back from users buys nothing.
   //
   // `admin` is deliberately absent: there is no `/admin` route in §6.1 (admin
   // screens live under `/settings/*`), and `ADMIN_HANDLE` defaults to exactly
   // this word (CLAUDE.md §66.9) - reserving it made the bootstrap admin's own
   // `/:handle` profile permanently unreachable for no corresponding route.
   "login", "signup", "logout", "settings",
-  "characters", "simulations", "posts", "rooms", "cast",
+  "characters", "posts", "rooms", "cast",
   // Settings sections (§6.3, §22). They live under the already-reserved
   // `settings` prefix, so none of them can collide today — they are listed for
   // the same reason as everything else here: a word is cheap to reserve now and

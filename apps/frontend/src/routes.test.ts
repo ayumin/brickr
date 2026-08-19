@@ -34,11 +34,15 @@ describe("normalizeHandleParam", () => {
 
   it("rejects every word in RESERVED_HANDLES (routed or not)", () => {
     for (const reserved of [
-      "login", "characters", "simulations", "rooms", "cast", "settings", "posts",
+      "login", "characters", "rooms", "cast", "settings", "posts",
       "profile", "appearance", "usage", "runtime", "users", "invites",
     ]) {
       expect(normalizeHandleParam(reserved)).toBeNull();
     }
+  });
+
+  it("accepts 'simulations': the word is no longer reserved, since no route uses it", () => {
+    expect(normalizeHandleParam("simulations")).toBe("simulations");
   });
 
   it("does not reject 'admin': there is no /admin route, and it collides with ADMIN_HANDLE's default (CLAUDE.md §66.9)", () => {
