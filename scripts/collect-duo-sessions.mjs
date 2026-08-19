@@ -25,8 +25,8 @@ const BASE_FIELDS = [
   "archived",
 ];
 // The flows API is an Experiment. Field names have already bitten us once
-// (duoWorkflows vs duoWorkflowWorkflows), so anything unproven is dropped and
-// the query retried rather than guessed at.
+// (duoWorkflows vs duoWorkflowWorkflows), so anything unproven goes here and is
+// dropped on the first failure rather than guessed at.
 const OPTIONAL_FIELDS = ["humanStatus"];
 
 function arg(name, fallback) {
@@ -40,6 +40,7 @@ const token = process.env.DUO_RETRO_TOKEN ?? process.env.GITLAB_TOKEN;
 const fullPath = arg("project", process.env.CI_PROJECT_PATH);
 const daysInput = arg("days", "7");
 const days = Number(daysInput);
+const envFile = arg("env-file", null);
 
 if (!token) {
   process.stderr.write(
@@ -56,8 +57,13 @@ if (!Number.isFinite(days) || days <= 0) {
   process.exit(1);
 }
 
+// Captured once. Everything downstream, including the values handed to CI
+// through --env-file, derives from this instant so the branch name can never
+// disagree with the date inside the generated file.
 const until = new Date();
 const since = new Date(until.getTime() - days * 24 * 60 * 60 * 1000);
+const date = until.toISOString().slice(0, 10);
+const outputPath = arg("out", `docs/duo-sessions/${date}.md`);
 
 function buildQuery(fields) {
   return `query($fullPath: ID!, $after: String, $updatedAfter: ISO8601DateTime) {
@@ -84,6 +90,7 @@ async function graphql(query, variables) {
 
 async function fetchSessions() {
   let fields = [...BASE_FIELDS, ...OPTIONAL_FIELDS];
+  let droppedOptional = false;
   const nodes = [];
   let after = null;
 
@@ -95,19 +102,23 @@ async function fetchSessions() {
     });
 
     if (Array.isArray(payload.errors) && payload.errors.length > 0) {
-      const unsupported = fields.filter(
-        (field) =>
-          OPTIONAL_FIELDS.includes(field) &&
-          payload.errors.some((error) => String(error.message).includes(`'${field}'`)),
-      );
-      if (unsupported.length > 0) {
+      const messages = payload.errors.map((error) => error.message).join("; ");
+
+      // Deliberately not parsing the error text. Neither the quoting nor the
+      // shape of "unknown field" errors is guaranteed, so matching on it would
+      // silently disable this fallback the day the wording changes. Instead:
+      // if the query fails at all while unproven fields are in it, drop all of
+      // them and retry once.
+      if (!droppedOptional && fields.some((field) => OPTIONAL_FIELDS.includes(field))) {
+        droppedOptional = true;
+        fields = fields.filter((field) => !OPTIONAL_FIELDS.includes(field));
         process.stderr.write(
-          `Dropping unsupported field(s) and retrying: ${unsupported.join(", ")}\n`,
+          `Retrying without optional field(s) ${OPTIONAL_FIELDS.join(", ")} after: ${messages}\n`,
         );
-        fields = fields.filter((field) => !unsupported.includes(field));
         continue;
       }
-      throw new Error(payload.errors.map((error) => error.message).join("; "));
+
+      throw new Error(messages);
     }
 
     const connection = payload.data?.project?.duoWorkflowWorkflows;
@@ -133,6 +144,9 @@ function goalExcerpt(goal) {
   return text.length > 70 ? `${text.slice(0, 70)}…` : text;
 }
 
+// createdAt to updatedAt, which is an upper bound on working time rather than
+// working time itself: any background transition that touches the record moves
+// updatedAt too. Archived sessions are excluded for that reason.
 function elapsedMinutes(session) {
   const from = Date.parse(session.createdAt);
   const to = Date.parse(session.updatedAt);
@@ -154,7 +168,11 @@ function row(cells) {
 }
 
 function renderGenerated(sessions) {
-  const elapsed = sessions.map(elapsedMinutes).filter((value) => value !== null);
+  const archived = sessions.filter((session) => session.archived === true);
+  const elapsed = sessions
+    .filter((session) => session.archived !== true)
+    .map(elapsedMinutes)
+    .filter((value) => value !== null);
   const total = elapsed.reduce((sum, value) => sum + value, 0);
   const average = elapsed.length > 0 ? `${Math.round(total / elapsed.length)} 分` : "-";
   const longest = elapsed.length > 0 ? `${Math.max(...elapsed)} 分` : "-";
@@ -169,9 +187,12 @@ function renderGenerated(sessions) {
     row(["指標", "値"]),
     row(["------", "----"]),
     row(["セッション数", String(sessions.length)]),
-    row(["平均所要時間", average]),
-    row(["最大所要時間", longest]),
-    row(["archived", String(sessions.filter((session) => session.archived === true).length)]),
+    row(["archived", String(archived.length)]),
+    row(["経過時間の平均", average]),
+    row(["経過時間の最大", longest]),
+    "",
+    "> 経過時間は `createdAt` から `updatedAt` までで、**実作業時間でなく上限値**です。",
+    "> 背景の状態遷移でも `updatedAt` は動くため、archived のセッションは集計から除外しています。",
     "",
     "種別別:",
     "",
@@ -206,7 +227,7 @@ function renderGenerated(sessions) {
     "",
     "下の「セッション一覧」節には、この全件表から特筆すべきものだけを抜粋してください。",
     "",
-    row(["Session ID", "種別", "エージェント", "状態", "所要(分)", "goal 冒頭"]),
+    row(["Session ID", "種別", "エージェント", "状態", "経過(分)", "goal 冒頭"]),
     row(["-----------", "------", "--------------", "------", "-----------", "-----------"]),
     ...[...sessions]
       .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt))
@@ -228,7 +249,7 @@ function renderGenerated(sessions) {
   return lines.join("\n");
 }
 
-function skeleton(date, generated) {
+function skeleton(generated) {
   // The section structure lives in TEMPLATE.md. Reading it here keeps the
   // generated file and the template from drifting apart.
   const template = readFileSync(TEMPLATE, "utf8");
@@ -247,15 +268,29 @@ function skeleton(date, generated) {
   ].join("\n");
 }
 
+// Hands the caller the exact date and path this run used, so a shell wrapper
+// never has to recompute them and drift across a UTC midnight boundary.
+function writeEnvFile(sessionCount) {
+  if (envFile === null) return;
+  writeFileSync(
+    envFile,
+    [
+      `RETRO_DATE='${date}'`,
+      `RETRO_OUTPUT='${outputPath}'`,
+      `RETRO_SESSIONS='${sessionCount}'`,
+      "",
+    ].join("\n"),
+  );
+}
+
 const sessions = await fetchSessions();
 
 if (sessions.length === 0) {
+  writeEnvFile(0);
   process.stdout.write(`No sessions updated in the last ${days} day(s). Nothing to write.\n`);
   process.exit(0);
 }
 
-const date = until.toISOString().slice(0, 10);
-const outputPath = arg("out", `docs/duo-sessions/${date}.md`);
 const generated = renderGenerated(sessions);
 
 let contents;
@@ -273,11 +308,12 @@ if (existsSync(outputPath)) {
   // qualitative sections someone already filled in.
   contents = existing.slice(0, begin) + generated + existing.slice(end + END.length);
 } else {
-  contents = skeleton(date, generated);
+  contents = skeleton(generated);
 }
 
 mkdirSync(dirname(outputPath), { recursive: true });
 writeFileSync(outputPath, contents);
+writeEnvFile(sessions.length);
 
 process.stdout.write(
   `Wrote ${sessions.length} session(s) for the last ${days} day(s) to ${outputPath}.\n`,
