@@ -108,7 +108,8 @@ brickr/
 │   │   │   │   ├── timeline/
 │   │   │   │   ├── composer/
 │   │   │   │   ├── characters/
-│   │   │   │   └── simulation/
+│   │   │   │   ├── feed/
+│   │   │   │   └── rooms/
 │   │   │   ├── hooks/
 │   │   │   ├── services/
 │   │   │   ├── types/
@@ -126,7 +127,7 @@ brickr/
 │       │   ├── characters/
 │       │   ├── model-profiles/
 │       │   ├── posts/
-│       │   ├── simulation/
+│       │   ├── rooms/
 │       │   ├── agents/
 │       │   ├── llm/
 │       │   ├── persistence/
@@ -300,7 +301,7 @@ Frontendは以下を担当します。
 - Reply表示
 - Quote Post表示
 - Character Profile
-- Simulation状態表示
+- Room状態表示
 - REST API Client
 - SSE Client
 - Loading / Error表示
@@ -352,7 +353,7 @@ Backendは以下を担当します。
 - Character投稿生成
 - Reply生成
 - Quote Post生成
-- Simulation lifecycle
+- Room lifecycle
 - Persistence
 - LLM Provider管理
 
@@ -399,7 +400,7 @@ MVPの主要Domain Conceptは以下です。
 Character
 ModelProfile
 Post
-Simulation
+Room
 UserProfile
 ```
 
@@ -837,7 +838,7 @@ Example:
 export type Post = {
   id: string;
 
-  simulationId: string;
+  roomId: string;
 
   authorId: string;
 
@@ -1195,7 +1196,7 @@ Character C generated
    ↓
 post.created
    ↓
-simulation.completed
+generation.completed（内部イベント）
 ```
 
 ---
@@ -1203,21 +1204,24 @@ simulation.completed
 # 44. SSE Endpoint
 
 ```http
-GET /api/simulations/:simulationId/events
+GET /api/rooms/:id/events
+GET /api/feed/events
 ```
 
 Event examples:
 
 ```text
 post.created
-character.processing
-simulation.completed
-simulation.failed
+response.started
+response.finished
 ```
 
-`character.processing` はUI上で「考え中」を表示する場合のみ利用してください。
-表示する場合は、Timeline上部ではなく反応対象のPost直下に表示してください。
-Eventには対象を特定する`targetPostId`を含めます。
+`generation.completed` / `generation.failed` は内部イベントで、SSEへは流しません。
+Provider errorやCharacter identityを外へ出さないためです（`ARCHITECTURE.md`の7章）。
+
+`response.started` はUI上で「考え中」を表示する場合のみ利用し、`response.finished`
+で解除してください。表示する場合は、Timeline上部ではなく反応対象のPost直下に
+表示してください。Eventには対象を特定する`targetPostId`を含めます。
 
 接続状態表示は操作可能にし、クリックでFrontendのSSE接続を明示的に
 切断・再接続できるようにします。切断中もREST APIとBackend側の生成は継続します。
@@ -1259,13 +1263,14 @@ Frontend向けCharacter DTOには内部PromptやAPI設定を含めないでく�
 
 ---
 
-## Simulations
+## Rooms
 
 ```http
-POST /api/simulations
-GET  /api/simulations/:id
-POST /api/simulations/:id/stop
-POST /api/simulations/:id/resume
+GET  /api/rooms
+POST /api/rooms
+GET  /api/rooms/:id
+POST /api/rooms/:id/stop
+POST /api/rooms/:id/resume
 ```
 
 ---
@@ -1273,8 +1278,8 @@ POST /api/simulations/:id/resume
 ## Posts
 
 ```http
-POST /api/simulations/:id/posts
-GET  /api/simulations/:id/posts
+POST /api/rooms/:id/posts
+GET  /api/rooms/:id/posts
 GET  /api/posts/:id
 ```
 
@@ -1285,7 +1290,8 @@ User ReplyやQuoteも同じPost APIで扱います。
 ## SSE
 
 ```http
-GET /api/simulations/:id/events
+GET /api/rooms/:id/events
+GET /api/feed/events
 ```
 
 ---
@@ -1489,7 +1495,7 @@ Skeptic timeout
 Kansai generated
 ```
 
-Skepticが失敗してもSimulation全体を止めないでください。
+Skepticが失敗してもRoom全体を止めないでください。
 
 Retryは最大1回程度で十分です。
 
@@ -1501,7 +1507,7 @@ Retryは最大1回程度で十分です。
 
 各LLM API callにはTimeoutを設定してください。
 
-1つのProviderの遅延でSimulation全体が永久に停止しないようにします。
+1つのProviderの遅延でRoom全体が永久に停止しないようにします。
 
 ---
 
@@ -1564,7 +1570,7 @@ MVPで最低限必要なTable候補:
 ```text
 characters
 model_profiles
-simulations
+rooms
 posts
 user_profiles
 ```
@@ -1596,9 +1602,11 @@ apps/backend/src/
 │   ├── thread-service.ts
 │   └── mention-parser.ts
 │
-├── simulation/
-│   ├── simulation.ts
-│   ├── simulation-service.ts
+├── rooms/
+│   ├── room.ts
+│   ├── room-repository.ts
+│   ├── room-runtime-service.ts
+│   ├── room-service.ts
 │   ├── responder-selector.ts
 │   └── action-selector.ts
 │
@@ -1641,9 +1649,9 @@ apps/frontend/src/
 │   │   ├── CharacterProfile.tsx
 │   │   └── CharacterPicker.tsx
 │   │
-│   └── simulation/
-│       ├── SimulationView.tsx
-│       └── useSimulationEvents.ts
+│   └── rooms/
+│       ├── RoomScreen.tsx
+│       └── useRoomPosts.ts
 │
 ├── services/
 │   ├── api-client.ts
@@ -1686,7 +1694,7 @@ MVPでは以下を実装します。
 23. Character同士の会話
 24. SSEによる順次表示
 25. 一部Provider失敗時の継続
-26. Simulationの停止と再開
+26. Roomの停止と再開
 27. Character作成・編集UI
 28. 8種類のブランドTheme切り替え
 29. User Profile表示・編集
@@ -1927,17 +1935,17 @@ x_handle     (任意、編集可)
 `/handle`（例: `/architect`）でその人物（UserまたはCharacter）のTimelineへ直接遷移できるようにします。
 
 Frontendにはまだルーターが存在しないため、React Router（6条で利用可能と定義済み）を導入し、
-`SimulationView`が保持するView状態をURLへ同期させます。Handleから著者を解決するAPIは、
-Simulationを読み込んでいない状態からのアクセス（直接URL / リロード）でも解決できる必要があります。
+`RoomScreen`が保持するView状態をURLへ同期させます。Handleから著者を解決するAPIは、
+Roomを読み込んでいない状態からのアクセス（直接URL / リロード）でも解決できる必要があります。
 
 ---
 
-## 66.3 Simulation / Timeline for Multiple Users
+## 66.3 Room / Timeline for Multiple Users
 
-複数の実Userが存在しても、Simulation（会話の場）自体は分割しません。
+複数の実Userが存在しても、Room（会話の場）自体は分割しません。
 
 ```text
-Simulation
+Room
     ↓
 共有Thread（User / Character問わず同じPost Model）
     ↓
@@ -1946,9 +1954,11 @@ Simulation
 
 UserもCharacterも同じ`authorId`として扱い、投稿者が人間かAIかをUI上で区別する情報は表示しません。
 
-すべてのUserは、存在するどのSimulationにも参加（投稿）できます。ただし、Stop状態のSimulationには参加できません。
+すべてのUserは、参加できるどのRoomにも投稿できます。ただしStop状態のRoomには参加できず、
+closed / privateなRoomはactive membershipを持つUserだけが参加できます
+（membershipとvisibilityの詳細は`ARCHITECTURE.md`の5章）。
 
-Simulationの`Stop` / `Resume`は、そのSimulationの作成者本人と管理者のみが実行できます（35条〜36条のResponder Selection自体には変更なし）。
+Roomの`Stop` / `Resume`は、そのRoomの作成者本人と管理者のみが実行できます（35条〜36条のResponder Selection自体には変更なし）。
 
 ---
 
@@ -1989,16 +1999,16 @@ Characterの編集・削除は、作成者本人と管理者のみに制限し�
 
 ---
 
-## 66.6 Simulation Ownership
+## 66.6 Room Ownership
 
-Simulationにも`createdByUserId`を持たせますが、Characterと可視範囲のルールが逆になります。
+Roomにも`createdByUserId`を持たせますが、Characterと可視範囲のルールが逆になります。
 
 ```text
-Simulationの作成者   : 全Userに公開（誰でも見える）
-Simulationの分析画面 : 作成者本人・管理者のみ閲覧可能
+Roomの作成者   : 全Userに公開（誰でも見える）
+Roomの分析画面 : 作成者本人・管理者のみ閲覧可能
 ```
 
-CharacterとSimulationで「作成者情報の公開範囲」が異なる点を混同しないでください。
+CharacterとRoomで「作成者情報の公開範囲」が異なる点を混同しないでください。
 
 ---
 
