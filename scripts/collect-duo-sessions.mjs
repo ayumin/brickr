@@ -144,11 +144,24 @@ async function fetchSessions() {
     }
 
     nodes.push(...connection.nodes);
+    pages += 1;
+
     if (connection.pageInfo.hasNextPage !== true) break;
+    if (pages >= MAX_PAGES) {
+      process.stderr.write(
+        `Stopped after ${MAX_PAGES} pages (${nodes.length} sessions). Raise MAX_PAGES if the window is not fully covered.\n`,
+      );
+      break;
+    }
     after = connection.pageInfo.endCursor;
   }
 
   return nodes;
+}
+
+function withinWindow(session) {
+  const updated = Date.parse(session.updatedAt);
+  return Number.isFinite(updated) && updated >= since.getTime();
 }
 
 const numericId = (gid) => /(\d+)$/.exec(String(gid ?? ""))?.[1] ?? "?";
