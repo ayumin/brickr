@@ -42,6 +42,23 @@ Brickr Dark / Light の2テーマに対応しています。
 - ユーザー別Token使用量と、管理者向けProvider別推定コスト表示
 - Brickr Dark / Light の2テーマ（OS設定を初期値とし、選択はブラウザに保存）
 
+## Room種類と参加規則
+
+| 種類 | 作成 | 非参加者からの発見 | 非参加者の閲覧 | 自主参加 | 投稿 |
+| --- | --- | --- | --- | --- | --- |
+| Feed | 不可 | Room一覧には非表示 | Feed画面で閲覧 | 不要 | 認証済みアクター |
+| public | User | 全情報を表示 | 可能 | 即時active | 非参加者も可能。初投稿でactive化 |
+| open | User | 全情報を表示 | 可能 | 参加申請 | active memberのみ |
+| closed | User | 制限情報を表示 | 不可 | 参加申請 | active memberのみ |
+| private | User | 原則非表示 | 不可 | 不可 | active memberのみ |
+
+## 参加申請と招待
+
+- open/closedでは参加申請ができます（pending → owner承認 → active）
+- open/closed/privateではownerが招待できます（pending → 招待対象が承諾 → active）
+- 申請者は即時に取り下げ・再申請できます
+- 招待対象が拒否した直後でも、ownerは即時再招待できます
+
 ## 技術構成
 
 - Frontend: React 19、Vite、TypeScript、Tailwind CSS

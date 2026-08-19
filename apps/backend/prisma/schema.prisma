@@ -26,12 +26,18 @@ enum MemberRole {
 }
 
 /// Lifecycle state of a room membership.
+///
 /// Allowed transitions (enforced at the service layer):
-///   pending  → active | removed | banned
-///   active   → left   | removed | banned
-///   left     → active (re-join)
-///   removed  → active (re-invite) | banned
-///   banned   → removed (only)
+///   (none)   → pending(request)    self-initiated join request
+///   (none)   → pending(invitation) owner-initiated invitation
+///   pending  → active              owner approves request / invitee accepts
+///   pending  → (deleted)           owner rejects / invitee declines / withdrawn
+///   active   → left                self-initiated leave
+///   active   → removed             owner removes member
+///   active   → banned              owner bans member
+///   left     → active              re-join (public) or re-request (open/closed)
+///   removed  → active              re-invite
+///   banned   → removed             owner unbans (cannot go directly to active)
 enum MemberStatus {
   active
   pending
@@ -40,20 +46,26 @@ enum MemberStatus {
   banned
 }
 
-/// Origin of a pending membership: request (self-initiated) or invitation (owner-initiated).
+/// Origin of a pending membership.
+/// - request: Self-initiated join request (open/closed rooms).
+/// - invitation: Owner-initiated invitation (open/closed/private rooms).
 /// Null for non-pending memberships (active, left, removed, banned).
 enum MembershipOrigin {
   request
   invitation
 }
 
-/// Internal room scope: distinguishes the global Feed room from user-created rooms.
+/// Room scope: distinguishes the global Feed room from user-created rooms.
+/// - global: The reserved Feed room. Posts from Feed screen go here.
+///           No membership rows; all active Casts are logical members.
+/// - room: User-created rooms with explicit memberships.
 ///
 /// Not exposed in public DTOs; used for internal filtering only.
 enum RoomScope {
   /// The reserved Feed room — posts from the Feed screen go here.
+  /// No membership rows exist; all active Casts are logical members.
   global
-  /// User-created rooms.
+  /// User-created rooms with explicit membership management.
   room
 }
 

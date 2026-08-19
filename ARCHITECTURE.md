@@ -105,9 +105,42 @@ Errorは次の共通envelopeを使います。
 
 ## 5. Room、Feed、Membership
 
+### Room種別
+
+Roomは内部的に `scope` で分類されます:
+- `global`: 予約されたFeed Room。Room一覧に表示せず、membership行を持たない。
+- `room`: ユーザー作成のRoom。明示的なmembershipで参加を管理。
+
 Roomは`active | archived`と`public | open | closed | private`を持ちます。
 RoomMembershipはUser/Cast、owner/member、active/pending/left/removed/bannedを表現します。
+
+### 認可resolver
+
+`RoomAuthorizationResolver`（`room-authorization.ts`）がRoom/membershipの状態からcapabilitiesを計算します:
+- `canDiscover`, `canView`, `canViewMetadata`, `canPost`, `canJoin`, `canLeave`, `canInvite`, `canManage`
+
 可視性と参加状態から、閲覧・参加・投稿・招待・管理capabilityをserviceで決定します。
+
+Feed Roomは特別扱い:
+- 認証済みUserは投稿可能
+- 有効な全Castを論理上のactive memberとして扱う
+- membership行は作成・参照しない
+- adminを含む誰もmanage/invite/join/leaveできない
+
+### Membership状態遷移
+
+```
+(none) → pending(request)    申請
+(none) → pending(invitation) 招待
+pending → active             承認/承諾
+pending → (deleted)          拒否/取下げ
+active → left                退会
+active → removed             除外
+active → banned              ban
+left → active                再参加
+removed → active             再招待
+banned → removed             unban
+```
 
 Feedは独立したDB rowを持ちません。FeedRepositoryが読者から見えるRoom IDを解決し、
 それらのroot postを`threadActivityAt DESC, id DESC`でpageします。cursorはこの2値を
