@@ -9,7 +9,7 @@ import type { PostService, PublishInput } from "../posts/post-service.js";
 import type { ThreadContext, ThreadService } from "../posts/thread-service.js";
 import { EventHub } from "./event-hub.js";
 import type { InternalSseEvent, ThreadActivityEvent } from "./public-events.js";
-import type { SimulationRepository } from "./simulation-repository.js";
+import type { RoomRepository } from "./room-repository.js";
 import type {
   CreateMembershipInput,
   RoomMembership,
@@ -18,13 +18,13 @@ import type {
 import {
   PostNotFoundError,
   assertRoomReadable,
-  SimulationForbiddenError,
-  SimulationNotFoundError,
-  SimulationService,
-  type SimulationActor,
-  type SimulationLogger,
-} from "./simulation-service.js";
-import type { Simulation } from "./simulation.js";
+  RoomManageForbiddenError,
+  RuntimeRoomNotFoundError,
+  RoomRuntimeService,
+  type SignedInActor,
+  type RoomRuntimeLogger,
+} from "./room-runtime-service.js";
+import type { Room } from "./room.js";
 
 /**
  * The signed-in person who starts every submission in these tests. A UUID, not
@@ -32,7 +32,7 @@ import type { Simulation } from "./simulation.js";
  */
 const USER_AUTHOR_ID = "11111111-1111-4111-8111-111111111111";
 
-const SIMULATION: Simulation = {
+const ROOM: Room = {
   id: "sim-1",
   title: "test",
   status: "active",
@@ -44,7 +44,7 @@ const SIMULATION: Simulation = {
   createdByUserId: USER_AUTHOR_ID,
 };
 
-const OWNER: SimulationActor = { id: USER_AUTHOR_ID, isAdmin: false };
+const OWNER: SignedInActor = { id: USER_AUTHOR_ID, isAdmin: false };
 
 /** A membership repository that answers `findOne` from a fixed in-memory list. */
 function makeMembershipsFake(rows: RoomMembership[] = []): RoomMembershipRepository {
@@ -59,19 +59,19 @@ function makeMembershipsFake(rows: RoomMembership[] = []): RoomMembershipReposit
 }
 
 describe("assertRoomReadable — real membership lookup (issue #175)", () => {
-  const nonOwner: SimulationActor = { id: "other-user", isAdmin: false };
+  const nonOwner: SignedInActor = { id: "other-user", isAdmin: false };
 
   it("rejects a non-member from an active closed room", async () => {
     await expect(
-      assertRoomReadable(makeMembershipsFake(), { ...SIMULATION, visibility: "closed" }, nonOwner),
-    ).rejects.toThrow(SimulationNotFoundError);
+      assertRoomReadable(makeMembershipsFake(), { ...ROOM, visibility: "closed" }, nonOwner),
+    ).rejects.toThrow(RuntimeRoomNotFoundError);
   });
 
   it("admits an active member of an active closed room", async () => {
     const memberships = makeMembershipsFake([
       {
         id: "mem-1",
-        roomId: SIMULATION.id,
+        roomId: ROOM.id,
         memberKind: "user",
         memberId: nonOwner.id,
         role: "member",
@@ -81,7 +81,7 @@ describe("assertRoomReadable — real membership lookup (issue #175)", () => {
       },
     ]);
     await expect(
-      assertRoomReadable(memberships, { ...SIMULATION, visibility: "closed" }, nonOwner),
+      assertRoomReadable(memberships, { ...ROOM, visibility: "closed" }, nonOwner),
     ).resolves.not.toThrow();
   });
 
@@ -89,15 +89,15 @@ describe("assertRoomReadable — real membership lookup (issue #175)", () => {
     await expect(
       assertRoomReadable(
         makeMembershipsFake(),
-        { ...SIMULATION, visibility: "closed", status: "archived" },
+        { ...ROOM, visibility: "closed", status: "archived" },
         nonOwner,
       ),
-    ).rejects.toThrow(SimulationNotFoundError);
+    ).rejects.toThrow(RuntimeRoomNotFoundError);
   });
 
   it("still admits the legacy owner (no membership row, createdByUserId match)", async () => {
     await expect(
-      assertRoomReadable(makeMembershipsFake(), { ...SIMULATION, visibility: "private" }, OWNER),
+      assertRoomReadable(makeMembershipsFake(), { ...ROOM, visibility: "private" }, OWNER),
     ).resolves.not.toThrow();
   });
 });
@@ -126,7 +126,7 @@ type HarnessOptions = {
   /** Eligible responders; defaults to all characters. */
   respondingCharacters?: Character[];
   /** Defaults to an ordinary room owned by `USER_AUTHOR_ID`. */
-  simulation?: Simulation;
+  room?: Room;
   generate?: (request: GenerateRequest) => Promise<GeneratedPost>;
   maxConcurrentCharacters?: number;
   maxCascadeDepth?: number;
@@ -139,7 +139,7 @@ type HarnessOptions = {
 type TokenUsageRecord = { userId: string; usage: NonNullable<GeneratedPost["usage"]> };
 
 type Harness = {
-  service: SimulationService;
+  service: RoomRuntimeService;
   events: EventHub;
   posts: Post[];
   generationCalls: GenerateRequest[];
@@ -162,17 +162,17 @@ function makeHarness(options: HarnessOptions): Harness {
   const tokenUsageRecords: TokenUsageRecord[] = [];
   let nextPostId = 1;
 
-  const simulation = options.simulation ?? SIMULATION;
+  const room = options.room ?? ROOM;
 
-  const simulationRepository = {
-    create: (): Promise<Simulation> => Promise.resolve(simulation),
-    findById: (id: string): Promise<Simulation | null> =>
-      Promise.resolve(id === simulation.id ? simulation : null),
-    updateStatus: (_id: string, status: Simulation["status"]): Promise<Simulation> =>
-      Promise.resolve({ ...simulation, status }),
-    updateTitle: (_id: string, title: string): Promise<Simulation> =>
-      Promise.resolve({ ...simulation, title }),
-  } as unknown as SimulationRepository;
+  const roomRepository = {
+    create: (): Promise<Room> => Promise.resolve(room),
+    findById: (id: string): Promise<Room | null> =>
+      Promise.resolve(id === room.id ? room : null),
+    updateStatus: (_id: string, status: Room["status"]): Promise<Room> =>
+      Promise.resolve({ ...room, status }),
+    updateTitle: (_id: string, title: string): Promise<Room> =>
+      Promise.resolve({ ...room, title }),
+  } as unknown as RoomRepository;
 
   const characterRepository = {
     findAll: (): Promise<Character[]> =>
@@ -285,7 +285,7 @@ function makeHarness(options: HarnessOptions): Harness {
     },
   } as unknown as AgentService;
 
-  const logger: SimulationLogger = {
+  const logger: RoomRuntimeLogger = {
     info: () => undefined,
     warn: () => undefined,
     error: () => undefined,
@@ -313,14 +313,14 @@ function makeHarness(options: HarnessOptions): Harness {
         roomId: post.roomId,
         postId: post.id,
         room: {
-          id: simulation.id,
-          title: simulation.title,
-          status: simulation.status,
-          visibility: simulation.visibility,
+          id: room.id,
+          title: room.title,
+          status: room.status,
+          visibility: room.visibility,
         },
         thread: {
           root: toDto(posts.find((entry) => entry.id === post.threadRootId) ?? post),
-          room: { id: simulation.id, title: simulation.title ?? "" },
+          room: { id: room.id, title: room.title ?? "" },
           latestReplies: [],
           replyCount: 0,
           lastActivityAt: post.threadActivityAt.toISOString(),
@@ -346,8 +346,8 @@ function makeHarness(options: HarnessOptions): Harness {
   } as unknown as import("./cast-participation-resolver.js").CastParticipationResolver;
 
   const events = new EventHub();
-  const service = new SimulationService({
-    simulations: simulationRepository,
+  const service = new RoomRuntimeService({
+    rooms: roomRepository,
     memberships: membershipRepository,
     posts: postService,
     characters: characterRepository,
@@ -405,7 +405,7 @@ function collectUntilCompleted(events: EventHub): {
     resolveCompleted = resolve;
   });
 
-  events.subscribe(SIMULATION.id, (event) => {
+  events.subscribe(ROOM.id, (event) => {
     received.push(event);
     if (event.type === "generation.completed") resolveCompleted?.(event);
   }, () => undefined);
@@ -432,7 +432,7 @@ function collectUntilTerminal(events: EventHub): {
     resolveTerminal = resolve;
   });
 
-  events.subscribe(SIMULATION.id, (event) => {
+  events.subscribe(ROOM.id, (event) => {
     received.push(event);
     if (event.type === "generation.completed" || event.type === "generation.failed") {
       resolveTerminal?.(event);
@@ -446,16 +446,16 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("SimulationService.submitUserPost — room authorization (issue #175)", () => {
+describe("RoomRuntimeService.submitUserPost — room authorization (issue #175)", () => {
   it("rejects a non-member posting to a closed room", async () => {
     const harness = makeHarness({
       characters: [],
-      simulation: { ...SIMULATION, visibility: "closed", createdByUserId: "someone-else" },
+      room: { ...ROOM, visibility: "closed", createdByUserId: "someone-else" },
     });
 
     await expect(
       harness.service.submitUserPost({
-        roomId: SIMULATION.id,
+        roomId: ROOM.id,
         authorId: USER_AUTHOR_ID,
         content: "投稿できないはず",
         responderIds: [],
@@ -466,11 +466,11 @@ describe("SimulationService.submitUserPost — room authorization (issue #175)",
   it("posts to the Feed room without querying membership (review: MR !104)", async () => {
     const harness = makeHarness({
       characters: [],
-      simulation: { ...SIMULATION, scope: "global", createdByUserId: undefined },
+      room: { ...ROOM, scope: "global", createdByUserId: undefined },
     });
 
     const post = await harness.service.submitUserPost({
-      roomId: SIMULATION.id,
+      roomId: ROOM.id,
       authorId: USER_AUTHOR_ID,
       content: "フィードへの投稿",
       responderIds: [],
@@ -488,7 +488,7 @@ describe("SimulationService.submitUserPost — room authorization (issue #175)",
 
     await expect(
       harness.service.submitUserPost({
-        roomId: SIMULATION.id,
+        roomId: ROOM.id,
         authorId: USER_AUTHOR_ID,
         content: "同時投稿",
         responderIds: [],
@@ -503,7 +503,7 @@ describe("SimulationService.submitUserPost — room authorization (issue #175)",
 
     await expect(
       harness.service.submitUserPost({
-        roomId: SIMULATION.id,
+        roomId: ROOM.id,
         authorId: USER_AUTHOR_ID,
         content: "保存されない投稿",
         responderIds: [],
@@ -513,7 +513,7 @@ describe("SimulationService.submitUserPost — room authorization (issue #175)",
   });
 });
 
-describe("SimulationService orchestration", () => {
+describe("RoomRuntimeService orchestration", () => {
   it("uses the full character list to resolve handles for previous Cast authors", async () => {
     const active = makeCharacter("active");
     const departed = makeCharacter("departed", { handle: "former_cast" });
@@ -523,7 +523,7 @@ describe("SimulationService orchestration", () => {
     });
     harness.posts.push({
       id: "departed-post",
-      roomId: SIMULATION.id,
+      roomId: ROOM.id,
       authorId: departed.id,
       content: "以前の投稿",
       mentions: [],
@@ -536,7 +536,7 @@ describe("SimulationService orchestration", () => {
     const stream = collectUntilCompleted(harness.events);
 
     await harness.service.submitUserPost({
-      roomId: SIMULATION.id,
+      roomId: ROOM.id,
       authorId: USER_AUTHOR_ID,
       content: "hello",
       responderIds: [active.id],
@@ -553,7 +553,7 @@ describe("SimulationService orchestration", () => {
     const stream = collectUntilCompleted(harness.events);
 
     const userPost = await harness.service.submitUserPost({
-      roomId: SIMULATION.id,
+      roomId: ROOM.id,
       authorId: USER_AUTHOR_ID,
       content: "hello",
       responderIds: [alpha.id],
@@ -596,7 +596,7 @@ describe("SimulationService orchestration", () => {
     const stream = collectUntilCompleted(harness.events);
 
     await harness.service.submitUserPost({
-      roomId: SIMULATION.id,
+      roomId: ROOM.id,
       authorId: USER_AUTHOR_ID,
       content: "hello",
       responderIds: [alpha.id, beta.id],
@@ -636,7 +636,7 @@ describe("SimulationService orchestration", () => {
     const stream = collectUntilCompleted(harness.events);
 
     await harness.service.submitUserPost({
-      roomId: SIMULATION.id,
+      roomId: ROOM.id,
       authorId: USER_AUTHOR_ID,
       content: "hello",
       responderIds: [broken.id, healthy.id],
@@ -675,7 +675,7 @@ describe("SimulationService orchestration", () => {
     const stream = collectUntilTerminal(harness.events);
 
     await harness.service.submitUserPost({
-      roomId: SIMULATION.id,
+      roomId: ROOM.id,
       authorId: USER_AUTHOR_ID,
       content: "hello",
       responderIds: [alpha.id],
@@ -714,7 +714,7 @@ describe("SimulationService orchestration", () => {
     const stream = collectUntilCompleted(harness.events);
 
     await harness.service.submitUserPost({
-      roomId: SIMULATION.id,
+      roomId: ROOM.id,
       authorId: USER_AUTHOR_ID,
       content: "hello",
       responderIds: [alpha.id],
@@ -733,20 +733,20 @@ describe("SimulationService orchestration", () => {
     expect(completed.generatedPostIds).toEqual(["post-2", "post-3"]);
   });
 
-  it("accepts new posts again after a stopped simulation is resumed", async () => {
+  it("accepts new posts again after a stopped room is resumed", async () => {
     vi.spyOn(Math, "random").mockReturnValue(0);
     const alpha = makeCharacter("alpha");
     const harness = makeHarness({ characters: [alpha] });
 
-    const stopped = await harness.service.stop(SIMULATION.id, OWNER);
+    const stopped = await harness.service.stop(ROOM.id, OWNER);
     expect(stopped.status).toBe("archived");
 
-    const resumed = await harness.service.resume(SIMULATION.id, OWNER);
+    const resumed = await harness.service.resume(ROOM.id, OWNER);
     expect(resumed.status).toBe("active");
 
     const stream = collectUntilCompleted(harness.events);
     await harness.service.submitUserPost({
-      roomId: SIMULATION.id,
+      roomId: ROOM.id,
       authorId: USER_AUTHOR_ID,
       content: "hello again",
       responderIds: [alpha.id],
@@ -760,18 +760,18 @@ describe("SimulationService orchestration", () => {
   });
 });
 
-describe("SimulationService cross-simulation post validation", () => {
-  it("rejects a replyTo id that belongs to a different simulation", async () => {
+describe("RoomRuntimeService cross-room post validation", () => {
+  it("rejects a replyTo id that belongs to a different room", async () => {
     const harness = makeHarness({ characters: [] });
     const foreignPost: Post = {
-      id: "post-in-another-simulation",
+      id: "post-in-another-room",
       roomId: "sim-other",
       authorId: USER_AUTHOR_ID,
       content: "from a different room",
       mentions: [],
       replyTo: null,
       quoteOf: null,
-      threadRootId: "post-in-another-simulation",
+      threadRootId: "post-in-another-room",
       threadActivityAt: new Date("2026-01-01T00:00:00Z"),
       createdAt: new Date("2026-01-01T00:00:00Z"),
     };
@@ -779,7 +779,7 @@ describe("SimulationService cross-simulation post validation", () => {
 
     await expect(
       harness.service.submitUserPost({
-        roomId: SIMULATION.id,
+        roomId: ROOM.id,
         authorId: USER_AUTHOR_ID,
         content: "hello",
         responderIds: [],
@@ -791,17 +791,17 @@ describe("SimulationService cross-simulation post validation", () => {
     expect(harness.posts).toEqual([foreignPost]);
   });
 
-  it("rejects a quoteOf id that belongs to a different simulation", async () => {
+  it("rejects a quoteOf id that belongs to a different room", async () => {
     const harness = makeHarness({ characters: [] });
     const foreignPost: Post = {
-      id: "post-in-another-simulation",
+      id: "post-in-another-room",
       roomId: "sim-other",
       authorId: USER_AUTHOR_ID,
       content: "from a different room",
       mentions: [],
       replyTo: null,
       quoteOf: null,
-      threadRootId: "post-in-another-simulation",
+      threadRootId: "post-in-another-room",
       threadActivityAt: new Date("2026-01-01T00:00:00Z"),
       createdAt: new Date("2026-01-01T00:00:00Z"),
     };
@@ -809,7 +809,7 @@ describe("SimulationService cross-simulation post validation", () => {
 
     await expect(
       harness.service.submitUserPost({
-        roomId: SIMULATION.id,
+        roomId: ROOM.id,
         authorId: USER_AUTHOR_ID,
         content: "hello",
         responderIds: [],
@@ -828,9 +828,9 @@ describe("SimulationService cross-simulation post validation", () => {
  * the only payload in play is the user post's, and `submitUserPost` awaits that
  * decision before returning — so there is nothing to wait on afterwards.
  */
-describe("SimulationService thread events (§11.3)", () => {
+describe("RoomRuntimeService thread events (§11.3)", () => {
   const onlyUserPost = {
-    roomId: SIMULATION.id,
+    roomId: ROOM.id,
     authorId: USER_AUTHOR_ID,
     content: "hello",
     responderIds: [],
@@ -848,7 +848,7 @@ describe("SimulationService thread events (§11.3)", () => {
 
   it("assembles the thread for a room subscriber", async () => {
     const harness = makeHarness({ characters: [] });
-    harness.events.subscribe(SIMULATION.id, vi.fn(), () => undefined);
+    harness.events.subscribe(ROOM.id, vi.fn(), () => undefined);
 
     const post = await harness.service.submitUserPost(onlyUserPost);
 
@@ -870,50 +870,50 @@ describe("SimulationService thread events (§11.3)", () => {
   });
 });
 
-describe("SimulationService ownership (CLAUDE.md §66.6)", () => {
-  const ADMIN: SimulationActor = { id: "admin-1", isAdmin: true };
-  const OTHER_USER: SimulationActor = { id: "someone-else", isAdmin: false };
+describe("RoomRuntimeService ownership (CLAUDE.md §66.6)", () => {
+  const ADMIN: SignedInActor = { id: "admin-1", isAdmin: true };
+  const OTHER_USER: SignedInActor = { id: "someone-else", isAdmin: false };
 
-  it("lets the creator stop, resume and rename their own simulation", async () => {
+  it("lets the creator stop, resume and rename their own room", async () => {
     const harness = makeHarness({ characters: [makeCharacter("alpha")] });
 
-    await expect(harness.service.stop(SIMULATION.id, OWNER)).resolves.toMatchObject({
+    await expect(harness.service.stop(ROOM.id, OWNER)).resolves.toMatchObject({
       status: "archived",
     });
-    await expect(harness.service.resume(SIMULATION.id, OWNER)).resolves.toMatchObject({
+    await expect(harness.service.resume(ROOM.id, OWNER)).resolves.toMatchObject({
       status: "active",
     });
     await expect(
-      harness.service.rename(SIMULATION.id, "new title", OWNER),
+      harness.service.rename(ROOM.id, "new title", OWNER),
     ).resolves.toMatchObject({ title: "new title" });
   });
 
-  it("lets an admin manage a simulation created by someone else", async () => {
+  it("lets an admin manage a room created by someone else", async () => {
     const harness = makeHarness({ characters: [makeCharacter("alpha")] });
 
-    await expect(harness.service.stop(SIMULATION.id, ADMIN)).resolves.toMatchObject({
+    await expect(harness.service.stop(ROOM.id, ADMIN)).resolves.toMatchObject({
       status: "archived",
     });
   });
 
-  it("rejects a signed-in caller who did not create the simulation", async () => {
+  it("rejects a signed-in caller who did not create the room", async () => {
     const harness = makeHarness({ characters: [makeCharacter("alpha")] });
 
-    await expect(harness.service.stop(SIMULATION.id, OTHER_USER)).rejects.toBeInstanceOf(
-      SimulationForbiddenError,
+    await expect(harness.service.stop(ROOM.id, OTHER_USER)).rejects.toBeInstanceOf(
+      RoomManageForbiddenError,
     );
-    await expect(harness.service.resume(SIMULATION.id, OTHER_USER)).rejects.toBeInstanceOf(
-      SimulationForbiddenError,
+    await expect(harness.service.resume(ROOM.id, OTHER_USER)).rejects.toBeInstanceOf(
+      RoomManageForbiddenError,
     );
     await expect(
-      harness.service.rename(SIMULATION.id, "new title", OTHER_USER),
-    ).rejects.toBeInstanceOf(SimulationForbiddenError);
+      harness.service.rename(ROOM.id, "new title", OTHER_USER),
+    ).rejects.toBeInstanceOf(RoomManageForbiddenError);
   });
 });
 
 
 
-describe("SimulationService token usage (CLAUDE.md §66.4)", () => {
+describe("RoomRuntimeService token usage (CLAUDE.md §66.4)", () => {
   const USAGE = { inputTokens: 10, outputTokens: 5, totalTokens: 15 };
 
   it("bills every generation from one submission to the user who posted it, including cascades", async () => {
@@ -936,7 +936,7 @@ describe("SimulationService token usage (CLAUDE.md §66.4)", () => {
     const stream = collectUntilCompleted(harness.events);
 
     await harness.service.submitUserPost({
-      roomId: SIMULATION.id,
+      roomId: ROOM.id,
       authorId: USER_AUTHOR_ID,
       content: "hello",
       responderIds: [alpha.id],
@@ -958,7 +958,7 @@ describe("SimulationService token usage (CLAUDE.md §66.4)", () => {
     const stream = collectUntilCompleted(harness.events);
 
     await harness.service.submitUserPost({
-      roomId: SIMULATION.id,
+      roomId: ROOM.id,
       authorId: USER_AUTHOR_ID,
       content: "hello",
       responderIds: [alpha.id],
@@ -986,7 +986,7 @@ describe("SimulationService token usage (CLAUDE.md §66.4)", () => {
     const stream = collectUntilCompleted(harness.events);
 
     await harness.service.submitUserPost({
-      roomId: SIMULATION.id,
+      roomId: ROOM.id,
       authorId: USER_AUTHOR_ID,
       content: "hello",
       responderIds: [alpha.id],

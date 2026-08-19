@@ -7,7 +7,7 @@ import type { Post } from "./post.js";
  * Resolves an author id to the denormalised author DTO the timeline renders.
  *
  * Users are looked up by id like characters are, rather than compared against a
- * fixed id: several people can post in one simulation (CLAUDE.md §66.3).
+ * fixed id: several people can post in one room (CLAUDE.md §66.3).
  *
  * Both halves resolve to the identical shape, with nothing saying which one it
  * was: telling a person from a character is what the feed must not reveal

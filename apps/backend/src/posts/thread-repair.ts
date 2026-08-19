@@ -57,7 +57,7 @@ export async function repairThreads(tx: DbTransaction, input: ThreadRepairInput)
   }
 
   for (const roomId of input.roomIds) {
-    await recalculateSimulationActivity(tx, roomId);
+    await recalculateRoomActivity(tx, roomId);
   }
 }
 
@@ -114,7 +114,7 @@ async function collectSubtree(tx: DbTransaction, rootId: string): Promise<string
  * creation time, which is also what an empty room starts with, so an emptied room
  * does not sort as if it had just been active.
  */
-async function recalculateSimulationActivity(
+async function recalculateRoomActivity(
   tx: DbTransaction,
   roomId: string,
 ): Promise<void> {

@@ -1,7 +1,7 @@
 /**
  * Synthesizes a mock value for the JSON Schema subset structured-output callers
  * emit (see `characters/character-generator.ts` and
- * `simulation/simulation-analysis-service.ts`).
+ * `rooms/room-analysis-service.ts`).
  *
  * The mock provider has no knowledge of what any particular schema means — it
  * only walks its shape — so a new structured-output caller works against the

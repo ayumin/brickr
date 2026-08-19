@@ -2,7 +2,7 @@ import type { Character } from "../characters/character.js";
 import type { LLMMessage } from "../llm/provider.js";
 import { parseImageDataUrl } from "../llm/image-data-url.js";
 import type { Post } from "../posts/post.js";
-import type { ResponseAction } from "../simulation/simulation.js";
+import type { ResponseAction } from "../rooms/room.js";
 
 /**
  * Rules shared by every character. Deliberately kept out of the per-character
@@ -77,7 +77,7 @@ export function buildMessages(input: {
 
   const transcript = posts
     .map((post) => {
-      // No marker for the human: with several people in one simulation there is
+      // No marker for the human: with several people in one room there is
       // no single poster, and §66.3 does not surface human versus AI.
       const label = `@${resolveHandle(post.authorId)}`;
       const marks: string[] = [];

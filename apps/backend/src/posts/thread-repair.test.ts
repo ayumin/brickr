@@ -22,7 +22,7 @@ function at(day: number): Date {
  * rather than derived.
  */
 function makeTx(posts: PostFixture[]) {
-  const simulationCreatedAt = at(1);
+  const roomCreatedAt = at(1);
 
   const tx = {
     post: {
@@ -81,12 +81,12 @@ function makeTx(posts: PostFixture[]) {
       ),
     },
     room: {
-      findUnique: vi.fn(() => Promise.resolve({ createdAt: simulationCreatedAt })),
+      findUnique: vi.fn(() => Promise.resolve({ createdAt: roomCreatedAt })),
       update: vi.fn(() => Promise.resolve({})),
     },
   };
 
-  return { tx: tx as unknown as DbTransaction, spies: tx, posts, simulationCreatedAt };
+  return { tx: tx as unknown as DbTransaction, spies: tx, posts, roomCreatedAt };
 }
 
 function maxOf(dates: Date[]): Date | null {
@@ -165,7 +165,7 @@ describe("repairThreads after a hard delete (§8.5)", () => {
   });
 
   it("falls back to the room's creation time when every post is gone", async () => {
-    const { tx, spies, simulationCreatedAt } = makeTx([]);
+    const { tx, spies, roomCreatedAt } = makeTx([]);
 
     await repairThreads(tx, {
       newRootIds: [],
@@ -175,7 +175,7 @@ describe("repairThreads after a hard delete (§8.5)", () => {
 
     expect(spies.room.update).toHaveBeenCalledWith({
       where: { id: "sim-1" },
-      data: { lastActivityAt: simulationCreatedAt },
+      data: { lastActivityAt: roomCreatedAt },
     });
   });
 

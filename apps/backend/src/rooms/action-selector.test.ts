@@ -3,7 +3,7 @@ import type { Character } from "../characters/character.js";
 import type { Post } from "../posts/post.js";
 import { resolveActionTargets, selectAction } from "./action-selector.js";
 import type { Rng } from "./responder-selector.js";
-import { RESPONSE_ACTIONS } from "./simulation.js";
+import { RESPONSE_ACTIONS } from "./room.js";
 
 /** Deterministic rng: queued values in order, then clamped to the last one. */
 function makeRng(values: readonly number[]): Rng {

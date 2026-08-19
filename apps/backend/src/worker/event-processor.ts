@@ -6,11 +6,11 @@
  * skipped (treated as completed) so a schema migration that adds a new type
  * does not crash older worker replicas.
  *
- * Design note: the worker intentionally does not import SimulationService
+ * Design note: the worker intentionally does not import RoomRuntimeService
  * directly — that class owns the in-process SSE hub and the "stopped" set,
  * neither of which makes sense in a separate process. Instead the worker calls
  * the same lower-level building blocks (repositories, AgentService) that
- * SimulationService uses, but without the SSE layer. SSE is a real-time
+ * RoomRuntimeService uses, but without the SSE layer. SSE is a real-time
  * concern for the API process; the worker's job is durable execution.
  */
 
@@ -22,21 +22,21 @@ import type { PostService } from "../posts/post-service.js";
 import type { ThreadService } from "../posts/thread-service.js";
 import type { ScheduledEventRepository } from "../scheduled-events/scheduled-event-repository.js";
 import type { ScheduledEvent } from "../scheduled-events/scheduled-event.js";
-import type { SimulationRepository } from "../simulation/simulation-repository.js";
-import type { RoomMembershipRepository } from "../simulation/room-membership-repository.js";
-import type { CastParticipationResolver } from "../simulation/cast-participation-resolver.js";
-import { resolveActionTargets, selectAction } from "../simulation/action-selector.js";
-import { selectResponders } from "../simulation/responder-selector.js";
+import type { RoomRepository } from "../rooms/room-repository.js";
+import type { RoomMembershipRepository } from "../rooms/room-membership-repository.js";
+import type { CastParticipationResolver } from "../rooms/cast-participation-resolver.js";
+import { resolveActionTargets, selectAction } from "../rooms/action-selector.js";
+import { selectResponders } from "../rooms/responder-selector.js";
 import {
   processCastJoinRequests,
   publishWelcomePost,
-} from "../simulation/cast-join-service.js";
-import { reviveThread } from "../simulation/thread-revival-service.js";
-import { reviewRoom } from "../simulation/room-review-service.js";
+} from "../rooms/cast-join-service.js";
+import { reviveThread } from "../rooms/thread-revival-service.js";
+import { reviewRoom } from "../rooms/room-review-service.js";
 import type { WorkerLogger } from "./logger.js";
 
 export type EventProcessorDeps = {
-  simulations: SimulationRepository;
+  rooms: RoomRepository;
   characters: CharacterRepository;
   memberships: RoomMembershipRepository;
   posts: PostService;
@@ -111,7 +111,7 @@ export async function processEvent(
  * Loads the triggering post and the room's character cast, selects which
  * characters should respond, generates their posts, and persists them.
  *
- * Mirrors the core of SimulationService.runGeneration / processCharacter but
+ * Mirrors the core of RoomRuntimeService.runGeneration / processCharacter but
  * without the SSE layer (the worker has no connected clients).
  */
 async function handleCharacterRespond(
@@ -138,11 +138,11 @@ async function handleCharacterRespond(
   }
 
   // Verify the persisted room state is still active. `archived` is the only
-  // persisted stopped state; SimulationService's in-memory set merely aborts
+  // persisted stopped state; RoomRuntimeService's in-memory set merely aborts
   // API-process generation already in flight while that archive write occurs.
   // A worker always reloads the row, so it neither needs nor can share that set.
-  const simulation = await deps.simulations.findById(roomId);
-  if (!simulation || simulation.status === "archived") {
+  const room = await deps.rooms.findById(roomId);
+  if (!room || room.status === "archived") {
     deps.logger.info(
       { eventId: event.id, roomId },
       "room is archived or deleted — skipping",
@@ -154,11 +154,11 @@ async function handleCharacterRespond(
   // room, or only active-membership Casts for a regular room (issue #177).
   const eligibleCharacters = await deps.castResolver.resolveRespondingCasts({
     roomId,
-    roomScope: simulation.scope,
+    roomScope: room.scope,
   });
 
   // If a specific character is targeted, use only that one; otherwise select
-  // responders the same way the simulation service does.
+  // responders the same way the room runtime service does.
   const explicitIds = characterId ? [characterId] : [];
 
   const { all: responders } = selectResponders({
@@ -280,7 +280,7 @@ async function handleCharacterJoinRequest(
   }
 
   const results = await processCastJoinRequests(roomId, {
-    simulations: deps.simulations,
+    rooms: deps.rooms,
     characters: deps.characters,
     memberships: deps.memberships,
     posts: deps.posts,
@@ -328,7 +328,7 @@ async function handleCharacterJoinWelcome(
   }
 
   const result = await publishWelcomePost(roomId, characterId, {
-    simulations: deps.simulations,
+    rooms: deps.rooms,
     characters: deps.characters,
     posts: deps.posts,
     llm: deps.llm,
@@ -375,7 +375,7 @@ async function handleThreadRevive(
   }
 
   const result = await reviveThread(roomId, {
-    simulations: deps.simulations,
+    rooms: deps.rooms,
     characters: deps.characters,
     posts: deps.posts,
     threads: deps.threads,
@@ -423,7 +423,7 @@ async function handleRoomReview(
   }
 
   const result = await reviewRoom(roomId, {
-    simulations: deps.simulations,
+    rooms: deps.rooms,
     posts: deps.posts,
     scheduledEvents: deps.scheduledEvents,
     castResolver: deps.castResolver,

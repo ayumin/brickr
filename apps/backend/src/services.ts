@@ -28,17 +28,17 @@ import { PostService } from "./posts/post-service.js";
 import { ProfileRepository } from "./profiles/profile-repository.js";
 import { ProfileService } from "./profiles/profile-service.js";
 import { ThreadService } from "./posts/thread-service.js";
-import { CastParticipationResolver } from "./simulation/cast-participation-resolver.js";
-import { EventHub } from "./simulation/event-hub.js";
-import { RoomMembershipRepository } from "./simulation/room-membership-repository.js";
-import { RoomMembershipService } from "./simulation/room-membership-service.js";
-import { RoomService } from "./simulation/room-service.js";
-import { RoomAnalysisSnapshotRepository } from "./simulation/room-analysis-snapshot-repository.js";
-import { RoomAnalysisSnapshotService } from "./simulation/room-analysis-snapshot-service.js";
-import { SimulationRepository } from "./simulation/simulation-repository.js";
-import { SimulationAnalysisService } from "./simulation/simulation-analysis-service.js";
-import type { SimulationLogger } from "./simulation/simulation-service.js";
-import { SimulationService } from "./simulation/simulation-service.js";
+import { CastParticipationResolver } from "./rooms/cast-participation-resolver.js";
+import { EventHub } from "./rooms/event-hub.js";
+import { RoomMembershipRepository } from "./rooms/room-membership-repository.js";
+import { RoomMembershipService } from "./rooms/room-membership-service.js";
+import { RoomService } from "./rooms/room-service.js";
+import { RoomAnalysisSnapshotRepository } from "./rooms/room-analysis-snapshot-repository.js";
+import { RoomAnalysisSnapshotService } from "./rooms/room-analysis-snapshot-service.js";
+import { RoomRepository } from "./rooms/room-repository.js";
+import { RoomAnalysisService } from "./rooms/room-analysis-service.js";
+import type { RoomRuntimeLogger } from "./rooms/room-runtime-service.js";
+import { RoomRuntimeService } from "./rooms/room-runtime-service.js";
 import { UserProfileRepository } from "./user-profile/user-profile-repository.js";
 import { UserProfileService } from "./user-profile/user-profile-service.js";
 import { ApplicationSettingsService } from "./settings/application-settings-service.js";
@@ -55,8 +55,8 @@ export type AppServices = {
   userProfile: UserProfileService;
   posts: PostService;
   feed: FeedService;
-  simulations: SimulationService;
-  simulationAnalysis: SimulationAnalysisService;
+  roomRuntime: RoomRuntimeService;
+  roomAnalysis: RoomAnalysisService;
   rooms: RoomService;
   roomMemberships: RoomMembershipService;
   roomAnalysisSnapshot: RoomAnalysisSnapshotService;
@@ -71,12 +71,12 @@ export type AppServices = {
  * Single composition root. Nothing else constructs repositories or services, so
  * swapping a dependency (e.g. a fake LLM in tests) happens here.
  */
-export async function buildServices(db: Db, logger: SimulationLogger): Promise<AppServices> {
+export async function buildServices(db: Db, logger: RoomRuntimeLogger): Promise<AppServices> {
   const characterRepository = new CharacterRepository(db);
   const modelProfileRepository = new ModelProfileRepository(db);
   const postRepository = new PostRepository(db);
   const roomMembershipRepository = new RoomMembershipRepository(db);
-  const simulationRepository = new SimulationRepository(db);
+  const roomRepository = new RoomRepository(db);
   const roomAnalysisSnapshotRepository = new RoomAnalysisSnapshotRepository(db);
   const userProfileRepository = new UserProfileRepository(db);
   const applicationSettingRepository = new ApplicationSettingRepository(db);
@@ -110,19 +110,19 @@ export async function buildServices(db: Db, logger: SimulationLogger): Promise<A
   );
   const threadService = new ThreadService(
     postRepository,
-    () => runtime.values.simulation.contextPostLimit,
+    () => runtime.values.room.contextPostLimit,
   );
   const agentService = new AgentService(llmClient, modelProfileRepository);
   const events = new EventHub();
   const tokenUsage = new TokenUsageService(tokenUsageRepository);
 
-  // Built before the simulation service, which publishes the thread payload the
+  // Built before the room runtime service, which publishes the thread payload the
   // feed assembles (§11.3). The dependency runs one way: the feed knows about
-  // simulations, never the other way round.
+  // rooms, never the other way round.
   const feed = new FeedService(
     new FeedRepository(db),
     postService,
-    simulationRepository,
+    roomRepository,
     roomMembershipRepository,
   );
 
@@ -131,8 +131,8 @@ export async function buildServices(db: Db, logger: SimulationLogger): Promise<A
     roomMembershipRepository,
   );
 
-  const simulations = new SimulationService({
-    simulations: simulationRepository,
+  const roomRuntime = new RoomRuntimeService({
+    rooms: roomRepository,
     memberships: roomMembershipRepository,
     posts: postService,
     characters: characterRepository,
@@ -142,35 +142,35 @@ export async function buildServices(db: Db, logger: SimulationLogger): Promise<A
     // The same object RuntimeSettings.recompute mutates in place, not a copy —
     // an admin changing a setting must take effect on this already-running
     // service without reconstructing it.
-    options: runtime.values.simulation,
+    options: runtime.values.room,
     logger,
     tokenUsage,
     threadActivity: feed,
     llmBudget,
     castResolver,
   });
-  const simulationAnalysis = new SimulationAnalysisService(
-    simulationRepository,
+  const roomAnalysis = new RoomAnalysisService(
+    roomRepository,
     postService,
     llmClient,
     providerRegistry,
   );
 
   const rooms = new RoomService({
-    simulations: simulationRepository,
+    rooms: roomRepository,
     memberships: roomMembershipRepository,
     handles: handleRepository,
     userProfiles: userProfileRepository,
   });
 
   const roomMemberships = new RoomMembershipService({
-    simulations: simulationRepository,
+    rooms: roomRepository,
     memberships: roomMembershipRepository,
   });
 
   const roomAnalysisSnapshot = new RoomAnalysisSnapshotService({
     snapshots: roomAnalysisSnapshotRepository,
-    simulations: simulationRepository,
+    rooms: roomRepository,
     memberships: roomMembershipRepository,
     posts: postService,
     llm: llmClient,
@@ -219,8 +219,8 @@ export async function buildServices(db: Db, logger: SimulationLogger): Promise<A
     userProfile: new UserProfileService(userProfileRepository),
     posts: postService,
     feed,
-    simulations,
-    simulationAnalysis,
+    roomRuntime,
+    roomAnalysis,
     rooms,
     roomMemberships,
     roomAnalysisSnapshot,

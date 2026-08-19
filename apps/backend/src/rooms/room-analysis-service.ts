@@ -9,13 +9,13 @@ import { z } from "zod";
 import type { LLMClient } from "../llm/llm-client.js";
 import type { LLMProviderRegistry } from "../llm/provider-registry.js";
 import type { PostService } from "../posts/post-service.js";
-import type { SimulationRepository } from "./simulation-repository.js";
+import type { RoomRepository } from "./room-repository.js";
 import {
-  assertSimulationOwnerOrAdmin,
-  SimulationNotFoundError,
-  toSimulationDto,
-  type SimulationActor,
-} from "./simulation-service.js";
+  assertRoomOwnerOrAdmin,
+  RuntimeRoomNotFoundError,
+  toRoomDto,
+  type SignedInActor,
+} from "./room-runtime-service.js";
 
 const SUMMARY_POST_LIMIT = 100;
 const SUMMARY_CONTENT_LIMIT = 500;
@@ -29,25 +29,25 @@ const summarySchema = z.object({
   lowEngagementTopics: z.string().trim().min(1),
 });
 
-export class SimulationAnalysisService {
+export class RoomAnalysisService {
   constructor(
-    private readonly simulations: SimulationRepository,
+    private readonly rooms: RoomRepository,
     private readonly posts: PostService,
     private readonly llm: LLMClient,
     private readonly providers: LLMProviderRegistry,
   ) {}
 
-  async analyze(id: string, actor: SimulationActor): Promise<RoomAnalysisDto> {
-    const simulation = await this.simulations.findById(id);
-    if (!simulation) throw new SimulationNotFoundError(id);
-    assertSimulationOwnerOrAdmin(simulation, actor);
+  async analyze(id: string, actor: SignedInActor): Promise<RoomAnalysisDto> {
+    const room = await this.rooms.findById(id);
+    if (!room) throw new RuntimeRoomNotFoundError(id);
+    assertRoomOwnerOrAdmin(room, actor);
 
     const posts = await this.posts.listByRoom(id);
     const replyCount = posts.filter((post) => post.replyTo !== null).length;
     const repostCount = posts.filter((post) => post.quoteOf !== null).length;
 
     return {
-      room: toSimulationDto(simulation),
+      room: toRoomDto(room),
       summary: await this.summarize(posts),
       postCount: posts.length,
       authorCount: new Set(posts.map((post) => post.author.id)).size,
@@ -86,18 +86,18 @@ export class SimulationAnalysisService {
         maxOutputTokens: 500,
         temperature: 0.2,
         structuredOutput: {
-          name: "simulation_summary",
-          schema: simulationSummaryJsonSchema,
+          name: "room_summary",
+          schema: roomSummaryJsonSchema,
         },
       });
-      return parseSimulationSummary(result.text);
+      return parseRoomSummary(result.text);
     } catch {
       return fallbackSummary(posts);
     }
   }
 }
 
-const simulationSummaryJsonSchema = {
+const roomSummaryJsonSchema = {
   type: "object",
   additionalProperties: false,
   properties: {
@@ -109,7 +109,7 @@ const simulationSummaryJsonSchema = {
   required: ["overallTopics", "postOverview", "highEngagementTopics", "lowEngagementTopics"],
 };
 
-export function parseSimulationSummary(text: string): RoomContentSummaryDto {
+export function parseRoomSummary(text: string): RoomContentSummaryDto {
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
   if (start < 0 || end < start) throw new Error("summary JSON was not found");

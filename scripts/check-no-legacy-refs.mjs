@@ -15,7 +15,16 @@ function walk(directory) {
   });
 }
 
-const files = ["README.md", "ARCHITECTURE.md", "CONTRIBUTE.md", ...walk("apps"), ...walk("packages")];
+// CLAUDE.md is checked too: it is the spec every contributor and agent reads
+// first, so a stale name there is where the old vocabulary comes back from.
+const files = [
+  "README.md",
+  "ARCHITECTURE.md",
+  "CONTRIBUTE.md",
+  "CLAUDE.md",
+  ...walk("apps"),
+  ...walk("packages"),
+];
 
 const forbidden = [
   { label: "legacy REST endpoint", pattern: /\/api\/simulations(?:\/|\b)/ },
@@ -24,6 +33,11 @@ const forbidden = [
   { label: "legacy Global Simulation constant", pattern: /GLOBAL_SIMULATION/ },
   { label: "legacy Global Simulation concept", pattern: /Global Simulation/i },
   { label: "removed frontend feature", pattern: /features\/simulation(?:\/|\b)/ },
+  // The domain is Room everywhere: type, class, file and directory names
+  // included. Only the lower-case word survives, in the reserved handle list
+  // (`packages/shared/src/handle.ts`) and in product prose.
+  { label: "legacy Simulation identifier", pattern: /Simulation/ },
+  { label: "legacy simulation module path", pattern: /src\/simulation(?:\/|\b)/ },
 ];
 
 const violations = [];

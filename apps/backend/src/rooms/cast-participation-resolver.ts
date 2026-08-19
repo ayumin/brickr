@@ -10,7 +10,7 @@
  *     membership in that room.
  *
  * This single resolver replaces the ad-hoc `findAll()` calls scattered across
- * SimulationService, ThreadRevivalService, and RoomReviewService, ensuring
+ * RoomRuntimeService, ThreadRevivalService, and RoomReviewService, ensuring
  * consistent Cast selection logic across all event types.
  *
  * Design notes:
@@ -26,7 +26,7 @@
 import type { Character } from "../characters/character.js";
 import type { CharacterRepository } from "../characters/character-repository.js";
 import type { RoomMembershipRepository } from "./room-membership-repository.js";
-import type { RoomScope } from "./simulation.js";
+import type { RoomScope } from "./room.js";
 
 export type CastParticipationContext = {
   roomId: string;

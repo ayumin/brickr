@@ -43,7 +43,7 @@ import {
 } from "@brickr/shared";
 import type { AppServices } from "../services.js";
 import { buildOpenApiOperation, defineRoute } from "./define-route.js";
-import { RoomForbiddenError } from "../simulation/room-service.js";
+import { RoomForbiddenError } from "../rooms/room-service.js";
 
 export const roomIdParams = z.object({
   id: z.string().trim().min(1).max(64).describe("Room ID"),
@@ -207,7 +207,7 @@ const inviteMemberBodySchema = z.object({
 
 export const getRoomOpenApiMeta = {
   operationId: "getRoomSummary",
-  tags: ["Simulations"] as string[],
+  tags: ["Rooms"] as string[],
   summary: "Get one room's summary",
   description:
     "Requires a session. A stopped room the caller neither created nor administers " +
@@ -220,7 +220,7 @@ export const getRoomOpenApiMeta = {
 
 export const createRoomOpenApiMeta = {
   operationId: "createRoom",
-  tags: ["Simulations"] as string[],
+  tags: ["Rooms"] as string[],
   summary: "Create a room",
   description:
     "Creates a room and grants the creator an active owner membership. " +
@@ -230,7 +230,7 @@ export const createRoomOpenApiMeta = {
 
 export const updateRoomOpenApiMeta = {
   operationId: "updateRoom",
-  tags: ["Simulations"] as string[],
+  tags: ["Rooms"] as string[],
   summary: "Update a room's title",
   description:
     "Updates the room title. Only the owner or an admin may update. " +
@@ -244,7 +244,7 @@ export const updateRoomOpenApiMeta = {
 
 export const archiveRoomOpenApiMeta = {
   operationId: "archiveRoom",
-  tags: ["Simulations"] as string[],
+  tags: ["Rooms"] as string[],
   summary: "Archive a room",
   description: "Archives a room. Only the owner or an admin may archive.",
   successDescription: "The archived room",
@@ -256,7 +256,7 @@ export const archiveRoomOpenApiMeta = {
 
 export const deleteRoomOpenApiMeta = {
   operationId: "deleteRoom",
-  tags: ["Simulations"] as string[],
+  tags: ["Rooms"] as string[],
   summary: "Delete an archived room",
   description:
     "Hard-deletes an archived room and all its posts. " +
@@ -295,7 +295,7 @@ export const analyzeRoomOpenApiMeta = {
 
 export const listRoomsOpenApiMeta = {
   operationId: "listRooms",
-  tags: ["Simulations"] as string[],
+  tags: ["Rooms"] as string[],
   summary: "List rooms visible to the caller",
   description:
     "Returns the rooms the signed-in user may discover, ordered by most recent activity. " +
@@ -309,7 +309,7 @@ export const listRoomsOpenApiMeta = {
 
 export const getRoomSnapshotOpenApiMeta = {
   operationId: "getRoomSnapshot",
-  tags: ["Simulations"] as string[],
+  tags: ["Rooms"] as string[],
   summary: "Get the current room analysis snapshot",
   description:
     "Returns the latest analysis snapshot for a room. " +
@@ -325,7 +325,7 @@ export const getRoomSnapshotOpenApiMeta = {
 
 export const updateRoomSnapshotOpenApiMeta = {
   operationId: "updateRoomSnapshot",
-  tags: ["Simulations"] as string[],
+  tags: ["Rooms"] as string[],
   summary: "Generate or update the room analysis snapshot",
   description:
     "Triggers generation of a new analysis snapshot for a room. " +
@@ -343,7 +343,7 @@ export const updateRoomSnapshotOpenApiMeta = {
 
 export const joinRoomOpenApiMeta = {
   operationId: "joinRoom",
-  tags: ["Simulations"] as string[],
+  tags: ["Rooms"] as string[],
   summary: "Join or request to join a room",
   description:
     "For public rooms: creates an active membership immediately. " +
@@ -360,7 +360,7 @@ export const joinRoomOpenApiMeta = {
 
 export const inviteToRoomOpenApiMeta = {
   operationId: "inviteToRoom",
-  tags: ["Simulations"] as string[],
+  tags: ["Rooms"] as string[],
   summary: "Invite a user to a room by handle",
   description:
     "Owner/admin only. Creates an active membership for the invited user, " +
@@ -375,7 +375,7 @@ export const inviteToRoomOpenApiMeta = {
 
 export const listMembershipsOpenApiMeta = {
   operationId: "listRoomMemberships",
-  tags: ["Simulations"] as string[],
+  tags: ["Rooms"] as string[],
   summary: "List memberships for a room",
   description: "Owner/admin only. Returns all membership records for the room.",
   successDescription: "The list of memberships",
@@ -387,7 +387,7 @@ export const listMembershipsOpenApiMeta = {
 
 export const approveMembershipOpenApiMeta = {
   operationId: "approveRoomMembershipByMemberId",
-  tags: ["Simulations"] as string[],
+  tags: ["Rooms"] as string[],
   summary: "Approve a pending membership",
   description: "Owner/admin only. Transitions a pending membership to active.",
   successDescription: "The approved membership",
@@ -399,7 +399,7 @@ export const approveMembershipOpenApiMeta = {
 
 export const removeMembershipOpenApiMeta = {
   operationId: "removeRoomMembership",
-  tags: ["Simulations"] as string[],
+  tags: ["Rooms"] as string[],
   summary: "Remove or reject a membership",
   description: "Owner/admin only. Sets the membership status to removed.",
   successDescription: "Membership removed",
@@ -411,7 +411,7 @@ export const removeMembershipOpenApiMeta = {
 
 export const banMemberOpenApiMeta = {
   operationId: "banRoomMemberByMemberId",
-  tags: ["Simulations"] as string[],
+  tags: ["Rooms"] as string[],
   summary: "Ban a member from a room",
   description: "Owner/admin only. Sets the membership status to banned. Banned members cannot re-join.",
   successDescription: "Member banned",
@@ -423,7 +423,7 @@ export const banMemberOpenApiMeta = {
 
 export const leaveRoomOpenApiMeta = {
   operationId: "leaveRoom",
-  tags: ["Simulations"] as string[],
+  tags: ["Rooms"] as string[],
   summary: "Leave a room",
   description:
     "Active members may leave a room (active → left). " +
@@ -439,7 +439,7 @@ export const leaveRoomOpenApiMeta = {
 
 export const acceptInvitationOpenApiMeta = {
   operationId: "acceptRoomInvitation",
-  tags: ["Simulations"] as string[],
+  tags: ["Rooms"] as string[],
   summary: "Accept a pending room invitation",
   description:
     "The caller must have a pending(invitation) membership in the room. " +
@@ -453,7 +453,7 @@ export const acceptInvitationOpenApiMeta = {
 
 export const declineInvitationOpenApiMeta = {
   operationId: "declineRoomInvitation",
-  tags: ["Simulations"] as string[],
+  tags: ["Rooms"] as string[],
   summary: "Decline a pending room invitation",
   description:
     "The caller must have a pending(invitation) membership in the room. " +
@@ -467,7 +467,7 @@ export const declineInvitationOpenApiMeta = {
 
 export const withdrawRequestOpenApiMeta = {
   operationId: "withdrawRoomJoinRequest",
-  tags: ["Simulations"] as string[],
+  tags: ["Rooms"] as string[],
   summary: "Withdraw a pending join request",
   description:
     "The caller must have a pending(request) membership in the room. " +
@@ -481,7 +481,7 @@ export const withdrawRequestOpenApiMeta = {
 
 export const getRoomInvitationOpenApiMeta = {
   operationId: "getRoomInvitation",
-  tags: ["Simulations"] as string[],
+  tags: ["Rooms"] as string[],
   summary: "Get the caller's pending room invitation",
   description:
     "Returns the pending invitation details for the caller in the given room. " +
@@ -507,7 +507,7 @@ const memberIdParams = z.object({
 
 export const inviteMemberOpenApiMeta = {
   operationId: "inviteRoomMember",
-  tags: ["Simulations"] as string[],
+  tags: ["Rooms"] as string[],
   summary: "Invite a user or character to a room",
   description:
     "Owner/admin only. Creates an active membership for the target. " +
@@ -522,7 +522,7 @@ export const inviteMemberOpenApiMeta = {
 
 export const listPendingMembershipsOpenApiMeta = {
   operationId: "listPendingRoomMemberships",
-  tags: ["Simulations"] as string[],
+  tags: ["Rooms"] as string[],
   summary: "List pending membership requests",
   description: "Owner/admin only. Returns all pending membership requests for the room.",
   successDescription: "List of pending memberships",
@@ -534,7 +534,7 @@ export const listPendingMembershipsOpenApiMeta = {
 
 export const removeRoomMemberOpenApiMeta = {
   operationId: "removeRoomMember",
-  tags: ["Simulations"] as string[],
+  tags: ["Rooms"] as string[],
   summary: "Remove a member from a room",
   description:
     "Owner/admin only. Transitions the membership to `removed`. " +
@@ -549,7 +549,7 @@ export const removeRoomMemberOpenApiMeta = {
 
 export const banRoomMemberOpenApiMeta = {
   operationId: "banRoomMember",
-  tags: ["Simulations"] as string[],
+  tags: ["Rooms"] as string[],
   summary: "Ban a member from a room",
   description:
     "Owner/admin only. Transitions the membership to `banned`. " +
@@ -564,7 +564,7 @@ export const banRoomMemberOpenApiMeta = {
 
 export const unbanRoomMemberOpenApiMeta = {
   operationId: "unbanRoomMember",
-  tags: ["Simulations"] as string[],
+  tags: ["Rooms"] as string[],
   summary: "Unban a member from a room",
   description:
     "Owner/admin only. Transitions the membership from `banned` to `removed`. " +
@@ -579,7 +579,7 @@ export const unbanRoomMemberOpenApiMeta = {
 
 export const approveRoomMemberOpenApiMeta = {
   operationId: "approveRoomMembership",
-  tags: ["Simulations"] as string[],
+  tags: ["Rooms"] as string[],
   summary: "Approve a pending membership request",
   description:
     "Owner/admin only. Transitions the membership from `pending` to `active`.",
@@ -593,7 +593,7 @@ export const approveRoomMemberOpenApiMeta = {
 
 export const rejectRoomMemberOpenApiMeta = {
   operationId: "rejectRoomMembership",
-  tags: ["Simulations"] as string[],
+  tags: ["Rooms"] as string[],
   summary: "Reject a pending membership request",
   description:
     "Owner/admin only. Deletes the pending membership row — no history is kept.",
@@ -955,7 +955,7 @@ export function registerRoomsRoutes(app: FastifyInstance, services: AppServices)
     auth: "required",
     response: roomListResponseSchema,
     handler: async ({ user }) => {
-      const rooms = await services.simulations.listRooms(user);
+      const rooms = await services.roomRuntime.listRooms(user);
       return { rooms };
     },
   }).register(app);
@@ -968,7 +968,7 @@ export function registerRoomsRoutes(app: FastifyInstance, services: AppServices)
     params: roomIdParams,
     response: roomSummaryResponseSchema,
     handler: async ({ user, params }) => {
-      return services.simulations.get(params.id, user);
+      return services.roomRuntime.get(params.id, user);
     },
   }).register(app);
 
@@ -1028,7 +1028,7 @@ export function registerRoomsRoutes(app: FastifyInstance, services: AppServices)
     params: roomIdParams,
     response: roomDtoResponseSchema,
     handler: async ({ user, params }) => ({
-      room: await services.simulations.stop(params.id, user),
+      room: await services.roomRuntime.stop(params.id, user),
     }),
   }).register(app);
 
@@ -1039,7 +1039,7 @@ export function registerRoomsRoutes(app: FastifyInstance, services: AppServices)
     params: roomIdParams,
     response: roomDtoResponseSchema,
     handler: async ({ user, params }) => ({
-      room: await services.simulations.resume(params.id, user),
+      room: await services.roomRuntime.resume(params.id, user),
     }),
   }).register(app);
 
@@ -1050,7 +1050,7 @@ export function registerRoomsRoutes(app: FastifyInstance, services: AppServices)
     params: roomIdParams,
     response: z.object({ analysis: z.unknown() }),
     handler: async ({ user, params }) => ({
-      analysis: await services.simulationAnalysis.analyze(params.id, user),
+      analysis: await services.roomAnalysis.analyze(params.id, user),
     }),
   }).register(app);
 
@@ -1140,7 +1140,7 @@ export function registerRoomsRoutes(app: FastifyInstance, services: AppServices)
     response: membershipsResponseSchema,
     handler: async ({ user, params }) => {
       // Only owner/admin may list memberships — enforced by canManage from the service
-      const roomResponse = await services.simulations.get(params.id, user);
+      const roomResponse = await services.roomRuntime.get(params.id, user);
       if (!roomResponse.room.canManage) {
         throw new RoomForbiddenError(params.id);
       }

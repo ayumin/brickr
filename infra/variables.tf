@@ -100,7 +100,7 @@ variable "backend_min_instances" {
 }
 
 variable "backend_max_instances" {
-  description = "Maximum backend instances. Keep at 1 until background simulation work is moved to a queue."
+  description = "Maximum backend instances. Keep at 1 until background room post generation is moved to a queue."
   type        = number
   default     = 1
 }

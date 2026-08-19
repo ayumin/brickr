@@ -41,7 +41,7 @@
  */
 
 import type { MemberKind, MemberRole, MembershipStatus, RoomVisibility } from "@brickr/shared";
-import type { RoomScope } from "./simulation.js";
+import type { RoomScope } from "./room.js";
 
 // ---------------------------------------------------------------------------
 // Actor types

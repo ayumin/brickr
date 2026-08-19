@@ -4,7 +4,7 @@ import { generateTemporaryPassword, hashPassword } from "./password.js";
 import type { SessionRepository } from "./session-repository.js";
 import type { UserAccountRepository } from "./user-account-repository.js";
 import { toPublicAccount, type UserAccount } from "./user-account.js";
-import type { RoomService } from "../simulation/room-service.js";
+import type { RoomService } from "../rooms/room-service.js";
 
 export type UserManagementPage = {
   accounts: UserAccount[];

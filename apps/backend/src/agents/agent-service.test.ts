@@ -6,7 +6,7 @@ import { LLMError } from "../llm/provider.js";
 import type { ModelProfile } from "../model-profiles/model-profile.js";
 import type { ModelProfileRepository } from "../model-profiles/model-profile-repository.js";
 import type { Post } from "../posts/post.js";
-import type { ResponseAction } from "../simulation/simulation.js";
+import type { ResponseAction } from "../rooms/room.js";
 import { AgentService, CharacterModelProfileMissingError } from "./agent-service.js";
 
 type ClientCall = { providerId: ProviderId; request: LLMGenerateRequest };
@@ -14,7 +14,7 @@ type ClientCall = { providerId: ProviderId; request: LLMGenerateRequest };
 type Responder = (providerId: ProviderId, request: LLMGenerateRequest) => string;
 
 /**
- * Stands in for the whole LLM layer. Proves the simulation side never needs a
+ * Stands in for the whole LLM layer. Proves the room side never needs a
  * provider SDK, an API key or a network call.
  */
 function makeFakeClient(

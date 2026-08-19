@@ -19,14 +19,14 @@
 import type { MemberKind, RoomMembershipDto } from "@brickr/shared";
 import { DomainError } from "../domain-error.js";
 import { isUniqueConstraintError } from "../persistence/prisma.js";
-import type { SimulationRepository } from "./simulation-repository.js";
+import type { RoomRepository } from "./room-repository.js";
 import type { RoomMembershipRepository } from "./room-membership-repository.js";
 import type { RoomMembership } from "./room-membership-repository.js";
 import { CannotModifyOwnerError } from "./room-membership-errors.js";
 import {
-  isSimulationOwnerOrAdmin,
-  type SimulationActor,
-} from "./simulation-service.js";
+  isRoomOwnerOrAdmin,
+  type SignedInActor,
+} from "./room-runtime-service.js";
 import { RoomNotFoundError, RoomArchivedError, RoomForbiddenError } from "./room-service.js";
 import { assertNotFeedRoom } from "./feed-room-guard.js";
 
@@ -104,7 +104,7 @@ function toDto(m: RoomMembership): RoomMembershipDto {
 // ---------------------------------------------------------------------------
 
 export type RoomMembershipServiceDeps = {
-  simulations: SimulationRepository;
+  rooms: RoomRepository;
   memberships: RoomMembershipRepository;
 };
 
@@ -128,7 +128,7 @@ export class RoomMembershipService {
    *   - Banned members must be unbanned before they can be re-invited.
    *   - Members who are already active or pending are rejected.
    */
-  async invite(input: InviteInput, actor: SimulationActor): Promise<RoomMembershipDto> {
+  async invite(input: InviteInput, actor: SignedInActor): Promise<RoomMembershipDto> {
     const room = await this.requireRoom(input.roomId);
     this.assertOwnerOrAdmin(room, actor, input.roomId);
     assertNotFeedRoom(room);
@@ -200,7 +200,7 @@ export class RoomMembershipService {
   async remove(
     roomId: string,
     membershipId: string,
-    actor: SimulationActor,
+    actor: SignedInActor,
   ): Promise<RoomMembershipDto> {
     const room = await this.requireRoom(roomId);
     this.assertOwnerOrAdmin(room, actor, roomId);
@@ -240,7 +240,7 @@ export class RoomMembershipService {
   async ban(
     roomId: string,
     membershipId: string,
-    actor: SimulationActor,
+    actor: SignedInActor,
   ): Promise<RoomMembershipDto> {
     const room = await this.requireRoom(roomId);
     this.assertOwnerOrAdmin(room, actor, roomId);
@@ -276,7 +276,7 @@ export class RoomMembershipService {
   async unban(
     roomId: string,
     membershipId: string,
-    actor: SimulationActor,
+    actor: SignedInActor,
   ): Promise<RoomMembershipDto> {
     const room = await this.requireRoom(roomId);
     this.assertOwnerOrAdmin(room, actor, roomId);
@@ -299,7 +299,7 @@ export class RoomMembershipService {
    */
   async listPending(
     roomId: string,
-    actor: SimulationActor,
+    actor: SignedInActor,
   ): Promise<RoomMembershipDto[]> {
     const room = await this.requireRoom(roomId);
     this.assertOwnerOrAdmin(room, actor, roomId);
@@ -315,7 +315,7 @@ export class RoomMembershipService {
   async approve(
     roomId: string,
     membershipId: string,
-    actor: SimulationActor,
+    actor: SignedInActor,
   ): Promise<RoomMembershipDto> {
     const room = await this.requireRoom(roomId);
     this.assertOwnerOrAdmin(room, actor, roomId);
@@ -343,7 +343,7 @@ export class RoomMembershipService {
   async reject(
     roomId: string,
     membershipId: string,
-    actor: SimulationActor,
+    actor: SignedInActor,
   ): Promise<void> {
     const room = await this.requireRoom(roomId);
     this.assertOwnerOrAdmin(room, actor, roomId);
@@ -361,7 +361,7 @@ export class RoomMembershipService {
   // -- helpers ---------------------------------------------------------------
 
   private async requireRoom(id: string) {
-    const room = await this.deps.simulations.findById(id);
+    const room = await this.deps.rooms.findById(id);
     if (!room) throw new RoomNotFoundError(id);
     return room;
   }
@@ -378,11 +378,11 @@ export class RoomMembershipService {
   }
 
   private assertOwnerOrAdmin(
-    simulation: { createdByUserId?: string },
-    actor: SimulationActor,
+    room: { createdByUserId?: string },
+    actor: SignedInActor,
     id: string,
   ): void {
-    if (!isSimulationOwnerOrAdmin(simulation, actor)) {
+    if (!isRoomOwnerOrAdmin(room, actor)) {
       throw new RoomForbiddenError(id);
     }
   }

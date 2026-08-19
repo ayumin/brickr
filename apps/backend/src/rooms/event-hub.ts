@@ -21,7 +21,7 @@ type RoomConnection = {
  * In-process pub/sub for SSE.
  *
  * Two kinds of subscriber, because the app has two streams (§11.1, §11.4): one
- * room's listeners, and the unified feed's, which wants every simulation. A post
+ * room's listeners, and the unified feed's, which wants every room. A post
  * reaches both from a single `publish`, so the two streams can never disagree
  * about what happened.
  *
@@ -39,7 +39,7 @@ type RoomConnection = {
  *     one member, including multiple tabs, when their access is revoked.
  */
 export class EventHub {
-  private readonly bySimulation = new Map<string, Map<string, RoomConnection>>();
+  private readonly byRoom = new Map<string, Map<string, RoomConnection>>();
   private readonly global = new Set<EventListener>();
 
   /**
@@ -56,10 +56,10 @@ export class EventHub {
     onClose: () => void,
     subscriberId?: string,
   ): { unsubscribe: () => void; connectionId: string } {
-    let connections = this.bySimulation.get(roomId);
+    let connections = this.byRoom.get(roomId);
     if (!connections) {
       connections = new Map();
-      this.bySimulation.set(roomId, connections);
+      this.byRoom.set(roomId, connections);
     }
 
     const connectionId = randomUUID();
@@ -70,16 +70,16 @@ export class EventHub {
     });
 
     const unsubscribe = (): void => {
-      const current = this.bySimulation.get(roomId);
+      const current = this.byRoom.get(roomId);
       if (!current) return;
       current.delete(connectionId);
-      if (current.size === 0) this.bySimulation.delete(roomId);
+      if (current.size === 0) this.byRoom.delete(roomId);
     };
 
     return { unsubscribe, connectionId };
   }
 
-  /** The unified feed's stream: every simulation, including the global row. */
+  /** The unified feed's stream: every room, including the global row. */
   subscribeAll(listener: EventListener): () => void {
     this.global.add(listener);
     return () => {
@@ -110,7 +110,7 @@ export class EventHub {
    * reconnect receive a 404 — the correct answer for a stopped room (§10.4).
    */
   closeRoom(roomId: string): void {
-    const connections = this.bySimulation.get(roomId);
+    const connections = this.byRoom.get(roomId);
     if (!connections) return;
 
     // Snapshot before iterating: onClose may trigger unsubscribe.
@@ -122,7 +122,7 @@ export class EventHub {
       }
     }
 
-    this.bySimulation.delete(roomId);
+    this.byRoom.delete(roomId);
   }
 
   /**
@@ -133,7 +133,7 @@ export class EventHub {
    * invoked so the route handler can end the HTTP response.
    */
   closeSubscriber(roomId: string, subscriberId: string): void {
-    const connections = this.bySimulation.get(roomId);
+    const connections = this.byRoom.get(roomId);
     if (!connections) return;
 
     const targeted = [...connections].filter(
@@ -142,7 +142,7 @@ export class EventHub {
     for (const [connectionId] of targeted) {
       connections.delete(connectionId);
     }
-    if (connections.size === 0) this.bySimulation.delete(roomId);
+    if (connections.size === 0) this.byRoom.delete(roomId);
 
     for (const [, connection] of targeted) {
       try {
@@ -164,7 +164,7 @@ export class EventHub {
   }
 
   subscriberCount(roomId: string): number {
-    return this.bySimulation.get(roomId)?.size ?? 0;
+    return this.byRoom.get(roomId)?.size ?? 0;
   }
 
   feedSubscriberCount(): number {
@@ -183,7 +183,7 @@ export class EventHub {
   }
 
   private deliverToRoom(roomId: string, event: PublishedInternalSseEvent): void {
-    const connections = this.bySimulation.get(roomId);
+    const connections = this.byRoom.get(roomId);
     if (!connections) return;
     for (const [connectionId, { listener }] of [...connections]) {
       try {
@@ -192,7 +192,7 @@ export class EventHub {
         // One broken subscriber must not stop delivery to the others.
         connections.delete(connectionId);
         if (connections.size === 0) {
-          this.bySimulation.delete(roomId);
+          this.byRoom.delete(roomId);
         }
       }
     }

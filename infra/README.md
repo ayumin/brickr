@@ -13,7 +13,7 @@ staging environment:
 
 The configuration runs at most one frontend instance and one backend instance,
 for a maximum of two application container instances. Both scale to zero while
-staging is unused. Simulation work currently runs in the backend process, so a
+staging is unused. Room post generation currently runs in the backend process, so a
 scale-down can interrupt in-flight generation; this data-loss tradeoff is
 intentional for this test-only environment.
 

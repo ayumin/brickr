@@ -31,20 +31,20 @@ import {
   RoomMemberBannedError,
   UserNotFoundError,
   VisibilityImmutableError,
-} from "../simulation/room-service.js";
+} from "../rooms/room-service.js";
 import {
   MembershipNotFoundError,
   MemberAlreadyExistsError,
   MemberBannedError,
   InvalidStatusTransitionError,
-} from "../simulation/room-membership-service.js";
-import { CannotModifyOwnerError } from "../simulation/room-membership-errors.js";
+} from "../rooms/room-membership-service.js";
+import { CannotModifyOwnerError } from "../rooms/room-membership-errors.js";
 import {
   SnapshotForbiddenError,
   SnapshotNotFoundError,
   SnapshotRoomArchivedError,
   SnapshotRoomNotFoundError,
-} from "../simulation/room-analysis-snapshot-service.js";
+} from "../rooms/room-analysis-snapshot-service.js";
 import { ScheduledEventNotFoundError } from "../scheduled-events/scheduled-event-repository.js";
 import { handleDomainError } from "./errors.js";
 

@@ -27,8 +27,8 @@ import type { PostService } from "../posts/post-service.js";
 import type { RoomAnalysisSnapshotRepository } from "./room-analysis-snapshot-repository.js";
 import type { RoomAnalysisSnapshot } from "./room-analysis-snapshot-repository.js";
 import type { RoomMembershipRepository } from "./room-membership-repository.js";
-import type { SimulationRepository } from "./simulation-repository.js";
-import type { SimulationActor } from "./simulation.js";
+import type { RoomRepository } from "./room-repository.js";
+import type { SignedInActor } from "./room.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -136,7 +136,7 @@ function toDto(snapshot: RoomAnalysisSnapshot): RoomAnalysisSnapshotDto {
 
 export type RoomAnalysisSnapshotServiceDeps = {
   snapshots: RoomAnalysisSnapshotRepository;
-  simulations: SimulationRepository;
+  rooms: RoomRepository;
   memberships: RoomMembershipRepository;
   posts: PostService;
   llm: LLMClient;
@@ -157,7 +157,7 @@ export class RoomAnalysisSnapshotService {
    */
   async get(
     roomId: string,
-    actor: SimulationActor,
+    actor: SignedInActor,
   ): Promise<{ snapshot: RoomAnalysisSnapshotDto }> {
     const room = await this.requireRoom(roomId);
     await this.assertCanView(room, actor, roomId);
@@ -184,7 +184,7 @@ export class RoomAnalysisSnapshotService {
    */
   async update(
     roomId: string,
-    actor: SimulationActor,
+    actor: SignedInActor,
   ): Promise<{ snapshot: RoomAnalysisSnapshotDto; updated: boolean }> {
     const room = await this.requireRoom(roomId);
 
@@ -240,7 +240,7 @@ export class RoomAnalysisSnapshotService {
   // ---------------------------------------------------------------------------
 
   private async requireRoom(roomId: string) {
-    const room = await this.deps.simulations.findById(roomId);
+    const room = await this.deps.rooms.findById(roomId);
     if (!room) throw new SnapshotRoomNotFoundError(roomId);
     return room;
   }
@@ -253,7 +253,7 @@ export class RoomAnalysisSnapshotService {
    */
   private async assertCanView(
     room: { createdByUserId?: string; status: string; visibility: string },
-    actor: SimulationActor,
+    actor: SignedInActor,
     roomId: string,
   ): Promise<void> {
     // Admins and the room owner always have access.

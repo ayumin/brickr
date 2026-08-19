@@ -13,7 +13,7 @@
  *   - non-owner/non-admin: all operations throw RoomForbiddenError
  */
 import { describe, expect, it, vi } from "vitest";
-import type { SimulationRepository } from "./simulation-repository.js";
+import type { RoomRepository } from "./room-repository.js";
 import type { RoomMembershipRepository } from "./room-membership-repository.js";
 import type { RoomMembership } from "./room-membership-repository.js";
 import {
@@ -26,16 +26,16 @@ import {
 } from "./room-membership-service.js";
 import { RoomNotFoundError, RoomArchivedError, RoomForbiddenError } from "./room-service.js";
 import { FeedRoomImmutableError } from "./feed-room-guard.js";
-import type { Simulation, SimulationActor } from "./simulation.js";
+import type { Room, SignedInActor } from "./room.js";
 
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
-const OWNER: SimulationActor = { id: "user-owner", isAdmin: false };
-const ADMIN: SimulationActor = { id: "user-admin", isAdmin: true };
-const OTHER: SimulationActor = { id: "user-other", isAdmin: false };
+const OWNER: SignedInActor = { id: "user-owner", isAdmin: false };
+const ADMIN: SignedInActor = { id: "user-admin", isAdmin: true };
+const OTHER: SignedInActor = { id: "user-other", isAdmin: false };
 
-function makeRoom(overrides: Partial<Simulation> = {}): Simulation {
+function makeRoom(overrides: Partial<Room> = {}): Room {
   return {
     id: "room-1",
     title: "テストルーム",
@@ -51,7 +51,7 @@ function makeRoom(overrides: Partial<Simulation> = {}): Simulation {
 }
 
 /** The reserved Feed room: unowned (admin-only), scope: 'global'. */
-function makeFeedRoom(overrides: Partial<Simulation> = {}): Simulation {
+function makeFeedRoom(overrides: Partial<Room> = {}): Room {
   return makeRoom({ scope: "global", createdByUserId: undefined, ...overrides });
 }
 
@@ -69,9 +69,9 @@ function makeMembership(overrides: Partial<RoomMembership> = {}): RoomMembership
   };
 }
 
-function makeSimulationRepo(
-  overrides: Partial<SimulationRepository> = {},
-): SimulationRepository {
+function makeRoomRepo(
+  overrides: Partial<RoomRepository> = {},
+): RoomRepository {
   return {
     create: vi.fn(),
     createWithOwner: vi.fn(),
@@ -83,7 +83,7 @@ function makeSimulationRepo(
     delete: vi.fn(),
     archiveByIds: vi.fn(),
     ...overrides,
-  } as unknown as SimulationRepository;
+  } as unknown as RoomRepository;
 }
 
 function makeMembershipRepo(
@@ -123,17 +123,17 @@ function makeMembershipRepo(
 }
 
 function makeService(
-  simRepo?: Partial<SimulationRepository>,
+  simRepo?: Partial<RoomRepository>,
   memRepo?: Partial<RoomMembershipRepository>,
 ): {
   service: RoomMembershipService;
-  simulations: SimulationRepository;
+  rooms: RoomRepository;
   memberships: RoomMembershipRepository;
 } {
-  const simulations = makeSimulationRepo(simRepo);
+  const rooms = makeRoomRepo(simRepo);
   const memberships = makeMembershipRepo(memRepo);
-  const service = new RoomMembershipService({ simulations, memberships });
-  return { service, simulations, memberships };
+  const service = new RoomMembershipService({ rooms, memberships });
+  return { service, rooms, memberships };
 }
 
 // ── invite ────────────────────────────────────────────────────────────────────

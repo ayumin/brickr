@@ -82,7 +82,7 @@ export interface LLMProvider {
 }
 
 /**
- * Raised for any provider failure. Simulation treats these as expected
+ * Raised for any provider failure. Room treats these as expected
  * failures: one character drops out, the rest keep going.
  */
 export class LLMError extends Error {

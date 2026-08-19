@@ -34,9 +34,9 @@ import { PostService } from "../posts/post-service.js";
 import { ThreadService } from "../posts/thread-service.js";
 import { ScheduledEventRepository } from "../scheduled-events/scheduled-event-repository.js";
 import type { ScheduledEvent } from "../scheduled-events/scheduled-event.js";
-import { CastParticipationResolver } from "../simulation/cast-participation-resolver.js";
-import { RoomMembershipRepository } from "../simulation/room-membership-repository.js";
-import { SimulationRepository } from "../simulation/simulation-repository.js";
+import { CastParticipationResolver } from "../rooms/cast-participation-resolver.js";
+import { RoomMembershipRepository } from "../rooms/room-membership-repository.js";
+import { RoomRepository } from "../rooms/room-repository.js";
 import { UserProfileRepository } from "../user-profile/user-profile-repository.js";
 import { RuntimeSettings } from "../settings/runtime-settings.js";
 import { workerConfig, RETRY_DELAYS_MS } from "./config.js";
@@ -68,7 +68,7 @@ const characterRepository = new CharacterRepository(prisma);
 const modelProfileRepository = new ModelProfileRepository(prisma);
 const userProfileRepository = new UserProfileRepository(prisma);
 const postRepo = new PostRepository(prisma);
-const simulationRepository = new SimulationRepository(prisma);
+const roomRepository = new RoomRepository(prisma);
 const roomMembershipRepository = new RoomMembershipRepository(prisma);
 const scheduledEventRepository = new ScheduledEventRepository(prisma);
 
@@ -93,7 +93,7 @@ const postService = new PostService(postRepo, characterRepository, userProfileRe
 
 const threadService = new ThreadService(
   postRepo,
-  () => runtime.values.simulation.contextPostLimit,
+  () => runtime.values.room.contextPostLimit,
 );
 
 const castResolver = new CastParticipationResolver(
@@ -102,7 +102,7 @@ const castResolver = new CastParticipationResolver(
 );
 
 const processorDeps = {
-  simulations: simulationRepository,
+  rooms: roomRepository,
   characters: characterRepository,
   memberships: roomMembershipRepository,
   posts: postService,

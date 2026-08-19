@@ -8,15 +8,15 @@ import { DomainError } from "../domain-error.js";
 import { optionalField } from "../persistence/repository-mapping.js";
 import type { PostService } from "../posts/post-service.js";
 import type { Post } from "../posts/post.js";
-import type { SimulationRepository } from "../simulation/simulation-repository.js";
-import type { RoomMembershipRepository } from "../simulation/room-membership-repository.js";
+import type { RoomRepository } from "../rooms/room-repository.js";
+import type { RoomMembershipRepository } from "../rooms/room-membership-repository.js";
 import {
   assertRoomReadable,
-  isSimulationOwnerOrAdmin,
-  SimulationNotFoundError,
-  type SimulationActor,
-} from "../simulation/simulation-service.js";
-import type { ThreadActivityEvent } from "../simulation/public-events.js";
+  isRoomOwnerOrAdmin,
+  RuntimeRoomNotFoundError,
+  type SignedInActor,
+} from "../rooms/room-runtime-service.js";
+import type { ThreadActivityEvent } from "../rooms/public-events.js";
 import { toFeedCapabilities } from "./feed-capabilities.js";
 import { decodeFeedCursor, encodeFeedCursor } from "./feed-cursor.js";
 import type { FeedRepository, FeedRoom, FeedThreadRow } from "./feed-repository.js";
@@ -24,10 +24,10 @@ import { withReaderCapabilities } from "./public-events.js";
 
 /**
  * A thread's root post could not be resolved — the id given is not a root, its
- * simulation is gone, or its room is stopped and the reader is not its owner
+ * room is gone, or its room is stopped and the reader is not its owner
  * or an administrator. All four collapse to a 404, kept distinct from
- * simulation-service's PostNotFoundError (a reply/quote target outside the
- * current simulation) so the two unrelated meanings cannot be confused by an
+ * room-runtime-service's PostNotFoundError (a reply/quote target outside the
+ * current room) so the two unrelated meanings cannot be confused by an
  * `instanceof` check.
  */
 export class ThreadRootNotFoundError extends DomainError {
@@ -66,7 +66,7 @@ export const THREAD_REPLIES_LIMIT = 500;
 const UNTITLED_ROOM_TITLE = "無題のルーム";
 
 /** The signed-in reader, or `null` for an anonymous one — the feed is public (§10.1). */
-export type FeedReader = (SimulationActor & { handle: string }) | null;
+export type FeedReader = (SignedInActor & { handle: string }) | null;
 
 export type FeedPageRequest = {
   reader: FeedReader;
@@ -86,7 +86,7 @@ export class FeedService {
   constructor(
     private readonly feed: FeedRepository,
     private readonly posts: PostService,
-    private readonly simulations: SimulationRepository,
+    private readonly rooms: RoomRepository,
     private readonly memberships: RoomMembershipRepository,
   ) {}
 
@@ -141,9 +141,9 @@ export class FeedService {
     roomId: string,
     reader: NonNullable<FeedReader>,
   ): Promise<void> {
-    const simulation = await this.simulations.findById(roomId);
-    if (!simulation) throw new SimulationNotFoundError(roomId);
-    await assertRoomReadable(this.memberships, simulation, reader);
+    const room = await this.rooms.findById(roomId);
+    if (!room) throw new RuntimeRoomNotFoundError(roomId);
+    await assertRoomReadable(this.memberships, room, reader);
   }
 
   /**
@@ -163,9 +163,9 @@ export class FeedService {
     const post = await this.posts.findById(id);
     if (!post) return null;
 
-    const simulation = await this.simulations.findById(post.roomId);
-    if (!simulation) return null;
-    if (simulation.status === "archived" && !isSimulationOwnerOrAdmin(simulation, reader)) {
+    const room = await this.rooms.findById(post.roomId);
+    if (!room) return null;
+    if (room.status === "archived" && !isRoomOwnerOrAdmin(room, reader)) {
       return null;
     }
 
@@ -185,15 +185,15 @@ export class FeedService {
       post.threadRootId === post.id ? post : await this.posts.findById(post.threadRootId);
     if (!root) throw new ThreadRootNotFoundError(post.threadRootId);
 
-    const simulation = await this.simulations.findById(root.roomId);
-    if (!simulation) throw new SimulationNotFoundError(root.roomId);
+    const roomRow = await this.rooms.findById(root.roomId);
+    if (!roomRow) throw new RuntimeRoomNotFoundError(root.roomId);
 
     const room: FeedRoom = {
-      id: simulation.id,
-      title: simulation.title,
-      status: simulation.status,
-      visibility: simulation.visibility,
-      ...optionalField("createdByUserId", simulation.createdByUserId),
+      id: roomRow.id,
+      title: roomRow.title,
+      status: roomRow.status,
+      visibility: roomRow.visibility,
+      ...optionalField("createdByUserId", roomRow.createdByUserId),
     };
 
     const [replyCounts, previews] = await Promise.all([
@@ -248,11 +248,11 @@ export class FeedService {
     const root = await this.posts.findById(threadRootId);
     if (!root || root.replyTo !== null) throw new ThreadRootNotFoundError(threadRootId);
 
-    const simulation = await this.simulations.findById(root.roomId);
-    if (!simulation) throw new ThreadRootNotFoundError(threadRootId);
+    const room = await this.rooms.findById(root.roomId);
+    if (!room) throw new ThreadRootNotFoundError(threadRootId);
     // Same rule as the thread detail: an archived room stays readable in full for
     // its creator and an administrator, and is a 404 for everyone else (§10.8).
-    if (simulation.status === "archived" && !isSimulationOwnerOrAdmin(simulation, reader)) {
+    if (room.status === "archived" && !isRoomOwnerOrAdmin(room, reader)) {
       throw new ThreadRootNotFoundError(threadRootId);
     }
 
@@ -345,7 +345,7 @@ export class FeedService {
       capabilities: toFeedCapabilities({
         isSignedIn: reader !== null,
         isStoppedRoom: row.room.status === "archived",
-        isRoomOwnerOrAdmin: reader !== null && isSimulationOwnerOrAdmin(row.room, reader),
+        isRoomOwnerOrAdmin: reader !== null && isRoomOwnerOrAdmin(row.room, reader),
         replyCount: input.replyCount,
         previewedReplyCount: latestReplies.length,
       }),

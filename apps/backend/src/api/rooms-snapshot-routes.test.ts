@@ -21,13 +21,13 @@ import {
   updateRoomSnapshotOpenApiMeta,
   registerRoomsRoutes,
 } from "./rooms-routes.js";
-import type { RoomAnalysisSnapshotService } from "../simulation/room-analysis-snapshot-service.js";
+import type { RoomAnalysisSnapshotService } from "../rooms/room-analysis-snapshot-service.js";
 import {
   SnapshotForbiddenError,
   SnapshotNotFoundError,
   SnapshotRoomArchivedError,
   SnapshotRoomNotFoundError,
-} from "../simulation/room-analysis-snapshot-service.js";
+} from "../rooms/room-analysis-snapshot-service.js";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -70,7 +70,7 @@ function makeServices(
   snapshotOverrides: Partial<RoomAnalysisSnapshotService> = {},
 ): AppServices {
   return {
-    simulations: {
+    roomRuntime: {
       get: () => Promise.resolve({ room: {} }),
       listRooms: () => Promise.resolve([]),
     },

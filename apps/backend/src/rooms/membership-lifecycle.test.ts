@@ -29,7 +29,7 @@
  */
 
 import { describe, expect, it, vi } from "vitest";
-import type { SimulationRepository } from "./simulation-repository.js";
+import type { RoomRepository } from "./room-repository.js";
 import type { RoomMembershipRepository, RoomMembership } from "./room-membership-repository.js";
 import {
   RoomMembershipService,
@@ -38,17 +38,17 @@ import {
   InvalidStatusTransitionError,
 } from "./room-membership-service.js";
 import { RoomArchivedError } from "./room-service.js";
-import type { Simulation, SimulationActor } from "./simulation.js";
+import type { Room, SignedInActor } from "./room.js";
 
 // ---------------------------------------------------------------------------
 // Fixtures
 // ---------------------------------------------------------------------------
 
-const OWNER: SimulationActor = { id: "user-owner", isAdmin: false };
-const ADMIN: SimulationActor = { id: "user-admin", isAdmin: true };
+const OWNER: SignedInActor = { id: "user-owner", isAdmin: false };
+const ADMIN: SignedInActor = { id: "user-admin", isAdmin: true };
 const MEMBER_ID = "user-target";
 
-function makeRoom(overrides: Partial<Simulation> = {}): Simulation {
+function makeRoom(overrides: Partial<Room> = {}): Room {
   return {
     id: "room-1",
     title: "テストルーム",
@@ -77,9 +77,9 @@ function makeMembership(overrides: Partial<RoomMembership> = {}): RoomMembership
   };
 }
 
-function makeSimulationRepo(
-  overrides: Partial<SimulationRepository> = {},
-): SimulationRepository {
+function makeRoomRepo(
+  overrides: Partial<RoomRepository> = {},
+): RoomRepository {
   return {
     create: vi.fn(),
     createWithOwner: vi.fn(),
@@ -91,7 +91,7 @@ function makeSimulationRepo(
     delete: vi.fn(),
     archiveByIds: vi.fn(),
     ...overrides,
-  } as unknown as SimulationRepository;
+  } as unknown as RoomRepository;
 }
 
 function makeMembershipRepo(
@@ -132,11 +132,11 @@ function makeMembershipRepo(
 }
 
 function makeService(
-  simRepo?: Partial<SimulationRepository>,
+  simRepo?: Partial<RoomRepository>,
   memRepo?: Partial<RoomMembershipRepository>,
 ): RoomMembershipService {
   return new RoomMembershipService({
-    simulations: makeSimulationRepo(simRepo),
+    rooms: makeRoomRepo(simRepo),
     memberships: makeMembershipRepo(memRepo),
   });
 }
@@ -204,7 +204,7 @@ describe("Membership lifecycle — allowed transitions", () => {
         ),
       });
       const service = new RoomMembershipService({
-        simulations: makeSimulationRepo(),
+        rooms: makeRoomRepo(),
         memberships,
       });
 

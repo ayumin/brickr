@@ -2,9 +2,9 @@ import type { RoomVisibility, RoomStatus } from "@brickr/shared";
 import type { Db, DbTransaction } from "../persistence/prisma.js";
 import { optionalField } from "../persistence/repository-mapping.js";
 import { toFallbackHandle } from "../user-profile/user-profile-repository.js";
-import type { Simulation, SimulationActor, SimulationSummary, RoomScope } from "./simulation.js";
+import type { Room, SignedInActor, RoomSummary, RoomScope } from "./room.js";
 
-type SimulationRow = {
+type RoomRow = {
   id: string;
   title: string | null;
   status: string;
@@ -17,27 +17,27 @@ type SimulationRow = {
 };
 
 /** The database column is an unconstrained string; this is the one place that trusts it. */
-export function toSimulationStatus(value: string): RoomStatus {
+export function toRoomStatus(value: string): RoomStatus {
   return value as RoomStatus;
 }
 
 /** The database column is an unconstrained string; this is the one place that trusts it. */
-export function toSimulationVisibility(value: string): RoomVisibility {
+export function toRoomVisibility(value: string): RoomVisibility {
   return value as RoomVisibility;
 }
 
 /** The database column is an unconstrained string; this is the one place that trusts it. */
-export function toSimulationScope(value: string): RoomScope {
+export function toRoomScope(value: string): RoomScope {
   return value as RoomScope;
 }
 
-function toSimulation(row: SimulationRow): Simulation {
+function toRoom(row: RoomRow): Room {
   return {
     id: row.id,
     title: row.title,
-    status: toSimulationStatus(row.status),
-    visibility: toSimulationVisibility(row.visibility),
-    scope: toSimulationScope(row.scope),
+    status: toRoomStatus(row.status),
+    visibility: toRoomVisibility(row.visibility),
+    scope: toRoomScope(row.scope),
     tags: row.tags,
     createdAt: row.createdAt,
     lastActivityAt: row.lastActivityAt,
@@ -45,7 +45,7 @@ function toSimulation(row: SimulationRow): Simulation {
   };
 }
 
-type SimulationSummaryRow = SimulationRow & {
+type RoomSummaryRow = RoomRow & {
   _count: { posts: number };
   createdByUser: { id: string; handle: string | null; displayName: string } | null;
   /** Pending membership count — only populated for the room list query. */
@@ -58,9 +58,9 @@ type SimulationSummaryRow = SimulationRow & {
   _callerIsActiveMember?: boolean;
 };
 
-function toSimulationSummary(row: SimulationSummaryRow): SimulationSummary {
+function toRoomSummary(row: RoomSummaryRow): RoomSummary {
   return {
-    ...toSimulation(row),
+    ...toRoom(row),
     postCount: row._count.posts,
     creator: row.createdByUser
       ? {
@@ -76,7 +76,7 @@ function toSimulationSummary(row: SimulationSummaryRow): SimulationSummary {
   };
 }
 
-export class SimulationRepository {
+export class RoomRepository {
   constructor(private readonly db: Db) {}
 
   /**
@@ -85,7 +85,7 @@ export class SimulationRepository {
    * `lastActivityAt` starts at the creation time so an empty room still sorts
    * sensibly in an activity-ordered list.
    */
-  async create(title: string | null, createdByUserId: string): Promise<Simulation> {
+  async create(title: string | null, createdByUserId: string): Promise<Room> {
     const createdAt = new Date();
     const row = await this.db.room.create({
       data: {
@@ -98,7 +98,7 @@ export class SimulationRepository {
         lastActivityAt: createdAt,
       },
     });
-    return toSimulation(row);
+    return toRoom(row);
   }
 
   /**
@@ -113,10 +113,10 @@ export class SimulationRepository {
     title: string | null,
     visibility: RoomVisibility,
     createdByUserId: string,
-  ): Promise<Simulation> {
+  ): Promise<Room> {
     const createdAt = new Date();
 
-    const simulation = await this.db.$transaction(async (tx: DbTransaction) => {
+    const room = await this.db.$transaction(async (tx: DbTransaction) => {
       const row = await tx.room.create({
         data: {
           title,
@@ -144,7 +144,7 @@ export class SimulationRepository {
       return row;
     });
 
-    return toSimulation(simulation);
+    return toRoom(room);
   }
 
   /**
@@ -190,7 +190,7 @@ export class SimulationRepository {
    * membership (if any) is included so the service layer can apply metadata
    * restrictions without a second query.
    */
-  async findAllVisibleTo(actor: SimulationActor): Promise<SimulationSummary[]> {
+  async findAllVisibleTo(actor: SignedInActor): Promise<RoomSummary[]> {
     const rows = await this.db.room.findMany({
       where: {
         // The Feed room (scope: 'global') is never shown in the room list.
@@ -251,7 +251,7 @@ export class SimulationRepository {
       const counts = row._count as { posts: number; memberships: number };
       const callerMembership = (row.memberships as Array<{ status: string }>)[0];
       const isActiveMember = callerMembership?.status === "active";
-      return toSimulationSummary({
+      return toRoomSummary({
         ...row,
         _count: { posts: counts.posts },
         _pendingCount: counts.memberships,
@@ -260,9 +260,9 @@ export class SimulationRepository {
     });
   }
 
-  async findById(id: string): Promise<Simulation | null> {
+  async findById(id: string): Promise<Room | null> {
     const row = await this.db.room.findUnique({ where: { id } });
-    return row ? toSimulation(row) : null;
+    return row ? toRoom(row) : null;
   }
 
   /**
@@ -270,7 +270,7 @@ export class SimulationRepository {
    * `creator` for a single room, the same fields `findAllVisibleTo` already
    * computes for the list.
    */
-  async findSummaryById(id: string): Promise<SimulationSummary | null> {
+  async findSummaryById(id: string): Promise<RoomSummary | null> {
     const row = await this.db.room.findUnique({
       where: { id },
       include: {
@@ -278,19 +278,19 @@ export class SimulationRepository {
         createdByUser: { select: { id: true, handle: true, displayName: true } },
       },
     });
-    return row ? toSimulationSummary(row) : null;
+    return row ? toRoomSummary(row) : null;
   }
 
-  async updateTitle(id: string, title: string): Promise<Simulation> {
+  async updateTitle(id: string, title: string): Promise<Room> {
     const row = await this.db.room.update({ where: { id }, data: { title } });
-    return toSimulation(row);
+    return toRoom(row);
   }
 
-  async updateStatus(id: string, status: RoomStatus): Promise<Simulation> {
+  async updateStatus(id: string, status: RoomStatus): Promise<Room> {
     const row = await this.db.room.update({
       where: { id },
       data: { status },
     });
-    return toSimulation(row);
+    return toRoom(row);
   }
 }

@@ -1,6 +1,6 @@
 import type { FeedThreadDto, SseEvent } from "@brickr/shared";
-import { isSimulationOwnerOrAdmin } from "../simulation/simulation-service.js";
-import type { PublishedInternalSseEvent } from "../simulation/public-events.js";
+import { isRoomOwnerOrAdmin } from "../rooms/room-runtime-service.js";
+import type { PublishedInternalSseEvent } from "../rooms/public-events.js";
 import { toFeedCapabilities } from "./feed-capabilities.js";
 import type { FeedRoom } from "./feed-repository.js";
 import type { FeedReader } from "./feed-service.js";
@@ -25,7 +25,7 @@ export function withReaderCapabilities(
     capabilities: toFeedCapabilities({
       isSignedIn: reader !== null,
       isStoppedRoom: room.status === "archived",
-      isRoomOwnerOrAdmin: reader !== null && isSimulationOwnerOrAdmin(room, reader),
+      isRoomOwnerOrAdmin: reader !== null && isRoomOwnerOrAdmin(room, reader),
       replyCount: thread.replyCount,
       previewedReplyCount: thread.latestReplies.length,
     }),

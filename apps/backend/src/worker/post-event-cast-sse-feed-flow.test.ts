@@ -12,13 +12,13 @@ import { describe, expect, it, vi } from "vitest";
 import type { Character } from "../characters/character.js";
 import type { Post } from "../posts/post.js";
 import type { ScheduledEvent } from "../scheduled-events/scheduled-event.js";
-import type { Simulation } from "../simulation/simulation.js";
-import { EventHub } from "../simulation/event-hub.js";
+import type { Room } from "../rooms/room.js";
+import { EventHub } from "../rooms/event-hub.js";
 import { processEvent, type EventProcessorDeps } from "./event-processor.js";
 import type {
   InternalSseEvent,
   PublishedInternalSseEvent,
-} from "../simulation/public-events.js";
+} from "../rooms/public-events.js";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -42,7 +42,7 @@ const character: Character = {
   modelProfileId: "profile-1",
 };
 
-const activeRoom: Simulation = {
+const activeRoom: Room = {
   id: "room-1",
   title: "Integration Test Room",
   status: "active",
@@ -165,7 +165,7 @@ describe("Step 1 — processEvent generates and publishes the Cast reply", () =>
     const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 
     const deps: EventProcessorDeps = {
-      simulations: { findById: () => Promise.resolve(activeRoom) },
+      rooms: { findById: () => Promise.resolve(activeRoom) },
       characters: {
         findAll: () => Promise.resolve([character]),
         findById: () => Promise.resolve(character),
@@ -254,10 +254,10 @@ describe("Step 1 — processEvent generates and publishes the Cast reply", () =>
 
   it("skips processing when the room is archived (archived after scheduling)", async () => {
     const { deps, publish, logger } = makeDeps({
-      simulations: {
+      rooms: {
         findById: () =>
           Promise.resolve({ ...activeRoom, status: "archived" }),
-      } as unknown as EventProcessorDeps["simulations"],
+      } as unknown as EventProcessorDeps["rooms"],
     });
 
     await processEvent(characterRespondEvent, deps);

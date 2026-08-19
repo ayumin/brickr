@@ -17,8 +17,8 @@ import type { LLMProviderRegistry } from "../llm/provider-registry.js";
 import type { PostService } from "../posts/post-service.js";
 import type { RoomAnalysisSnapshotRepository } from "./room-analysis-snapshot-repository.js";
 import type { RoomMembershipRepository } from "./room-membership-repository.js";
-import type { SimulationRepository } from "./simulation-repository.js";
-import type { Simulation } from "./simulation.js";
+import type { RoomRepository } from "./room-repository.js";
+import type { Room } from "./room.js";
 import {
   RoomAnalysisSnapshotService,
   SnapshotForbiddenError,
@@ -32,7 +32,7 @@ import type { RoomAnalysisSnapshot } from "./room-analysis-snapshot-repository.j
 // Fixtures
 // ---------------------------------------------------------------------------
 
-const activeRoom: Simulation = {
+const activeRoom: Room = {
   id: "room-1",
   title: "テストルーム",
   status: "active",
@@ -44,12 +44,12 @@ const activeRoom: Simulation = {
   createdByUserId: "owner-1",
 };
 
-const archivedRoom: Simulation = {
+const archivedRoom: Room = {
   ...activeRoom,
   status: "archived",
 };
 
-const closedRoom: Simulation = {
+const closedRoom: Room = {
   ...activeRoom,
   visibility: "closed",
 };
@@ -84,10 +84,10 @@ function makePost(id: string): PostDto {
 // Factory helpers
 // ---------------------------------------------------------------------------
 
-function makeSimulations(room: Simulation | null): SimulationRepository {
+function makeRooms(room: Room | null): RoomRepository {
   return {
     findById: (id: string) => Promise.resolve(id === room?.id ? room : null),
-  } as unknown as SimulationRepository;
+  } as unknown as RoomRepository;
 }
 
 function makeSnapshots(snapshot: RoomAnalysisSnapshot | null): RoomAnalysisSnapshotRepository {
@@ -145,7 +145,7 @@ function makeProviders(hasProvider: boolean): LLMProviderRegistry {
 }
 
 function makeService(overrides: {
-  room?: Simulation | null;
+  room?: Room | null;
   snapshot?: RoomAnalysisSnapshot | null;
   posts?: PostDto[];
   membershipStatus?: string;
@@ -168,7 +168,7 @@ function makeService(overrides: {
 
   return new RoomAnalysisSnapshotService({
     snapshots: makeSnapshots(snapshot),
-    simulations: makeSimulations(room),
+    rooms: makeRooms(room),
     memberships: makeMemberships(membershipStatus),
     posts: makePosts(posts),
     llm: makeLLM(llmResult),
@@ -419,7 +419,7 @@ describe("RoomAnalysisSnapshotService.update() LLM outcomes", () => {
     const listByRoom = vi.fn(() => Promise.resolve([makePost("post-1")]));
     const service = new RoomAnalysisSnapshotService({
       snapshots: makeSnapshots(null),
-      simulations: makeSimulations(activeRoom),
+      rooms: makeRooms(activeRoom),
       memberships: makeMemberships(),
       posts: { listByRoom } as unknown as PostService,
       llm: makeLLM(JSON.stringify({

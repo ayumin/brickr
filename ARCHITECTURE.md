@@ -43,7 +43,7 @@ apps/
 │       ├── auth/           account、session、invite
 │       ├── feed/           横断Feed queryとcapability
 │       ├── posts/          Post/Thread write・mapping
-│       ├── simulation/     Room domain、membership、analysis、EventHub
+│       ├── rooms/          Room domain、membership、analysis、EventHub
 │       ├── scheduled-events/ DB queue
 │       ├── worker/         queue pollingとevent processor
 │       └── llm/            provider abstraction、budget、usage

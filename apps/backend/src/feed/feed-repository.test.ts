@@ -275,7 +275,7 @@ describe("FeedRepository mine filter (§12.3)", () => {
   });
 
   /**
-   * A thread never spans simulations (§10.5), so narrowing the lookups changes no
+   * A thread never spans rooms (§10.5), so narrowing the lookups changes no
    * result. It stops one room's filter from reading every reply, mention, and quote
    * in the database to build a list the outer query would discard anyway (§26).
    */

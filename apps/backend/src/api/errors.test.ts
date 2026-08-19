@@ -28,10 +28,10 @@ import { LLMError, LLMTimeoutError } from "../llm/provider.js";
 import { ReplyTargetNotFoundError } from "../posts/post-repository.js";
 import {
   PostNotFoundError,
-  SimulationForbiddenError,
-  SimulationNotFoundError,
-  SimulationStoppedError,
-} from "../simulation/simulation-service.js";
+  RoomManageForbiddenError,
+  RuntimeRoomNotFoundError,
+  RoomStoppedError,
+} from "../rooms/room-runtime-service.js";
 import { handleDomainError } from "./errors.js";
 
 function fakeReply(): { reply: FastifyReply; result: () => { status: number; body: unknown } } {
@@ -65,9 +65,9 @@ const CASES: Array<{ error: Error; status: number; code: string }> = [
   { error: new ModelProfileNotFoundError("profile-1"), status: 404, code: "not_found" },
   { error: new CharacterGenerationError(), status: 502, code: "character_generation_failed" },
   { error: new CharacterCsvError("bad row"), status: 400, code: "invalid_csv" },
-  { error: new SimulationNotFoundError("sim-1"), status: 404, code: "not_found" },
-  { error: new SimulationStoppedError("sim-1"), status: 409, code: "room_archived" },
-  { error: new SimulationForbiddenError("sim-1"), status: 403, code: "forbidden" },
+  { error: new RuntimeRoomNotFoundError("sim-1"), status: 404, code: "not_found" },
+  { error: new RoomStoppedError("sim-1"), status: 409, code: "room_archived" },
+  { error: new RoomManageForbiddenError("sim-1"), status: 403, code: "forbidden" },
   { error: new PostNotFoundError("post-1"), status: 404, code: "not_found" },
   { error: new ThreadRootNotFoundError("post-1"), status: 404, code: "not_found" },
   { error: new ReplyTargetNotFoundError("post-1"), status: 404, code: "not_found" },

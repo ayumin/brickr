@@ -25,6 +25,10 @@ describe("RESERVED_HANDLES", () => {
   it("does not reserve the pre-login user's own handle", () => {
     expect(RESERVED_HANDLES).not.toContain("you");
   });
+
+  it("does not reserve 'simulations': no route, type or directory uses that name any more", () => {
+    expect(RESERVED_HANDLES).not.toContain("simulations");
+  });
 });
 
 describe("isReservedHandle", () => {
@@ -40,7 +44,7 @@ describe("isReservedHandle", () => {
 
   it("reserves the routes this MR adds above the /:handle catch-all", () => {
     expect(isReservedHandle("characters")).toBe(true);
-    expect(isReservedHandle("simulations")).toBe(true);
+    expect(isReservedHandle("rooms")).toBe(true);
     expect(isReservedHandle("posts")).toBe(true);
   });
 

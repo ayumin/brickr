@@ -4,7 +4,7 @@ import type {
   LLMProviderRegistry,
   ProviderModelCatalog,
 } from "../llm/provider-registry.js";
-import type { SimulationLogger } from "../simulation/simulation-service.js";
+import type { RoomRuntimeLogger } from "../rooms/room-runtime-service.js";
 import type { ModelProfile } from "./model-profile.js";
 import type { ModelProfileRepository } from "./model-profile-repository.js";
 
@@ -17,7 +17,7 @@ export class ModelProfileService {
   constructor(
     private readonly profiles: ModelProfileRepository,
     private readonly providers: Pick<LLMProviderRegistry, "listAvailableModels">,
-    private readonly logger: Pick<SimulationLogger, "warn">,
+    private readonly logger: Pick<RoomRuntimeLogger, "warn">,
     private readonly timeoutMs: number | (() => number),
   ) {}
 

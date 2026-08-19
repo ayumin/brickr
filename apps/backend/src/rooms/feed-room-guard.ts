@@ -1,5 +1,5 @@
 import { DomainError } from "../domain-error.js";
-import type { Simulation } from "./simulation.js";
+import type { Room } from "./room.js";
 
 /** The Feed room (scope: 'global') cannot be modified, archived, deleted, or joined. */
 export class FeedRoomImmutableError extends DomainError {
@@ -24,7 +24,7 @@ export class FeedRoomImmutableError extends DomainError {
  * the latter would reveal that the target id is the reserved Feed room
  * before authorization has even been checked.
  */
-export function assertNotFeedRoom(room: Pick<Simulation, "scope">): void {
+export function assertNotFeedRoom(room: Pick<Room, "scope">): void {
   if (room.scope === "global") {
     throw new FeedRoomImmutableError();
   }

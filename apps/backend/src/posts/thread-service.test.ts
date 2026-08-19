@@ -446,11 +446,11 @@ describe("ThreadService.getCurrentThread", () => {
     /**
      * root <- mid <- target, plus five newer unrelated posts.
      *
-     * The recent window (`contextLimit` newest posts of the simulation) consists
+     * The recent window (`contextLimit` newest posts of the room) consists
      * entirely of the unrelated chatter, so nothing in the target's own thread
      * arrives via the ambient fetch. Only the ancestor walk can supply it.
      */
-    const deepThreadSimulation = (): readonly Post[] => [
+    const deepThreadRoom = (): readonly Post[] => [
       makePost({ id: "root", createdAt: at(1) }),
       makePost({ id: "mid", createdAt: at(2), authorId: "c-architect", replyTo: "root" }),
       makePost({ id: "target", createdAt: at(3), authorId: "c-skeptic", replyTo: "mid" }),
@@ -460,7 +460,7 @@ describe("ThreadService.getCurrentThread", () => {
     ];
 
     it("keeps the thread root when ambient posts would fill the budget", async () => {
-      const posts = deepThreadSimulation();
+      const posts = deepThreadRoom();
       const { repository, calls } = makeFakeRepository(posts);
       const service = new ThreadService(repository, 5);
 
@@ -483,7 +483,7 @@ describe("ThreadService.getCurrentThread", () => {
     });
 
     it("squeezes ambient posts out entirely when the thread alone fills the budget", async () => {
-      const posts = deepThreadSimulation();
+      const posts = deepThreadRoom();
       const { repository } = makeFakeRepository(posts);
       const service = new ThreadService(repository, 3);
 
@@ -493,7 +493,7 @@ describe("ThreadService.getCurrentThread", () => {
     });
 
     it("still supplies the whole thread when the budget is generous", async () => {
-      const posts = deepThreadSimulation();
+      const posts = deepThreadRoom();
       const { repository } = makeFakeRepository(posts);
       const service = new ThreadService(repository, 20);
 

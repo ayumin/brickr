@@ -1,7 +1,7 @@
 import type { Character } from "../characters/character.js";
 import type { Post } from "../posts/post.js";
 import type { Rng } from "./responder-selector.js";
-import type { ResponseAction } from "./simulation.js";
+import type { ResponseAction } from "./room.js";
 
 const defaultRng: Rng = Math.random;
 

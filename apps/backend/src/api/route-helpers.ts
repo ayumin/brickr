@@ -38,8 +38,8 @@ export async function withDomainErrors<T>(
   }
 }
 
-/** Shared param parsing + domain-error mapping for simulation-scoped routes. */
-export async function withSimulation<T>(
+/** Shared param parsing + domain-error mapping for room-scoped routes. */
+export async function withRoom<T>(
   request: FastifyRequest,
   reply: FastifyReply,
   handler: (id: string) => Promise<T>,
@@ -49,7 +49,7 @@ export async function withSimulation<T>(
     request.params,
     reply,
     "invalid_params",
-    "simulation id is invalid",
+    "room id is invalid",
   );
   if (!params) return reply;
 

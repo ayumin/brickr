@@ -147,7 +147,7 @@ model Character {
 
 model Room {
   id     String  @id @default(uuid())
-  /// Human-readable room name (optional, same role as the old Simulation.title).
+  /// Human-readable room name (optional).
   title  String?
   /// "active" | "archived".
   status String  @default("active")
@@ -521,7 +521,7 @@ model RoomAnalysisSnapshot {
 ///
 /// One row per provider. The `tokenLimit` is the administrator-configured
 /// ceiling; `totalTokens` is the running aggregate across all rooms.
-/// When `stopped` is true the simulation layer refuses to call that provider
+/// When `stopped` is true the room runtime refuses to call that provider
 /// until an administrator resets the row.
 ///
 /// Room-level usage is tracked in `LLMUsage`; deleting a room removes its
