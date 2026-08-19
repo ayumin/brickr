@@ -250,26 +250,70 @@ function renderGenerated(sessions) {
     );
   }
 
-  lines.push(
-    "## セッション一覧（自動生成・全件）",
-    "",
-    "下の「セッション一覧」節には、この全件表から特筆すべきものだけを抜粋してください。",
-    "",
+  // A normal week produces a couple of hundred sessions. Listing all of them
+  // buries the few that are worth reading, so only two slices are emitted:
+  // the sessions that did not finish, and the longest ones.
+  const LONGEST_COUNT = 10;
+
+  const header = [
     row(["Session ID", "種別", "エージェント", "状態", "経過(分)", "goal 冒頭"]),
     row(["-----------", "------", "--------------", "------", "-----------", "-----------"]),
-    ...[...sessions]
-      .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt))
-      .map((session) => {
-        const minutes = elapsedMinutes(session);
-        return row([
-          numericId(session.id),
-          `\`${cell(session.workflowDefinition)}\``,
-          cell(session.agentName ?? "-"),
-          cell(session.humanStatus ?? "-"),
-          minutes === null ? "-" : String(minutes),
-          cell(goalExcerpt(session.goal)),
-        ]);
-      }),
+  ];
+  const sessionRow = (session) => {
+    const minutes = elapsedMinutes(session);
+    return row([
+      numericId(session.id),
+      `\`${cell(session.workflowDefinition)}\``,
+      cell(session.agentName ?? "-"),
+      cell(session.humanStatus ?? "-"),
+      minutes === null ? "-" : String(minutes),
+      cell(goalExcerpt(session.goal)),
+    ]);
+  };
+  const byElapsedDesc = (a, b) => (elapsedMinutes(b) ?? -1) - (elapsedMinutes(a) ?? -1);
+
+  // Only treat a session as unfinished when the status is actually known.
+  // Without this guard, an instance without humanStatus would flag every
+  // single session as needing review.
+  const statusKnown = sessions.some(
+    (session) => session.humanStatus !== undefined && session.humanStatus !== null,
+  );
+  const unfinished = statusKnown
+    ? [...sessions].filter((session) => session.humanStatus !== "finished").sort(byElapsedDesc)
+    : [];
+  const unfinishedIds = new Set(unfinished.map((session) => session.id));
+
+  const longestSessions = [...sessions]
+    .filter((session) => session.archived !== true && !unfinishedIds.has(session.id))
+    .sort(byElapsedDesc)
+    .slice(0, LONGEST_COUNT);
+
+  lines.push("## 要確認セッション", "");
+  if (!statusKnown) {
+    lines.push(
+      "> 状態が取得できなかったため抽出できません。`humanStatus` の取得可否を確認してください。",
+      "",
+    );
+  } else if (unfinished.length === 0) {
+    lines.push("この期間のセッションはすべて `finished` でした。", "");
+  } else {
+    lines.push(
+      "`finished` 以外で終わったセッションです。掘る価値があるのは基本ここです。",
+      "",
+      ...header,
+      ...unfinished.map(sessionRow),
+      "",
+    );
+  }
+
+  const omitted = sessions.length - unfinished.length - longestSessions.length;
+  lines.push(
+    `## 経過時間の長い上位 ${LONGEST_COUNT} 件`,
+    "",
+    ...header,
+    ...longestSessions.map(sessionRow),
+    "",
+    `> 残る ${omitted} 件は省略しています。全件は docs/duo-sessions/README.md の GraphQL クエリで取得できます。`,
     "",
     END,
   );
