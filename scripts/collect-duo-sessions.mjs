@@ -35,9 +35,18 @@ function arg(name, fallback) {
   return found === undefined ? fallback : found.slice(prefix.length);
 }
 
-const host = (process.env.CI_SERVER_URL ?? "https://gitlab.com").replace(/\/+$/, "");
-const token = process.env.DUO_RETRO_TOKEN ?? process.env.GITLAB_TOKEN;
-const fullPath = arg("project", process.env.CI_PROJECT_PATH);
+// An exported-but-empty variable is the common failure mode here:
+// `export DUO_RETRO_TOKEN="$(some command)"` where the command printed nothing.
+// `??` only skips null and undefined, so the empty string would suppress the
+// GITLAB_TOKEN fallback and make the diagnosis harder than it needs to be.
+function env(name) {
+  const value = process.env[name];
+  return value === undefined || value.trim() === "" ? undefined : value;
+}
+
+const host = env("CI_SERVER_URL")?.replace(/\/+$/, "") ?? "https://gitlab.com";
+const token = env("DUO_RETRO_TOKEN") ?? env("GITLAB_TOKEN");
+const fullPath = arg("project", env("CI_PROJECT_PATH"));
 const daysInput = arg("days", "7");
 const days = Number(daysInput);
 const envFile = arg("env-file", null);
