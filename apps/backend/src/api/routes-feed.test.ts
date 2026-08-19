@@ -219,7 +219,9 @@ describe("/api/rooms/:id/posts", () => {
 
   async function start() {
     const post = { id: "post-1", roomId: "room-1", content: "hello" };
-    const requireReadableRoomForPosts = vi.fn(() => Promise.resolve());
+    const requireReadableRoomForPosts = vi.fn(() =>
+      Promise.resolve({ room: { id: "room-1" }, canPost: true }),
+    );
     const listByRoom = vi.fn(() => Promise.resolve([post]));
     const submitUserPost = vi.fn(() => Promise.resolve(post));
     const buildThreadForReader = vi.fn(() => Promise.resolve({ root: post, replies: [] }));
@@ -239,6 +241,7 @@ describe("/api/rooms/:id/posts", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
       posts: [{ id: "post-1", roomId: "room-1", content: "hello" }],
+      canPost: true,
     });
     // Uses the "ForPosts" variant, not `requireReadableRoom` — it must not
     // refuse the reserved Feed room the way the plain room-view path does

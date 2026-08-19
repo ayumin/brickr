@@ -70,6 +70,17 @@ export type CreatePostResponse = {
 
 export type PostsResponse = {
   posts: PostDto[];
+  /**
+   * Whether the caller may reply/quote in this room right now (§10.8).
+   *
+   * Computed server-side (`RoomRuntimeService.requireReadableRoomForPosts`)
+   * rather than left for the client to re-derive from a separate room fetch:
+   * `GET /api/rooms/:id` 404s for the reserved Feed room (by design — it
+   * never gets a second room-shaped surface), so a post-detail screen that
+   * tried to determine postability that way would wrongly disable reply/quote
+   * for every feed-composed post's thread.
+   */
+  canPost: boolean;
 };
 
 /**

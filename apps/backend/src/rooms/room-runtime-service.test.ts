@@ -535,7 +535,7 @@ describe("RoomRuntimeService.requireReadableRoom vs requireReadableRoomForPosts 
     ).rejects.toThrow(RuntimeRoomNotFoundError);
   });
 
-  it("requireReadableRoomForPosts admits the Feed room so a feed post's thread can be read", async () => {
+  it("requireReadableRoomForPosts admits the Feed room so a feed post's thread can be read, and reports canPost", async () => {
     const harness = makeHarness({
       characters: [],
       room: { ...ROOM, scope: "global", createdByUserId: undefined },
@@ -543,7 +543,7 @@ describe("RoomRuntimeService.requireReadableRoom vs requireReadableRoomForPosts 
 
     await expect(
       harness.service.requireReadableRoomForPosts(ROOM.id, { id: "any-user", isAdmin: false }),
-    ).resolves.toMatchObject({ id: ROOM.id, scope: "global" });
+    ).resolves.toMatchObject({ room: { id: ROOM.id, scope: "global" }, canPost: true });
   });
 
   it("requireReadableRoomForPosts still enforces membership for an ordinary closed room", async () => {
@@ -555,6 +555,17 @@ describe("RoomRuntimeService.requireReadableRoom vs requireReadableRoomForPosts 
     await expect(
       harness.service.requireReadableRoomForPosts(ROOM.id, { id: "non-member", isAdmin: false }),
     ).rejects.toThrow(RuntimeRoomNotFoundError);
+  });
+
+  it("requireReadableRoomForPosts reports canPost: false for an archived room (§19.3)", async () => {
+    const harness = makeHarness({
+      characters: [],
+      room: { ...ROOM, status: "archived" },
+    });
+
+    await expect(
+      harness.service.requireReadableRoomForPosts(ROOM.id, OWNER),
+    ).resolves.toMatchObject({ canPost: false });
   });
 });
 

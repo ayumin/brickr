@@ -8,6 +8,14 @@ export type RoomPostsState = {
   connection: ConnectionState;
   loading: boolean;
   error: string | null;
+  /**
+   * Whether the caller may reply/quote in this room right now (§10.8).
+   *
+   * Server-computed, from the same `GET /api/rooms/:id/posts` response that
+   * hydrates `posts` — not derived from a separate room fetch, which 404s for
+   * the reserved Feed room and would wrongly disable every action here.
+   */
+  canPost: boolean;
 };
 
 export const INITIAL_ROOM_POSTS_STATE: RoomPostsState = {
@@ -16,11 +24,12 @@ export const INITIAL_ROOM_POSTS_STATE: RoomPostsState = {
   connection: "connecting",
   loading: true,
   error: null,
+  canPost: false,
 };
 
 export type RoomPostsAction =
   | { kind: "reset" }
-  | { kind: "hydrated"; posts: PostDto[] }
+  | { kind: "hydrated"; posts: PostDto[]; canPost: boolean }
   | { kind: "loadFailed"; message: string }
   | { kind: "upsertPosts"; posts: PostDto[] }
   | { kind: "responseStarted"; activity: ResponseActivity }
@@ -51,6 +60,7 @@ export function reduceRoomPosts(state: RoomPostsState, action: RoomPostsAction):
         posts: mergeRoomPosts(state.posts, action.posts),
         loading: false,
         error: null,
+        canPost: action.canPost,
       };
     case "loadFailed":
       return { ...state, loading: false, error: action.message };

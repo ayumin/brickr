@@ -297,13 +297,24 @@ export class RoomRuntimeService {
    * Closed/private rooms require an active membership (or ownership/admin),
    * backed by a real `RoomMembership` lookup (issue #175, closing out #153) —
    * except the Feed room, which has no membership rows and is never refused.
+   *
+   * Also returns `canPost`: the post-detail screen needs to know whether
+   * reply/quote actions should be enabled, and — for the same reason this
+   * method exists — cannot get that from `GET /api/rooms/:id`, which 404s for
+   * the Feed room. Computed here rather than re-derived by the caller, since
+   * the server is the only side that can enforce it (CLAUDE.md §62).
    */
-  async requireReadableRoomForPosts(id: string, actor: SignedInActor): Promise<Room> {
+  async requireReadableRoomForPosts(
+    id: string,
+    actor: SignedInActor,
+  ): Promise<{ room: Room; canPost: boolean }> {
     const room = await this.requireRoom(id);
     // The Feed room is deliberately never refused here (see the doc comment
     // above): it has no membership rows, and computeRoomCapabilities's Feed-room
-    // branch would otherwise report canView: false for everyone.
-    if (room.scope === "global") return room;
+    // branch would otherwise report canView: false for everyone. Posting into
+    // it is always allowed for a signed-in actor (`actor` here always is one —
+    // see `SignedInActor` — and the Feed room is never archived).
+    if (room.scope === "global") return { room, canPost: true };
     const roomActor = await toRoomActor(
       this.deps.memberships,
       room.id,
@@ -317,7 +328,7 @@ export class RoomRuntimeService {
     if (!caps.canView) {
       throw new RuntimeRoomNotFoundError(room.id);
     }
-    return room;
+    return { room, canPost: caps.canPost };
   }
 
   private async requireRoomSummary(id: string): Promise<RoomSummary> {

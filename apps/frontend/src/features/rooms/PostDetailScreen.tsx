@@ -68,23 +68,11 @@ export function PostDetailScreen({ postId }: { postId: string }) {
   const roomId = state.status === "ready" ? state.post.roomId : null;
 
   const userProfile = useUserProfile();
+  // `canPost` (whether the room is stopped, per §19.3) comes from the same
+  // `GET /api/rooms/:id/posts` fetch as `posts` — not a separate `GET
+  // /api/rooms/:id` call, which 404s for the reserved Feed room and would
+  // wrongly disable reply/quote for every feed-composed post's thread.
   const events = useRoomPosts(roomId ?? "", roomId !== null);
-
-  // Whether the room is stopped, fetched separately from the post itself:
-  // a stopped room's post detail still opens for its creator/admin (§10.8),
-  // but posting/replying/quoting stays refused for everyone regardless (§19.3).
-  const [canPost, setCanPost] = useState(false);
-  useEffect(() => {
-    if (roomId === null) return;
-    const controller = new AbortController();
-    api
-      .getRoom(roomId, controller.signal)
-      .then(({ room }) => setCanPost(room.status !== "archived"))
-      .catch((cause: unknown) => {
-        if (!isAbortError(cause)) setCanPost(false);
-      });
-    return () => controller.abort();
-  }, [roomId]);
 
   const openAuthor = useCallback(
     (authorId: string) => {
@@ -175,7 +163,7 @@ export function PostDetailScreen({ postId }: { postId: string }) {
         allPosts={events.posts}
         userProfile={userProfile.profile}
         activities={events.activities}
-        canPost={canPost}
+        canPost={events.canPost}
         onOpenAuthor={openAuthor}
         onOpenHandle={openHandle}
         onOpenPost={openPost}
