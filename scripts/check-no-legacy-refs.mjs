@@ -17,11 +17,17 @@ function walk(directory) {
 
 // CLAUDE.md is checked too: it is the spec every contributor and agent reads
 // first, so a stale name there is where the old vocabulary comes back from.
+// AGENTS.md and LEARNED.md are checked for the same reason: they are now the
+// entry point and the distilled rules an agent reads before touching anything.
+// docs/duo-sessions/ is deliberately excluded. Those are historical logs and
+// have to be able to name what the code used to be called.
 const files = [
   "README.md",
   "ARCHITECTURE.md",
   "CONTRIBUTE.md",
   "CLAUDE.md",
+  "AGENTS.md",
+  "LEARNED.md",
   ...walk("apps"),
   ...walk("packages"),
 ];

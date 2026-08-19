@@ -43,6 +43,30 @@
   script:
     - node scripts/check-design-tokens.mjs
 
+# Deliberately not .quality-change-rules: adding the agent instruction files
+# there would run the e2e and docker compose jobs on documentation-only changes.
+.learned-change-rules:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - LEARNED.md
+        - AGENTS.md
+        - scripts/check-learned-md.mjs
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes:
+        - LEARNED.md
+        - AGENTS.md
+        - scripts/check-learned-md.mjs
+
+"quality:learned-md":
+  extends: .learned-change-rules
+  stage: validate
+  image: node:22-bookworm-slim
+  before_script: []
+  needs: []
+  script:
+    - node scripts/check-learned-md.mjs
+
 "quality:empty-database":
   extends:
     - .backend-job
