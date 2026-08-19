@@ -283,7 +283,7 @@ describe("LLMClient runtime fallback — logging", () => {
     expect(fallbackLog).toMatch(/result=success/);
   });
 
-  it("logs primary=openai fallback=gemini when primary fails and Gemini is tried", async () => {
+  it("logs primary=openai attempted=openai result=retrying_next when primary fails", async () => {
     const openai = failingProvider("openai", new Error("connection error"));
     const gemini = successProvider("gemini");
     const mock = successProvider("mock");
@@ -299,9 +299,10 @@ describe("LLMClient runtime fallback — logging", () => {
     await client.generate("openai", baseRequest);
 
     const calls = logger.debug.mock.calls.map((c) => c[0] as string);
-    // Should have a "retrying_next" log for openai→gemini attempt
+    // "attempted" names the provider that just failed (openai), not the
+    // provider about to be tried next (gemini) — see logFallback's docstring.
     const retryLog = calls.find(
-      (msg) => msg.includes("primary=openai") && msg.includes("fallback=openai") && msg.includes("retrying_next"),
+      (msg) => msg.includes("primary=openai") && msg.includes("attempted=openai") && msg.includes("retrying_next"),
     );
     expect(retryLog).toBeDefined();
   });
@@ -378,5 +379,40 @@ describe("LLMClient runtime fallback — budget interaction", () => {
     // Mock is exempt from budget checks, so it should succeed.
     const result = await client.generate("openai", baseRequest);
     expect(result.text).toBe("mock response");
+  });
+
+  it("surfaces a budget-checker infrastructure failure instead of silently degrading to Gemini/Mock", async () => {
+    const openai = successProvider("openai", "openai response");
+    const gemini = successProvider("gemini", "gemini response");
+    const mock = successProvider("mock", "mock response");
+
+    const geminiSpy = vi.spyOn(gemini, "generate");
+    const mockSpy = vi.spyOn(mock, "generate");
+
+    const budgetChecker = {
+      // The checker itself is unhealthy (e.g. its DB is unreachable) — this
+      // must not be treated the same as an intentional "not allowed" result,
+      // or every character would quietly degrade to Mock during an outage.
+      isAllowed: vi.fn(() => Promise.reject(new Error("budget database unavailable"))),
+      recordUsage: vi.fn(() => Promise.resolve()),
+    };
+
+    const client = new LLMClient(
+      makeRegistry([openai, gemini, mock]),
+      defaultOptions,
+      undefined,
+      undefined,
+      undefined,
+      budgetChecker,
+    );
+
+    await expect(client.generate("openai", baseRequest)).rejects.toMatchObject({
+      message: "openai request failed: budget database unavailable",
+    });
+
+    // Gemini and Mock are healthy and registered, but must never be reached —
+    // the infra failure aborts the chain rather than falling through to them.
+    expect(geminiSpy).not.toHaveBeenCalled();
+    expect(mockSpy).not.toHaveBeenCalled();
   });
 });

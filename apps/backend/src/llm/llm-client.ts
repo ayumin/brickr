@@ -93,11 +93,16 @@ export class LLMClient {
         try {
           allowed = await this.budgetChecker.isAllowed(currentId);
         } catch (error) {
+          // A budget-checker infrastructure failure (e.g. the underlying DB is
+          // down) is not the same as an intentional "budget exceeded"
+          // decision: since the checker guards every non-mock provider, quietly
+          // falling through the rest of the chain would degrade all real
+          // traffic to Gemini/Mock without surfacing the outage. Fail fast
+          // instead so it is visible to the caller, same as before the
+          // fallback chain existed.
           const normalized = normalizeError(error, currentId);
-          lastError = normalized;
-          // Budget checker failure is treated as a transient error; try next provider.
-          this.logFallback(providerId, currentId, normalized.message, "retrying_next");
-          continue;
+          this.logFallback(providerId, currentId, normalized.message, "failed");
+          throw normalized;
         }
         if (!allowed) {
           // Budget exceeded is provider-specific and non-retryable; skip to next.
@@ -182,16 +187,24 @@ export class LLMClient {
    * Logs a fallback event in the structured format required by the spec (§9).
    *
    * Format:
-   *   primary=<id> fallback=<id|none> reason=<msg> result=<outcome>
+   *   primary=<id> fallback=<id> reason=<msg> result=success
+   *   primary=<id> attempted=<id|none> reason=<msg> result=retrying_next|failed
+   *
+   * `fallback` always names the provider that actually served the request.
+   * `attempted` names the provider that was just tried — and failed, was
+   * skipped, or (as "none") exhausted the chain — never the provider about
+   * to be tried next, so the field name cannot be misread as "falling back
+   * to this provider" when it is in fact the one that just failed.
    */
   private logFallback(
     primary: ProviderId,
-    fallback: ProviderId | "none",
+    providerId: ProviderId | "none",
     reason: string,
     result: "success" | "retrying_next" | "failed",
   ): void {
+    const field = result === "success" ? "fallback" : "attempted";
     this.logger?.debug(
-      `primary=${primary} fallback=${fallback} reason=${reason} result=${result}`,
+      `primary=${primary} ${field}=${providerId} reason=${reason} result=${result}`,
     );
   }
 
