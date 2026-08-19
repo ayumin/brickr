@@ -152,8 +152,20 @@ async function fetchSessions() {
 
     if (connection.pageInfo.hasNextPage !== true) break;
     if (pages >= MAX_PAGES) {
+      // Warn when the page cap is hit before we have seen any session whose
+      // updatedAt predates `since`. If every fetched session is within the
+      // window, the API may still have older sessions we never reached, which
+      // means the in-window count could be understated. This is the failure
+      // mode the comment in buildQuery describes: an unconfirmed sort order
+      // combined with a large historical backlog can exhaust MAX_PAGES on
+      // old sessions (or, here, on recent ones) before covering the window.
+      const oldestUpdated = nodes.reduce((min, node) => {
+        const t = Date.parse(node.updatedAt);
+        return Number.isFinite(t) && t < min ? t : min;
+      }, Infinity);
+      const windowMayBeIncomplete = oldestUpdated >= since.getTime();
       process.stderr.write(
-        `Stopped after ${MAX_PAGES} pages (${nodes.length} sessions). Raise MAX_PAGES if the window is not fully covered.\n`,
+        `Stopped after ${MAX_PAGES} pages (${nodes.length} sessions).${windowMayBeIncomplete ? " WARNING: the oldest fetched session is still within the requested window — the in-window count may be understated. Raise MAX_PAGES or narrow --days to ensure full coverage." : " Raise MAX_PAGES if the window is not fully covered."}\n`,
       );
       break;
     }
