@@ -287,7 +287,9 @@ function renderGenerated(sessions) {
   // where a casing change would silently mark every session as unfinished.
   const isFinished = (session) => String(session.status ?? "").toUpperCase() === "FINISHED";
   const unfinished = statusKnown
-    ? [...sessions].filter((session) => !isFinished(session)).sort(byElapsedDesc)
+    ? [...sessions]
+        .filter((session) => session.archived !== true && !isFinished(session))
+        .sort(byElapsedDesc)
     : [];
   const unfinishedIds = new Set(unfinished.map((session) => session.id));
 
