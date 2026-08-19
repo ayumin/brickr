@@ -61,3 +61,24 @@
     expire_in: 1 month
     paths:
       - docs/duo-sessions/
+
+# scripts/ has no test harness in this repository, so at least catch syntax
+# errors before they reach a scheduled run where nobody is watching.
+# End-to-end verification needs DUO_RETRO_TOKEN and is done with the manual web
+# trigger above, before the schedule is trusted.
+"duo:collector-syntax":
+  stage: validate
+  image: node:22-bookworm-slim
+  before_script: []
+  needs: []
+  script:
+    - node --check scripts/collect-duo-sessions.mjs
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - scripts/collect-duo-sessions.mjs
+        - .gitlab/ci/duo-retrospective.yml
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes:
+        - scripts/collect-duo-sessions.mjs
+        - .gitlab/ci/duo-retrospective.yml

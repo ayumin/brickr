@@ -3,7 +3,7 @@ import { dirname } from "node:path";
 import process from "node:process";
 
 // Collects GitLab Duo Agent Platform sessions for a period and writes the
-// mechanical part of a retrospective: the session list and the metrics.
+// mechanical part of a retrospective: the metrics and the session list.
 //
 // The qualitative part is deliberately not generated. The value of the first
 // retrospective came from cross-cutting observations ("the same curl ran about
@@ -15,7 +15,15 @@ const BEGIN = "<!-- collect:begin -->";
 const END = "<!-- collect:end -->";
 
 // Verified to exist on DuoWorkflow.
-const BASE_FIELDS = ["id", "goal", "agentName", "workflowDefinition", "createdAt", "updatedAt", "archived"];
+const BASE_FIELDS = [
+  "id",
+  "goal",
+  "agentName",
+  "workflowDefinition",
+  "createdAt",
+  "updatedAt",
+  "archived",
+];
 // The flows API is an Experiment. Field names have already bitten us once
 // (duoWorkflows vs duoWorkflowWorkflows), so anything unproven is dropped and
 // the query retried rather than guessed at.
@@ -30,7 +38,8 @@ function arg(name, fallback) {
 const host = (process.env.CI_SERVER_URL ?? "https://gitlab.com").replace(/\/+$/, "");
 const token = process.env.DUO_RETRO_TOKEN ?? process.env.GITLAB_TOKEN;
 const fullPath = arg("project", process.env.CI_PROJECT_PATH);
-const days = Number(arg("days", "7"));
+const daysInput = arg("days", "7");
+const days = Number(daysInput);
 
 if (!token) {
   process.stderr.write(
@@ -43,7 +52,7 @@ if (!fullPath) {
   process.exit(1);
 }
 if (!Number.isFinite(days) || days <= 0) {
-  process.stderr.write(`--days must be a positive number, got "${arg("days", "7")}".\n`);
+  process.stderr.write(`--days must be a positive number, got "${daysInput}".\n`);
   process.exit(1);
 }
 
@@ -92,7 +101,9 @@ async function fetchSessions() {
           payload.errors.some((error) => String(error.message).includes(`'${field}'`)),
       );
       if (unsupported.length > 0) {
-        process.stderr.write(`Dropping unsupported field(s) and retrying: ${unsupported.join(", ")}\n`);
+        process.stderr.write(
+          `Dropping unsupported field(s) and retrying: ${unsupported.join(", ")}\n`,
+        );
         fields = fields.filter((field) => !unsupported.includes(field));
         continue;
       }
@@ -119,7 +130,7 @@ const cell = (value) => String(value ?? "").replaceAll("|", "\\|");
 
 function goalExcerpt(goal) {
   const text = String(goal ?? "").replace(/\s+/g, " ").trim();
-  return text.length > 70 ? `${text.slice(0, 70)}\u2026` : text;
+  return text.length > 70 ? `${text.slice(0, 70)}…` : text;
 }
 
 function elapsedMinutes(session) {
@@ -138,72 +149,77 @@ function tally(sessions, pick) {
   return [...counts.entries()].sort((a, b) => b[1] - a[1]);
 }
 
+function row(cells) {
+  return `| ${cells.join(" | ")} |`;
+}
+
 function renderGenerated(sessions) {
   const elapsed = sessions.map(elapsedMinutes).filter((value) => value !== null);
   const total = elapsed.reduce((sum, value) => sum + value, 0);
+  const average = elapsed.length > 0 ? `${Math.round(total / elapsed.length)} 分` : "-";
+  const longest = elapsed.length > 0 ? `${Math.max(...elapsed)} 分` : "-";
 
   const lines = [
     BEGIN,
     "",
-    `<!-- scripts/collect-duo-sessions.mjs \u304c\u751f\u6210\u3057\u307e\u3059\u3002\u3053\u306e\u30d6\u30ed\u30c3\u30af\u5185\u3092\u624b\u3067\u7de8\u96c6\u3057\u306a\u3044\u3067\u304f\u3060\u3055\u3044\u3002 -->`,
+    "<!-- scripts/collect-duo-sessions.mjs が生成します。このブロック内を手で編集しないでください。 -->",
     "",
-    "## \u6307\u6a19",
+    "## 指標",
     "",
-    "| \u6307\u6a19 | \u5024 |",
-    "|------|----|",
-    `| \u30bb\u30c3\u30b7\u30e7\u30f3\u6570 | ${sessions.length} |`,
-    `| \u5e73\u5747\u6240\u8981\u6642\u9593 | ${elapsed.length > 0 ? `${Math.round(total / elapsed.length)} \u5206` : "-"} |`,
-    `| \u6700\u5927\u6240\u8981\u6642\u9593 | ${elapsed.length > 0 ? `${Math.max(...elapsed)} \u5206` : "-"} |`,
-    `| archived | ${sessions.filter((session) => session.archived === true).length} |`,
+    row(["指標", "値"]),
+    row(["------", "----"]),
+    row(["セッション数", String(sessions.length)]),
+    row(["平均所要時間", average]),
+    row(["最大所要時間", longest]),
+    row(["archived", String(sessions.filter((session) => session.archived === true).length)]),
     "",
-    "\u7a2e\u5225\u5225:",
+    "種別別:",
     "",
-    "| workflowDefinition | \u4ef6\u6570 |",
-    "|--------------------|------|",
-    ...tally(sessions, (session) => session.workflowDefinition).map(
-      ([key, count]) => `| \`${cell(key)}\` | ${count} |`,
+    row(["workflowDefinition", "件数"]),
+    row(["--------------------", "------"]),
+    ...tally(sessions, (session) => session.workflowDefinition).map(([key, count]) =>
+      row([`\`${cell(key)}\``, String(count)]),
     ),
     "",
   ];
 
   const statuses = tally(sessions, (session) => session.humanStatus);
-  const statusKnown = statuses.some(([key]) => key !== "(unknown)");
-  if (statusKnown) {
+  if (statuses.some(([key]) => key !== "(unknown)")) {
     lines.push(
-      "\u72b6\u614b\u5225:",
+      "状態別:",
       "",
-      "| \u72b6\u614b | \u4ef6\u6570 |",
-      "|------|------|",
-      ...statuses.map(([key, count]) => `| ${cell(key)} | ${count} |`),
+      row(["状態", "件数"]),
+      row(["------", "------"]),
+      ...statuses.map(([key, count]) => row([cell(key), String(count)])),
       "",
     );
   } else {
     lines.push(
-      "> \u72b6\u614b\u5225\u306e\u96c6\u8a08\u306f\u53d6\u5f97\u3067\u304d\u307e\u305b\u3093\u3067\u3057\u305f\u3002",
-      "> `humanStatus` \u304c\u3053\u306e\u30a4\u30f3\u30b9\u30bf\u30f3\u30b9\u306e GraphQL \u30b9\u30ad\u30fc\u30de\u306b\u306a\u3044\u53ef\u80fd\u6027\u304c\u3042\u308a\u307e\u3059\u3002",
+      "> 状態別の集計は取得できませんでした。",
+      "> `humanStatus` がこのインスタンスの GraphQL スキーマにない可能性があります。",
       "",
     );
   }
 
   lines.push(
-    "## \u30bb\u30c3\u30b7\u30e7\u30f3\u4e00\u89a7\uff08\u81ea\u52d5\u751f\u6210\uff09",
+    "## セッション一覧（自動生成・全件）",
     "",
-    "| Session ID | \u7a2e\u5225 | \u30a8\u30fc\u30b8\u30a7\u30f3\u30c8 | \u72b6\u614b | \u6240\u8981(\u5206) | goal \u5192\u982d |",
-    "|-----------|------|--------------|------|-----------|-----------|",
+    "下の「セッション一覧」節には、この全件表から特筆すべきものだけを抜粋してください。",
+    "",
+    row(["Session ID", "種別", "エージェント", "状態", "所要(分)", "goal 冒頭"]),
+    row(["-----------", "------", "--------------", "------", "-----------", "-----------"]),
     ...[...sessions]
       .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt))
       .map((session) => {
         const minutes = elapsedMinutes(session);
-        return [
-          "",
+        return row([
           numericId(session.id),
           `\`${cell(session.workflowDefinition)}\``,
           cell(session.agentName ?? "-"),
           cell(session.humanStatus ?? "-"),
           minutes === null ? "-" : String(minutes),
           cell(goalExcerpt(session.goal)),
-          "",
-        ].join(" | ").trim();
+        ]);
       }),
     "",
     END,
@@ -222,9 +238,9 @@ function skeleton(date, generated) {
   }
 
   return [
-    `# Duo \u30bb\u30c3\u30b7\u30e7\u30f3\u632f\u308a\u8fd4\u308a: ${date}`,
+    `# Duo セッション振り返り: ${date}`,
     "",
-    `> \u5bfe\u8c61\u671f\u9593: ${since.toISOString().slice(0, 10)} \u301c ${date}`,
+    `> 対象期間: ${since.toISOString().slice(0, 10)} 〜 ${date}`,
     "",
     generated,
     template.slice(sectionsStart),
@@ -263,4 +279,6 @@ if (existsSync(outputPath)) {
 mkdirSync(dirname(outputPath), { recursive: true });
 writeFileSync(outputPath, contents);
 
-process.stdout.write(`Wrote ${sessions.length} session(s) for the last ${days} day(s) to ${outputPath}.\n`);
+process.stdout.write(
+  `Wrote ${sessions.length} session(s) for the last ${days} day(s) to ${outputPath}.\n`,
+);
