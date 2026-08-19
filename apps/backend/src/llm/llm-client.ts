@@ -2,7 +2,7 @@
  * The single entry point into the LLM layer.
  *
  * Owns timeout, bounded retry, provider fallback and error normalization, so
- * the room layer only ever has to deal with `LLMError`.
+ * the room runtime only ever has to deal with `LLMError`.
  */
 
 import type { LLMProviderRegistry } from "./provider-registry.js";
@@ -202,7 +202,7 @@ function normalizeError(error: unknown, providerId: ProviderId): LLMError {
  * Raised when the budget circuit breaker is open for a provider (issue #162).
  *
  * Not retryable: the breaker stays open until an administrator resets it.
- * Treated as an expected failure by the room layer (same as `LLMError`),
+ * Treated as an expected failure by the room runtime (same as `LLMError`),
  * so one character dropping out does not stop the rest.
  */
 export class LLMBudgetExceededError extends LLMError {

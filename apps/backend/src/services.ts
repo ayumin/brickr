@@ -116,7 +116,7 @@ export async function buildServices(db: Db, logger: RoomRuntimeLogger): Promise<
   const events = new EventHub();
   const tokenUsage = new TokenUsageService(tokenUsageRepository);
 
-  // Built before the room service, which publishes the thread payload the
+  // Built before the room runtime service, which publishes the thread payload the
   // feed assembles (§11.3). The dependency runs one way: the feed knows about
   // rooms, never the other way round.
   const feed = new FeedService(

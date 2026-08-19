@@ -158,7 +158,7 @@ async function handleCharacterRespond(
   });
 
   // If a specific character is targeted, use only that one; otherwise select
-  // responders the same way the room service does.
+  // responders the same way the room runtime service does.
   const explicitIds = characterId ? [characterId] : [];
 
   const { all: responders } = selectResponders({

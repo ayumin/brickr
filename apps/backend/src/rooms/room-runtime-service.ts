@@ -360,7 +360,7 @@ export class RoomRuntimeService {
 
     // The Feed room's canPost only checks isAuthenticated (no membership row
     // exists to look up), so skip the query entirely for it — the same
-    // short-circuit `requireReadableRoom` above already uses.
+    // short-circuit `requireReadableRoomForPosts` above already uses.
     if (room.scope !== "global") {
       const roomActor = await toRoomActor(
         this.deps.memberships,

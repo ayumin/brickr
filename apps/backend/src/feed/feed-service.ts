@@ -26,7 +26,7 @@ import { withReaderCapabilities } from "./public-events.js";
  * A thread's root post could not be resolved — the id given is not a root, its
  * room is gone, or its room is stopped and the reader is not its owner
  * or an administrator. All four collapse to a 404, kept distinct from
- * room-service's PostNotFoundError (a reply/quote target outside the
+ * room-runtime-service's PostNotFoundError (a reply/quote target outside the
  * current room) so the two unrelated meanings cannot be confused by an
  * `instanceof` check.
  */
