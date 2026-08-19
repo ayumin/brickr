@@ -49,8 +49,6 @@ export type LLMBudgetChecker = {
 };
 
 export class LLMClient {
-  private readonly loggedFallbacks = new Set<ProviderId>();
-
   constructor(
     private readonly registry: LLMProviderRegistry,
     private readonly options: LLMClientOptions,
@@ -58,6 +56,7 @@ export class LLMClient {
     private readonly usageTracker?: LLMUsageTracker,
     private readonly fallbackModel?: (providerId: ProviderId) => string | undefined,
     private readonly budgetChecker?: LLMBudgetChecker,
+  ) {}
 
   async generate(
     providerId: ProviderId,
