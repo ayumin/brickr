@@ -20,7 +20,7 @@ import { useSelectedRoom } from "./useSelectedRoom";
 import { InvitationCard } from "./InvitationCard";
 import { JoinRequestButton } from "./JoinRequestButton";
 import { useMyMembershipState, useMyInvitation } from "./useRoomMembership";
-import { api } from "../../services/api-client";
+import { api, isAbortError } from "../../services/api-client";
 
 /**
  * One room's persistent content (§13.5): mounted once per opened room id by

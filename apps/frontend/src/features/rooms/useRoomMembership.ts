@@ -72,6 +72,7 @@ export function useMyMembershipState(room: {
     canJoin: boolean;
     canLeave: boolean;
     canPost: boolean;
+    canManage: boolean;
   };
   visibility: string;
   status: string;
