@@ -37,7 +37,10 @@
 
 | 内容 | 反映先 | 状態 |
 |------|--------|------|
-| | `CLAUDE.md` / `.agents/skills/glab/SKILL.md` | 反映済み / 未反映 |
+| | `LEARNED.md` の Keep / Problem / Try / Notes | 反映済み / 未反映 |
+
+昇格閾値を満たさない（異なる 2 セッション未満の）ものは `Notes` へ入れ、
+再出現したら `Keep` または `Problem` へ昇格します。
 
 ## 積み残し
 
