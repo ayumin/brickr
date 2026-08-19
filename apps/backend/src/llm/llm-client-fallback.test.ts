@@ -4,7 +4,7 @@
  * Fallback order: Primary → Gemini → Mock
  */
 import { describe, expect, it, vi } from "vitest";
-import { LLMClient, LLMBudgetExceededError } from "./llm-client.js";
+import { LLMClient } from "./llm-client.js";
 import { LLMProviderRegistry } from "./provider-registry.js";
 import type { LLMGenerateRequest, LLMGenerateResult, LLMProvider } from "./provider.js";
 import { LLMError } from "./provider.js";
