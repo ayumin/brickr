@@ -311,11 +311,18 @@ function writeEnvFile(sessionCount) {
   );
 }
 
-const sessions = await fetchSessions();
+const fetched = await fetchSessions();
+const sessions = fetched.filter(withinWindow);
+
+// Both numbers are printed so that a zero result can be told apart from a
+// filter that quietly dropped everything.
+process.stdout.write(
+  `Fetched ${fetched.length} session(s); ${sessions.length} updated within the last ${days} day(s).\n`,
+);
 
 if (sessions.length === 0) {
   writeEnvFile(0);
-  process.stdout.write(`No sessions updated in the last ${days} day(s). Nothing to write.\n`);
+  process.stdout.write("Nothing to write.\n");
   process.exit(0);
 }
 
