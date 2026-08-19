@@ -26,8 +26,8 @@ import {
   SnapshotForbiddenError,
   SnapshotNotFoundError,
   SnapshotRoomArchivedError,
-  SnapshotRoomNotFoundError,
 } from "../rooms/room-analysis-snapshot-service.js";
+import { RoomNotFoundError } from "../rooms/room-errors.js";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -186,9 +186,9 @@ describe("GET /api/rooms/:id/snapshot", () => {
     expect(response.json()).toMatchObject({ error: { code: "snapshot_not_found" } });
   });
 
-  it("maps SnapshotRoomNotFoundError to 404", async () => {
+  it("maps RoomNotFoundError to 404", async () => {
     const services = makeServices({
-      get: () => Promise.reject(new SnapshotRoomNotFoundError("missing")),
+      get: () => Promise.reject(new RoomNotFoundError("missing")),
     });
     const app = await buildApp(signedInUser, services);
     apps.push(app);
@@ -282,9 +282,9 @@ describe("POST /api/rooms/:id/snapshot", () => {
     expect(response.json()).toMatchObject({ error: { code: "room_archived" } });
   });
 
-  it("maps SnapshotRoomNotFoundError to 404", async () => {
+  it("maps RoomNotFoundError to 404", async () => {
     const services = makeServices({
-      update: () => Promise.reject(new SnapshotRoomNotFoundError("missing")),
+      update: () => Promise.reject(new RoomNotFoundError("missing")),
     });
     const app = await buildApp(signedInUser, services);
     apps.push(app);

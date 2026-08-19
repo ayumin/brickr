@@ -19,11 +19,11 @@ import {
   PostNotFoundError,
   assertRoomReadable,
   RoomManageForbiddenError,
-  RuntimeRoomNotFoundError,
   RoomRuntimeService,
   type SignedInActor,
   type RoomRuntimeLogger,
 } from "./room-runtime-service.js";
+import { RoomNotFoundError } from "./room-errors.js";
 import type { Room } from "./room.js";
 
 /**
@@ -64,7 +64,7 @@ describe("assertRoomReadable — real membership lookup (issue #175)", () => {
   it("rejects a non-member from an active closed room", async () => {
     await expect(
       assertRoomReadable(makeMembershipsFake(), { ...ROOM, visibility: "closed" }, nonOwner),
-    ).rejects.toThrow(RuntimeRoomNotFoundError);
+    ).rejects.toThrow(RoomNotFoundError);
   });
 
   it("admits an active member of an active closed room", async () => {
@@ -92,7 +92,7 @@ describe("assertRoomReadable — real membership lookup (issue #175)", () => {
         { ...ROOM, visibility: "closed", status: "archived" },
         nonOwner,
       ),
-    ).rejects.toThrow(RuntimeRoomNotFoundError);
+    ).rejects.toThrow(RoomNotFoundError);
   });
 
   it("still admits the legacy owner (no membership row, createdByUserId match)", async () => {
@@ -532,7 +532,7 @@ describe("RoomRuntimeService.requireReadableRoom vs requireReadableRoomForPosts 
 
     await expect(
       harness.service.requireReadableRoom(ROOM.id, { id: "any-user", isAdmin: false }),
-    ).rejects.toThrow(RuntimeRoomNotFoundError);
+    ).rejects.toThrow(RoomNotFoundError);
   });
 
   it("requireReadableRoomForPosts admits the Feed room so a feed post's thread can be read", async () => {
@@ -554,7 +554,7 @@ describe("RoomRuntimeService.requireReadableRoom vs requireReadableRoomForPosts 
 
     await expect(
       harness.service.requireReadableRoomForPosts(ROOM.id, { id: "non-member", isAdmin: false }),
-    ).rejects.toThrow(RuntimeRoomNotFoundError);
+    ).rejects.toThrow(RoomNotFoundError);
   });
 });
 

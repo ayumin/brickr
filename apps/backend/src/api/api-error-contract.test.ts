@@ -43,7 +43,6 @@ import {
   SnapshotForbiddenError,
   SnapshotNotFoundError,
   SnapshotRoomArchivedError,
-  SnapshotRoomNotFoundError,
 } from "../rooms/room-analysis-snapshot-service.js";
 import { ScheduledEventNotFoundError } from "../scheduled-events/scheduled-event-repository.js";
 import { handleDomainError } from "./errors.js";
@@ -104,7 +103,7 @@ const CASES: Array<{ error: Error; status: number; code: string }> = [
   { error: new SnapshotForbiddenError("room-1"), status: 403, code: "forbidden" },
   { error: new SnapshotNotFoundError("room-1"), status: 404, code: "snapshot_not_found" },
   { error: new SnapshotRoomArchivedError("room-1"), status: 409, code: "room_archived" },
-  { error: new SnapshotRoomNotFoundError("room-1"), status: 404, code: "room_not_found" },
+  { error: new RoomNotFoundError("room-1"), status: 404, code: "room_not_found" },
 
   // Scheduled event errors (issue #160)
   { error: new ScheduledEventNotFoundError("event-1"), status: 404, code: "not_found" },
@@ -188,7 +187,7 @@ describe("API error body shape", () => {
   it("not-found errors from different subsystems all produce HTTP 404", () => {
     const notFoundErrors = [
       new SnapshotNotFoundError("room-1"),
-      new SnapshotRoomNotFoundError("room-1"),
+      new RoomNotFoundError("room-1"),
       new ScheduledEventNotFoundError("event-1"),
       new RoomNotFoundError("room-1"),
     ];
