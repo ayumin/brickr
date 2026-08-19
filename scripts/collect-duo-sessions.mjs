@@ -24,10 +24,14 @@ const BASE_FIELDS = [
   "updatedAt",
   "archived",
 ];
-// The flows API is an Experiment. Field names have already bitten us once
-// (duoWorkflows vs duoWorkflowWorkflows), so anything unproven goes here and is
-// dropped on the first failure rather than guessed at.
-const OPTIONAL_FIELDS = ["humanStatus"];
+// `status` is a stable uppercase enum (FINISHED, STOPPED, ...). `humanStatus`
+// was tried first and rejected: it returns localised display text, mixing
+// "finished" with "実行中", so it cannot be compared safely in code.
+//
+// It stays in the optional list so an instance that lacks it degrades instead of
+// failing outright. The flows API is an Experiment and its field names have
+// already changed under us once (duoWorkflows vs duoWorkflowWorkflows).
+const OPTIONAL_FIELDS = ["status"];
 
 function arg(name, fallback) {
   const prefix = `--${name}=`;
@@ -232,7 +236,7 @@ function renderGenerated(sessions) {
     "",
   ];
 
-  const statuses = tally(sessions, (session) => session.humanStatus);
+  const statuses = tally(sessions, (session) => session.status);
   if (statuses.some(([key]) => key !== "(unknown)")) {
     lines.push(
       "状態別:",
@@ -245,7 +249,7 @@ function renderGenerated(sessions) {
   } else {
     lines.push(
       "> 状態別の集計は取得できませんでした。",
-      "> `humanStatus` がこのインスタンスの GraphQL スキーマにない可能性があります。",
+      "> `status` がこのインスタンスの GraphQL スキーマにない可能性があります。",
       "",
     );
   }
@@ -265,7 +269,7 @@ function renderGenerated(sessions) {
       numericId(session.id),
       `\`${cell(session.workflowDefinition)}\``,
       cell(session.agentName ?? "-"),
-      cell(session.humanStatus ?? "-"),
+      cell(session.status ?? "-"),
       minutes === null ? "-" : String(minutes),
       cell(goalExcerpt(session.goal)),
     ]);
@@ -273,13 +277,17 @@ function renderGenerated(sessions) {
   const byElapsedDesc = (a, b) => (elapsedMinutes(b) ?? -1) - (elapsedMinutes(a) ?? -1);
 
   // Only treat a session as unfinished when the status is actually known.
-  // Without this guard, an instance without humanStatus would flag every
-  // single session as needing review.
+  // Without this guard, an instance that dropped the optional `status` field
+  // would flag every single session as needing review.
   const statusKnown = sessions.some(
-    (session) => session.humanStatus !== undefined && session.humanStatus !== null,
+    (session) => session.status !== undefined && session.status !== null,
   );
+  // Compared case-insensitively. The enum is uppercase today, but this file
+  // already survived one rename in this API and the comparison is the one place
+  // where a casing change would silently mark every session as unfinished.
+  const isFinished = (session) => String(session.status ?? "").toUpperCase() === "FINISHED";
   const unfinished = statusKnown
-    ? [...sessions].filter((session) => session.humanStatus !== "finished").sort(byElapsedDesc)
+    ? [...sessions].filter((session) => !isFinished(session)).sort(byElapsedDesc)
     : [];
   const unfinishedIds = new Set(unfinished.map((session) => session.id));
 
@@ -291,14 +299,14 @@ function renderGenerated(sessions) {
   lines.push("## 要確認セッション", "");
   if (!statusKnown) {
     lines.push(
-      "> 状態が取得できなかったため抽出できません。`humanStatus` の取得可否を確認してください。",
+      "> 状態が取得できなかったため抽出できません。`status` の取得可否を確認してください。",
       "",
     );
   } else if (unfinished.length === 0) {
-    lines.push("この期間のセッションはすべて `finished` でした。", "");
+    lines.push("この期間のセッションはすべて `FINISHED` でした。", "");
   } else {
     lines.push(
-      "`finished` 以外で終わったセッションです。掘る価値があるのは基本ここです。",
+      "`FINISHED` 以外で終わったセッションです。掘る価値があるのは基本ここです。",
       "",
       ...header,
       ...unfinished.map(sessionRow),
