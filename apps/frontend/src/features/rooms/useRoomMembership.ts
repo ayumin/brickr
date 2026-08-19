@@ -96,7 +96,6 @@ export function useMyMembershipState(room: {
   const isOpen = room.visibility === "open";
   const isActive = room.status === "active";
   const hasPendingRequest =
-  const hasPendingRequest =
     isActive && isOpen && !caps.canJoin && !isActiveMember && !caps.canManage;
   return { hasPendingRequest, isActiveMember };
 }
