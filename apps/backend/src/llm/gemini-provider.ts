@@ -74,6 +74,11 @@ export class GeminiProvider implements LLMProvider {
         contents,
         config: {
           systemInstruction: request.systemPrompt,
+          // Thinking tokens count against maxOutputTokens; left enabled, a
+          // thinking-capable model can spend the whole budget reasoning and
+          // emit no visible text at all, which the caller then sees as an
+          // empty response and retries into a Gemini/Mock fallback loop.
+          thinkingConfig: { thinkingBudget: 0 },
           ...(request.maxOutputTokens === undefined
             ? {}
             : { maxOutputTokens: request.maxOutputTokens }),
