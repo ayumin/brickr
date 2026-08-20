@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { geminiGenerationModelId } from "./gemini-provider.js";
+import { geminiGenerationModelId, isThinkingConfigRejection } from "./gemini-provider.js";
 import { isOpenAICharacterModel } from "./openai-provider.js";
 import { LLMProviderRegistry } from "./provider-registry.js";
 import type {
@@ -30,6 +30,21 @@ describe("provider model filters", () => {
     ).toBe("gemini-2.5-flash");
     expect(geminiGenerationModelId("models/text-embedding-004", ["embedContent"])).toBeNull();
     expect(geminiGenerationModelId(undefined, ["generateContent"])).toBeNull();
+  });
+
+  it("recognizes Gemini's rejection of thinkingConfig on non-thinking models", () => {
+    const rejection = sdkError(400, "Thinking config is not supported for this model.");
+    expect(isThinkingConfigRejection(rejection, ["status", "code"])).toBe(true);
+  });
+
+  it("does not mistake an unrelated 400 for a thinkingConfig rejection", () => {
+    const unrelated = sdkError(400, "Request contains an invalid argument.");
+    expect(isThinkingConfigRejection(unrelated, ["status", "code"])).toBe(false);
+  });
+
+  it("does not mistake a non-400 thinking-related error for a rejection", () => {
+    const rateLimited = sdkError(429, "thinking budget exceeded rate limit");
+    expect(isThinkingConfigRejection(rateLimited, ["status", "code"])).toBe(false);
   });
 });
 
@@ -79,6 +94,11 @@ describe("LLMProviderRegistry.preferred", () => {
     expect(registry.preferred()).toBeNull();
   });
 });
+
+/** Mimics the GenAI SDK's error shape: an `Error` with an extra `status` field. */
+function sdkError(status: number, message: string): Error {
+  return Object.assign(new Error(message), { status });
+}
 
 function fakeProvider(
   id: ProviderId,
