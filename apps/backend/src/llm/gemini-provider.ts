@@ -5,9 +5,15 @@
  * abstractions from `provider.ts`.
  */
 
-import { GoogleGenAI, type Content, type Part } from "@google/genai";
+import {
+  GoogleGenAI,
+  type Content,
+  type GenerateContentConfig,
+  type GenerateContentResponse,
+  type Part,
+} from "@google/genai";
 import { env } from "../config/env.js";
-import { requireClient, toLLMError } from "./provider-http-error.js";
+import { httpStatusOf, messageOf, requireClient, toLLMError } from "./provider-http-error.js";
 import type {
   LLMAvailableModel,
   LLMGenerateRequest,
@@ -67,45 +73,85 @@ export class GeminiProvider implements LLMProvider {
     const client = requireClient(this.client, PROVIDER_ID);
 
     const contents: Content[] = request.messages.map(toGeminiContent);
+    const config: GenerateContentConfig = {
+      systemInstruction: request.systemPrompt,
+      ...(request.maxOutputTokens === undefined
+        ? {}
+        : { maxOutputTokens: request.maxOutputTokens }),
+      ...(request.temperature === undefined ? {} : { temperature: request.temperature }),
+      ...(request.structuredOutput
+        ? {
+            responseMimeType: "application/json",
+            responseJsonSchema: request.structuredOutput.schema,
+          }
+        : {}),
+      ...(request.signal ? { abortSignal: request.signal } : {}),
+    };
 
     try {
-      const response = await client.models.generateContent({
-        model: request.model,
-        contents,
-        config: {
-          systemInstruction: request.systemPrompt,
-          ...(request.maxOutputTokens === undefined
-            ? {}
-            : { maxOutputTokens: request.maxOutputTokens }),
-          ...(request.temperature === undefined ? {} : { temperature: request.temperature }),
-          ...(request.structuredOutput
-            ? {
-                responseMimeType: "application/json",
-                responseJsonSchema: request.structuredOutput.schema,
-              }
-            : {}),
-          ...(request.signal ? { abortSignal: request.signal } : {}),
-        },
+      // Thinking tokens count against maxOutputTokens; left enabled, a
+      // thinking-capable model can spend the whole budget reasoning and
+      // emit no visible text at all, which the caller then sees as an
+      // empty response and retries into a Gemini/Mock fallback loop.
+      const response = await this.generateContentOnce(client, request.model, contents, {
+        ...config,
+        thinkingConfig: { thinkingBudget: 0 },
       });
-
-      return {
-        text: response.text ?? "",
-        model: request.model,
-        providerId: PROVIDER_ID,
-        ...(response.usageMetadata
-          ? {
-              usage: {
-                inputTokens: response.usageMetadata.promptTokenCount ?? 0,
-                outputTokens: response.usageMetadata.candidatesTokenCount ?? 0,
-                totalTokens: response.usageMetadata.totalTokenCount ?? 0,
-              },
-            }
-          : {}),
-      };
+      return toGenerateResult(response, request.model);
     } catch (error) {
-      throw toLLMError(PROVIDER_ID, error, STATUS_FIELDS);
+      // Only "thinking-capable" Gemini models accept `thinkingConfig`; older
+      // or non-thinking models reject it outright (INVALID_ARGUMENT). Since
+      // `request.model` is caller-supplied and can name any model this
+      // provider's `listModels()` surfaced, retry once without it rather
+      // than hard-failing a model that was never thinking-capable to begin
+      // with.
+      if (!isThinkingConfigRejection(error, STATUS_FIELDS)) {
+        throw toLLMError(PROVIDER_ID, error, STATUS_FIELDS);
+      }
+      try {
+        const response = await this.generateContentOnce(client, request.model, contents, config);
+        return toGenerateResult(response, request.model);
+      } catch (retryError) {
+        throw toLLMError(PROVIDER_ID, retryError, STATUS_FIELDS);
+      }
     }
   }
+
+  private async generateContentOnce(
+    client: GoogleGenAI,
+    model: string,
+    contents: Content[],
+    config: GenerateContentConfig,
+  ): Promise<GenerateContentResponse> {
+    return client.models.generateContent({ model, contents, config });
+  }
+}
+
+function toGenerateResult(response: GenerateContentResponse, model: string): LLMGenerateResult {
+  return {
+    text: response.text ?? "",
+    model,
+    providerId: PROVIDER_ID,
+    ...(response.usageMetadata
+      ? {
+          usage: {
+            inputTokens: response.usageMetadata.promptTokenCount ?? 0,
+            outputTokens: response.usageMetadata.candidatesTokenCount ?? 0,
+            totalTokens: response.usageMetadata.totalTokenCount ?? 0,
+          },
+        }
+      : {}),
+  };
+}
+
+/** True when Gemini rejected the request specifically because of `thinkingConfig`. */
+export function isThinkingConfigRejection(
+  error: unknown,
+  statusFields: readonly string[],
+): boolean {
+  return (
+    httpStatusOf(error, statusFields) === 400 && messageOf(error).toLowerCase().includes("thinking")
+  );
 }
 
 /** Returns the generation request id, or null for embedding/image-only models. */
