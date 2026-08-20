@@ -103,7 +103,6 @@ const CASES: Array<{ error: Error; status: number; code: string }> = [
   { error: new SnapshotForbiddenError("room-1"), status: 403, code: "forbidden" },
   { error: new SnapshotNotFoundError("room-1"), status: 404, code: "snapshot_not_found" },
   { error: new SnapshotRoomArchivedError("room-1"), status: 409, code: "room_archived" },
-  { error: new RoomNotFoundError("room-1"), status: 404, code: "room_not_found" },
 
   // Scheduled event errors (issue #160)
   { error: new ScheduledEventNotFoundError("event-1"), status: 404, code: "not_found" },
@@ -189,7 +188,6 @@ describe("API error body shape", () => {
       new SnapshotNotFoundError("room-1"),
       new RoomNotFoundError("room-1"),
       new ScheduledEventNotFoundError("event-1"),
-      new RoomNotFoundError("room-1"),
     ];
     for (const error of notFoundErrors) {
       const { reply, result } = fakeReply();
