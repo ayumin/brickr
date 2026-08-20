@@ -21,7 +21,7 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { UserAccount } from "../auth/user-account.js";
-import { DomainError } from "../domain-error.js";
+
 import { appErrorHandler } from "../app-error.js";
 import type { AppServices } from "../services.js";
 import { registeredRoutes } from "./define-route.js";
@@ -81,10 +81,7 @@ const signedInUser: UserAccount = {
   interests: [],
 };
 
-class RuntimeRoomNotFoundError extends DomainError {
-  readonly httpStatus = 404;
-  readonly errorCode = "not_found" as const;
-}
+
 
 const roomSummary = {
   id: "room-1",
@@ -260,7 +257,7 @@ describe("GET /api/rooms/:id", () => {
 
   it("maps a DomainError from the service to its HTTP answer", async () => {
     const services = makeServices({
-      get: () => Promise.reject(new RuntimeRoomNotFoundError("room not found")),
+      get: () => Promise.reject(new RoomNotFoundError("room-missing")),
     });
     const app = await buildApp(signedInUser, services);
     apps.push(app);
@@ -269,7 +266,7 @@ describe("GET /api/rooms/:id", () => {
 
     expect(response.statusCode).toBe(404);
     expect(response.json()).toMatchObject({
-      error: { code: "not_found", message: "room not found" },
+      error: { code: "room_not_found", message: 'room "room-missing" not found' },
     });
   });
 

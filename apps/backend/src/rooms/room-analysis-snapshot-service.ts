@@ -29,6 +29,7 @@ import type { RoomAnalysisSnapshot } from "./room-analysis-snapshot-repository.j
 import type { RoomMembershipRepository } from "./room-membership-repository.js";
 import type { RoomRepository } from "./room-repository.js";
 import type { SignedInActor } from "./room.js";
+import { RoomNotFoundError } from "./room-errors.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -43,14 +44,6 @@ const SNAPSHOT_CONTENT_LIMIT = 500;
 // ---------------------------------------------------------------------------
 // Domain errors
 // ---------------------------------------------------------------------------
-
-export class SnapshotRoomNotFoundError extends DomainError {
-  readonly httpStatus = 404;
-  readonly errorCode = "room_not_found" as const;
-  constructor(id: string) {
-    super(`room "${id}" not found`);
-  }
-}
 
 export class SnapshotForbiddenError extends DomainError {
   readonly httpStatus = 403;
@@ -241,7 +234,7 @@ export class RoomAnalysisSnapshotService {
 
   private async requireRoom(roomId: string) {
     const room = await this.deps.rooms.findById(roomId);
-    if (!room) throw new SnapshotRoomNotFoundError(roomId);
+    if (!room) throw new RoomNotFoundError(roomId);
     return room;
   }
 

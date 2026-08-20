@@ -24,8 +24,8 @@ import {
   SnapshotForbiddenError,
   SnapshotNotFoundError,
   SnapshotRoomArchivedError,
-  SnapshotRoomNotFoundError,
 } from "./room-analysis-snapshot-service.js";
+import { RoomNotFoundError } from "./room-errors.js";
 import type { RoomAnalysisSnapshot } from "./room-analysis-snapshot-repository.js";
 
 // ---------------------------------------------------------------------------
@@ -249,11 +249,11 @@ describe("RoomAnalysisSnapshotService.get() permissions", () => {
     ).rejects.toBeInstanceOf(SnapshotForbiddenError);
   });
 
-  it("throws SnapshotRoomNotFoundError for an unknown room", async () => {
+  it("throws RoomNotFoundError for an unknown room", async () => {
     const service = makeService({ room: null });
     await expect(
       service.get("missing", { id: "owner-1", isAdmin: false }),
-    ).rejects.toBeInstanceOf(SnapshotRoomNotFoundError);
+    ).rejects.toBeInstanceOf(RoomNotFoundError);
   });
 
   it("throws SnapshotNotFoundError when no snapshot exists", async () => {
@@ -302,11 +302,11 @@ describe("RoomAnalysisSnapshotService.update() permissions", () => {
     ).rejects.toBeInstanceOf(SnapshotRoomArchivedError);
   });
 
-  it("throws SnapshotRoomNotFoundError for an unknown room", async () => {
+  it("throws RoomNotFoundError for an unknown room", async () => {
     const service = makeService({ room: null });
     await expect(
       service.update("missing", { id: "owner-1", isAdmin: false }),
-    ).rejects.toBeInstanceOf(SnapshotRoomNotFoundError);
+    ).rejects.toBeInstanceOf(RoomNotFoundError);
   });
 });
 

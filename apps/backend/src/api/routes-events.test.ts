@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { UserAccount } from "../auth/user-account.js";
 import type { AppServices } from "../services.js";
 import { EventHub } from "../rooms/event-hub.js";
-import { RuntimeRoomNotFoundError } from "../rooms/room-runtime-service.js";
+import { RoomNotFoundError } from "../rooms/room-errors.js";
 import { registerRoutes } from "./routes.js";
 
 /**
@@ -27,7 +27,7 @@ const user: UserAccount = {
 function makeServices(readable = true) {
   const events = new EventHub();
   const assertRoomFeedReadable = vi.fn((roomId: string) =>
-    readable ? Promise.resolve() : Promise.reject(new RuntimeRoomNotFoundError(roomId)),
+    readable ? Promise.resolve() : Promise.reject(new RoomNotFoundError(roomId)),
   );
   return {
     services: { events, feed: { assertRoomFeedReadable } } as unknown as AppServices,
@@ -173,7 +173,7 @@ describe("SSE contract: visibility re-evaluation (§11.1)", () => {
 
     // Non-members receive 404, not an open stream.
     expect(response.statusCode).toBe(404);
-    expect(response.json()).toMatchObject({ error: { code: "not_found" } });
+    expect(response.json()).toMatchObject({ error: { code: "room_not_found" } });
     // No connection was registered in the EventHub.
     expect(events.subscriberCount("private-room")).toBe(0);
   });

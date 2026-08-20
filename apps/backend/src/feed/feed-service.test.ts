@@ -4,7 +4,7 @@ import type { PostService } from "../posts/post-service.js";
 import type { Post } from "../posts/post.js";
 import type { RoomRepository } from "../rooms/room-repository.js";
 import type { RoomMembershipRepository } from "../rooms/room-membership-repository.js";
-import { RuntimeRoomNotFoundError } from "../rooms/room-runtime-service.js";
+import { RoomNotFoundError } from "../rooms/room-errors.js";
 import type { Room } from "../rooms/room.js";
 import type { FeedRepository, FeedRoom, FeedThreadRow } from "./feed-repository.js";
 import { FeedService, FEED_PAGE_SIZE, THREAD_REPLIES_LIMIT, ThreadRootNotFoundError } from "./feed-service.js";
@@ -634,7 +634,7 @@ describe("FeedService room feed (§10.2, §10.4)", () => {
 
     await expect(
       service.getRoomFeed(STOPPED_ROOM.id, { reader: READER, filter: "all" }),
-    ).rejects.toThrow(RuntimeRoomNotFoundError);
+    ).rejects.toThrow(RoomNotFoundError);
   });
 
   it("opens a stopped room for its creator and for an administrator", async () => {
@@ -675,7 +675,7 @@ describe("FeedService room feed (§10.2, §10.4)", () => {
 
     await expect(
       service.getRoomFeed("missing", { reader: READER, filter: "all" }),
-    ).rejects.toThrow(RuntimeRoomNotFoundError);
+    ).rejects.toThrow(RoomNotFoundError);
   });
 
   it("refuses a closed room for a non-member", async () => {
@@ -688,7 +688,7 @@ describe("FeedService room feed (§10.2, §10.4)", () => {
 
     await expect(
       service.getRoomFeed(CLOSED_ROOM.id, { reader: READER, filter: "all" }),
-    ).rejects.toThrow(RuntimeRoomNotFoundError);
+    ).rejects.toThrow(RoomNotFoundError);
   });
 
   it("opens a closed room for an active member", async () => {
@@ -740,7 +740,7 @@ describe("FeedService room feed (§10.2, §10.4)", () => {
 
     await expect(
       service.getRoomFeed(PRIVATE_ROOM.id, { reader: READER, filter: "all" }),
-    ).rejects.toThrow(RuntimeRoomNotFoundError);
+    ).rejects.toThrow(RoomNotFoundError);
   });
 });
 
@@ -971,7 +971,7 @@ describe("FeedService.buildThreadActivity (§11.3)", () => {
     const { service } = makeHarness({ posts: [homeless], rooms: [ROOM] });
 
     await expect(service.buildThreadActivity(homeless)).rejects.toThrow(
-      RuntimeRoomNotFoundError,
+      RoomNotFoundError,
     );
   });
 });

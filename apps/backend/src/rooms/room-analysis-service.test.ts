@@ -9,10 +9,8 @@ import {
   rankPosts,
   RoomAnalysisService,
 } from "./room-analysis-service.js";
-import {
-  RoomManageForbiddenError,
-  RuntimeRoomNotFoundError,
-} from "./room-runtime-service.js";
+import { RoomManageForbiddenError } from "./room-runtime-service.js";
+import { RoomNotFoundError } from "./room-errors.js";
 import type { RoomRepository } from "./room-repository.js";
 import type { Room } from "./room.js";
 
@@ -163,7 +161,7 @@ describe("RoomAnalysisService.analyze ownership (§66.6)", () => {
     const service = makeService(null);
     await expect(
       service.analyze("missing", { id: "user-1", isAdmin: true }),
-    ).rejects.toBeInstanceOf(RuntimeRoomNotFoundError);
+    ).rejects.toBeInstanceOf(RoomNotFoundError);
   });
 });
 

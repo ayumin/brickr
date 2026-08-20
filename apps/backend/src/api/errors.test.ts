@@ -29,9 +29,9 @@ import { ReplyTargetNotFoundError } from "../posts/post-repository.js";
 import {
   PostNotFoundError,
   RoomManageForbiddenError,
-  RuntimeRoomNotFoundError,
   RoomStoppedError,
 } from "../rooms/room-runtime-service.js";
+import { RoomNotFoundError } from "../rooms/room-errors.js";
 import { handleDomainError } from "./errors.js";
 
 function fakeReply(): { reply: FastifyReply; result: () => { status: number; body: unknown } } {
@@ -65,7 +65,7 @@ const CASES: Array<{ error: Error; status: number; code: string }> = [
   { error: new ModelProfileNotFoundError("profile-1"), status: 404, code: "not_found" },
   { error: new CharacterGenerationError(), status: 502, code: "character_generation_failed" },
   { error: new CharacterCsvError("bad row"), status: 400, code: "invalid_csv" },
-  { error: new RuntimeRoomNotFoundError("sim-1"), status: 404, code: "not_found" },
+  { error: new RoomNotFoundError("sim-1"), status: 404, code: "room_not_found" },
   { error: new RoomStoppedError("sim-1"), status: 409, code: "room_archived" },
   { error: new RoomManageForbiddenError("sim-1"), status: 403, code: "forbidden" },
   { error: new PostNotFoundError("post-1"), status: 404, code: "not_found" },
